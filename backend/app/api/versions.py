@@ -1,0 +1,570 @@
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+    UploadFile,
+    File,
+    Form,
+)
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+from pathlib import Path
+from fastapi import Query
+from app.api.deps import get_db
+from app.models.model import Model
+from app.models.version import ModelVersion, VersionDelta
+from app.models.artifact import Artifact
+from app.schemas.version import VersionOut
+from app.utils.hashing import sha256_bytes
+from fastapi.responses import FileResponse
+import zipfile
+import tempfile
+import os
+from app.schemas.artifact import ArtifactOut
+
+router = APIRouter()
+
+STORAGE_ROOT = Path("storage")
+CACHE_ROOT = STORAGE_ROOT / "cache"
+CACHE_ROOT.mkdir(parents=True, exist_ok=True)
+
+# ======================================================
+# CREATE VERSION (TRUE DVC DATASET DELTA)
+# ======================================================
+@router.post(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions",
+    response_model=VersionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_version(
+    factory_id: int,
+    algorithm_id: int,
+    model_id: int,
+    dataset_files: list[UploadFile] = File(...),
+    model: UploadFile = File(...),
+    code: UploadFile | None = File(None),
+
+    # Metrics (stored in DB, not files)
+    accuracy: float | None = Form(None),
+    precision: float | None = Form(None),
+    recall: float | None = Form(None),
+    f1_score: float | None = Form(None),
+
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    # --------------------------------------------------
+    # Validate model
+    # --------------------------------------------------
+    model_obj = (
+        db.query(Model)
+        .filter(Model.id == model_id, Model.algorithm_id == algorithm_id)
+        .first()
+    )
+    if not model_obj:
+        raise HTTPException(404, "Model not found")
+
+    # --------------------------------------------------
+    # Validate metrics
+    # --------------------------------------------------
+    for name, value in {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1_score,
+    }.items():
+        if value is not None and not (0.0 <= value <= 100.0):
+            raise HTTPException(400, f"{name} must be between 0 and 100")
+
+    # --------------------------------------------------
+    # Create new version
+    # --------------------------------------------------
+    latest = (
+        db.query(func.max(ModelVersion.version_number))
+        .filter(ModelVersion.model_id == model_id)
+        .scalar()
+    )
+    version_number = (latest or 0) + 1
+
+    db.query(ModelVersion).filter(
+        ModelVersion.model_id == model_id,
+        ModelVersion.is_active == True,
+    ).update({"is_active": False})
+
+    version = ModelVersion(
+        model_id=model_id,
+        version_number=version_number,
+        note=note,
+        is_active=True,
+        accuracy=accuracy,
+        precision=precision,
+        recall=recall,
+        f1_score=f1_score,
+    )
+    db.add(version)
+    db.commit()
+    db.refresh(version)
+
+    # --------------------------------------------------
+    # Load previous dataset snapshot
+    # --------------------------------------------------
+    prev_version = (
+        db.query(ModelVersion)
+        .filter(
+            ModelVersion.model_id == model_id,
+            ModelVersion.id != version.id,
+        )
+        .order_by(ModelVersion.version_number.desc())
+        .first()
+    )
+
+    prev_dataset = {}
+    if prev_version:
+        for a in prev_version.artifacts:
+            if a.type == "dataset":
+                prev_dataset[a.checksum] = a
+
+    prev_checksums = set(prev_dataset.keys())
+
+    # --------------------------------------------------
+    #  Compute current dataset checksums
+    # --------------------------------------------------
+    current_checksums = set()
+    current_files = {}
+    added = 0
+    unchanged = 0
+
+
+    for file in dataset_files:
+        data = file.file.read()
+        file.file.seek(0)  # 🔥 IMPORTANT
+        checksum = sha256_bytes(data)
+        current_checksums.add(checksum)
+        current_files[checksum]=(file.filename,data)
+
+    # --------------------------------------------------
+    # Decide dataset mode (incremental vs new)
+    # --------------------------------------------------
+    inherit_previous = bool(prev_checksums & current_checksums)
+
+    added = unchanged = 0
+
+    # --------------------------------------------------
+    # Build SNAPSHOT (this is the key fix)
+    # --------------------------------------------------
+    for checksum, (filename, data) in current_files.items():
+
+        # Reuse old file
+        if inherit_previous and checksum in prev_dataset:
+            a = prev_dataset[checksum]
+            db.add(
+                Artifact(
+                    version_id=version.id,
+                    name=a.name,
+                    type="dataset",
+                    group_path="dataset/",
+                    path=a.path,
+                    size=a.size,
+                    checksum=a.checksum,
+                )
+            )
+            unchanged += 1
+            continue
+
+        # New file
+        cache_dir = CACHE_ROOT / checksum[:2] / checksum[2:4]
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_path = cache_dir / checksum
+
+        if not cache_path.exists():
+            with open(cache_path, "wb") as f:
+                f.write(data)
+
+        db.add(
+            Artifact(
+                version_id=version.id,
+                name=filename,
+                type="dataset",
+                group_path="dataset/",
+                path=str(cache_path),
+                size=len(data),
+                checksum=checksum,
+            )
+        )
+        added += 1
+
+    removed = (
+        len(prev_checksums - current_checksums)
+        if inherit_previous
+        else 0
+    )
+
+    # --------------------------------------------------
+    # Save MODEL / CODE
+    # --------------------------------------------------
+    def save_single(file: UploadFile, artifact_type: str):
+        data = file.file.read()
+        file.file.seek(0)
+        checksum = sha256_bytes(data)
+
+        cache_dir = CACHE_ROOT / checksum[:2] / checksum[2:4]
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_path = cache_dir / checksum
+
+        if not cache_path.exists():
+            with open(cache_path, "wb") as f:
+                f.write(data)
+
+        db.add(
+            Artifact(
+                version_id=version.id,
+                name=file.filename,
+                type=artifact_type,
+                path=str(cache_path),
+                size=len(data),
+                checksum=checksum,
+            )
+        )
+
+    save_single(model, "model")
+    if code:
+        save_single(code, "code")
+
+    # --------------------------------------------------
+    # Save delta
+    # --------------------------------------------------
+    db.add(
+        VersionDelta(
+            version_id=version.id,
+            added_count=added,
+            removed_count=removed,
+            unchanged_count=unchanged,
+        )
+    )
+
+    db.commit()
+    return version
+
+# ======================================================
+# LIST ALL VERSIONS (TIMELINE)
+# ======================================================
+@router.get(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions",
+    response_model=list[VersionOut],
+)
+def list_versions(
+    model_id: int,
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(ModelVersion)
+        .filter(ModelVersion.model_id == model_id)
+        .order_by(ModelVersion.version_number.desc())
+        .all()
+    )
+
+
+# ======================================================
+# GET VERSION DETAILS
+# ======================================================
+@router.get(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}",
+    response_model=VersionOut,
+)
+def get_version(
+    algorithm_id: int,
+    model_id: int,
+    version_id: int,
+    db: Session = Depends(get_db),
+):
+    version = (
+        db.query(ModelVersion)
+        .filter(
+            ModelVersion.id == version_id,
+            ModelVersion.model_id == model_id,
+        )
+        .first()
+    )
+    
+    if not version:
+        raise HTTPException(404, "Version not found")
+    return version
+
+
+# ======================================================
+# CHECKOUT / ROLLBACK VERSION (DVC CORE)
+# ======================================================
+@router.post(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/checkout",
+    status_code=status.HTTP_200_OK,
+)
+def checkout_version(
+    model_id: int,
+    version_id: int,
+    db: Session = Depends(get_db),
+):
+    version = (
+        db.query(ModelVersion)
+        .filter(
+            ModelVersion.id == version_id,
+            ModelVersion.model_id == model_id,
+        )
+        .first()
+    )
+    if not version:
+        raise HTTPException(404, "Version not found")
+
+    # Deactivate all
+    db.query(ModelVersion).filter(
+        ModelVersion.model_id == model_id
+    ).update({"is_active": False})
+
+    # Activate selected
+    version.is_active = True
+    db.commit()
+
+    return {"message": f"Checked out version v{version.version_number}"}
+
+
+
+@router.get(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/delta"
+)
+def get_version_delta(
+    version_id: int,
+    db: Session = Depends(get_db),
+):
+    delta = (
+        db.query(VersionDelta)
+        .filter(VersionDelta.version_id == version_id)
+        .first()
+    )
+
+    if not delta:
+        raise HTTPException(404, "Delta not found")
+
+    return {
+        "added": delta.added_count,
+        "removed": delta.removed_count,
+        "unchanged": delta.unchanged_count,
+    }
+
+
+@router.get(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/download"
+)
+def download_version(
+    model_id: int,
+    version_id: int,
+    dataset: bool = Query(False),
+    model: bool = Query(False),
+    metrics: bool = Query(False),
+    code: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    version = (
+        db.query(ModelVersion)
+        .filter(
+            ModelVersion.id == version_id,
+            ModelVersion.model_id == model_id,
+        )
+        .first()
+    )
+
+    if not version:
+        raise HTTPException(404, "Version not found")
+
+    # Map selection → artifact types
+    selected_types = []
+    if dataset:
+        selected_types.append("dataset")
+    if model:
+        selected_types.append("model")
+   
+    if code:
+        selected_types.append("code")
+
+    if not selected_types:
+        raise HTTPException(400, "No artifacts selected for download")
+
+    artifacts = (
+        db.query(Artifact)
+        .filter(
+            Artifact.version_id == version_id,
+            Artifact.type.in_(selected_types),
+        )
+        .all()
+    )
+
+    if not artifacts:
+        raise HTTPException(404, "No artifacts found for selected types")
+
+    # Create temp ZIP
+    tmp_dir = tempfile.mkdtemp()
+    zip_path = os.path.join(
+        tmp_dir, f"version_v{version.version_number}.zip"
+    )
+
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for artifact in artifacts:
+            file_path = Path(artifact.path)
+            if not file_path.exists():
+                continue
+
+            # Dataset → keep folder structure
+            if artifact.type == "dataset":
+                arcname = f"dataset/{artifact.name}"
+            else:
+                arcname = f"{artifact.type}/{artifact.name}"
+
+            zipf.write(file_path, arcname=arcname)
+
+    return FileResponse(
+        zip_path,
+        filename=f"version_v{version.version_number}.zip",
+        media_type="application/zip",
+    )
+
+@router.delete(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}",
+    status_code=204,
+)
+def delete_version(
+    model_id: int,
+    version_id: int,
+    db: Session = Depends(get_db),
+):
+    version = (
+        db.query(ModelVersion)
+        .filter(
+            ModelVersion.id == version_id,
+            ModelVersion.model_id == model_id,
+        )
+        .first()
+    )
+
+    if not version:
+        raise HTTPException(404, "Version not found")
+
+    db.delete(version)
+    db.commit()
+
+
+
+@router.post(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/edit",
+    status_code=200,
+)
+def edit_version(
+    version_id: int,
+    dataset_files: list[UploadFile] | None = File(None),
+    model: UploadFile | None = File(None),
+    code: UploadFile | None = File(None),
+    metrics: UploadFile | None = File(None),
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    version = db.query(ModelVersion).filter(ModelVersion.id == version_id).first()
+    if not version:
+        raise HTTPException(404, "Version not found")
+
+    # ---- existing dataset checksums
+    existing = {
+        a.checksum
+        for a in version.artifacts
+        if a.type == "dataset"
+    }
+
+    added = 0
+    unchanged = 0
+
+    if dataset_files:
+        for file in dataset_files:
+            contents = file.file.read()
+            checksum = sha256_bytes(contents)
+
+            if checksum in existing:
+                unchanged += 1
+                continue
+
+            cache_dir = CACHE_ROOT / checksum[:2] / checksum[2:4]
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_path = cache_dir / checksum
+
+            if not cache_path.exists():
+                with open(cache_path, "wb") as f:
+                    f.write(contents)
+
+            db.add(
+                Artifact(
+                    version_id=version.id,
+                    name=file.filename,
+                    type="dataset",
+                    path=str(cache_path),
+                    size=len(contents),
+                    checksum=checksum,
+                )
+            )
+            added += 1
+
+    def save_single(file, t):
+        contents = file.file.read()
+        checksum = sha256_bytes(contents)
+
+        cache_dir = CACHE_ROOT / checksum[:2] / checksum[2:4]
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_path = cache_dir / checksum
+
+        if not cache_path.exists():
+            with open(cache_path, "wb") as f:
+                f.write(contents)
+
+        db.add(
+            Artifact(
+                version_id=version.id,
+                name=file.filename,
+                type=t,
+                path=str(cache_path),
+                size=len(contents),
+                checksum=checksum,
+            )
+        )
+
+    if model:
+        save_single(model, "model")
+    if code:
+        save_single(code, "code")
+    if metrics:
+        save_single(metrics, "metrics")
+
+    if note:
+        version.note = note
+
+    db.commit()
+
+    return {
+        "message": "Version updated successfully",
+        "dataset_added": added,
+        "dataset_unchanged": unchanged,
+    }
+
+
+# ======================================================
+# LIST ARTIFACTS OF A VERSION
+# ======================================================
+@router.get(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/artifacts",
+    response_model=list[ArtifactOut],
+)
+def list_artifacts(
+    version_id: int,
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(Artifact)
+        .filter(Artifact.version_id == version_id)
+        .order_by(Artifact.id.desc())
+        .all()
+    )
+

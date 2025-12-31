@@ -1,0 +1,17 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.env.production
+__pycache__/
+*.log
+
+# Confirmation
+backend/storage/
+backend/storage/cache/
+backend/storage/cache/**
+*.pt
+*.onnx
+*.engine
+*.bin
