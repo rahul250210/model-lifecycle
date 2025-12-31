@@ -32,7 +32,7 @@ interface Props {
   versions: Version[];
   basePath: string;
   onRollback?: (versionId: number) => void;
-  onDelete: (versionId: number) => void;
+  onDelete?: (versionId: number) => void;
 }
 
 /* =======================
@@ -46,9 +46,8 @@ export default function VersionsDashboard({
   onDelete,
 }: Props) {
   const navigate = useNavigate();
-  
+
   return (
-    
     <Stack spacing={2}>
       {versions.map((v) => (
         <Card
@@ -101,40 +100,48 @@ export default function VersionsDashboard({
 
             {/* ================= Actions ================= */}
             <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-  <Button
-    size="small"
-    startIcon={<VisibilityIcon />}
-    onClick={() => navigate(`${basePath}/${v.id}`)}
-  >
-    Details
-  </Button>
+              {/* Details */}
+              <Button
+                size="small"
+                startIcon={<VisibilityIcon />}
+                onClick={() => navigate(`${basePath}/${v.id}`)}
+              >
+                Details
+              </Button>
 
-  {!v.is_active && onRollback && (
-    <Button
-      size="small"
-      color="warning"
-      startIcon={<ReplayIcon />}
-      onClick={() => onRollback(v.id)}
-    >
-      Rollback
-    </Button>
-  )}
+              {/* Rollback */}
+              {!v.is_active && onRollback && (
+                <Button
+                  size="small"
+                  color="warning"
+                  startIcon={<ReplayIcon />}
+                  onClick={() => onRollback(v.id)}
+                >
+                  Rollback
+                </Button>
+              )}
 
-  {/* ✅ DELETE BUTTON FIX */}
-  <Button
-    size="small"
-    color="error"
-    startIcon={<DeleteIcon />}
-    disabled={v.is_active && versions.length > 1}
-    onClick={() => {
-      if (!confirm(`Delete version v${v.version_number}?`)) return;
-      onDelete(v.id);
-    }}
-  >
-    Delete
-  </Button>
-</Stack>
-
+              {/* Delete */}
+              {onDelete && (
+                <Button
+                  size="small"
+                  color="error"
+                  startIcon={<DeleteIcon />}
+                  disabled={v.is_active}
+                  onClick={() => {
+                    if (
+                      confirm(
+                        `Delete Version v${v.version_number}? This cannot be undone.`
+                      )
+                    ) {
+                      onDelete(v.id);
+                    }
+                  }}
+                >
+                  Delete
+                </Button>
+              )}
+            </Stack>
           </CardContent>
         </Card>
       ))}

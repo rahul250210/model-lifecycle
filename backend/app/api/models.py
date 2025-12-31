@@ -198,3 +198,38 @@ def delete_model(
 
     db.delete(model)
     db.commit()
+
+
+# ======================================================
+# GET MODEL BY ID
+# ======================================================
+@router.get(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}",
+    response_model=ModelOut,
+)
+def get_model(
+    factory_id: int,
+    algorithm_id: int,
+    model_id: int,
+    db: Session = Depends(get_db),
+):
+    model = (
+        db.query(Model)
+        .filter(
+            Model.id == model_id,
+            Model.algorithm_id == algorithm_id,
+        )
+        .first()
+    )
+
+    if not model:
+        raise HTTPException(404, "Model not found")
+
+    # attach versions_count (for UI consistency)
+    model.versions_count = (
+        db.query(func.count(ModelVersion.id))
+        .filter(ModelVersion.model_id == model_id)
+        .scalar()
+    )
+
+    return model
