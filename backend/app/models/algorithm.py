@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from app.database import Base
+from sqlalchemy.orm import relationship
 
 class Algorithm(Base):
     __tablename__ = "algorithms"
@@ -13,3 +14,14 @@ class Algorithm(Base):
 
     # runtime only
     models_count: int = 0
+
+    factory = relationship(
+        "Factory",
+        back_populates="algorithms"
+    )
+
+    models = relationship(
+        "Model",
+        back_populates="algorithm",
+        cascade="all, delete-orphan"
+    )

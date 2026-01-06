@@ -10,19 +10,21 @@ import {
   CircularProgress,
   Chip,
   IconButton,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  Grid,
+  
   InputAdornment,
   Container,
   alpha,
   Paper,
+  CardActionArea,
+  Stack,
+  Divider,
 } from "@mui/material";
-
+import Grid from "@mui/material/Grid";
 import AddIcon from "@mui/icons-material/Add";
 import FactoryIcon from "@mui/icons-material/Factory";
 import SchemaIcon from "@mui/icons-material/Schema";
@@ -30,15 +32,15 @@ import HubIcon from "@mui/icons-material/Hub";
 import DeleteIcon from "@mui/icons-material/Delete";
 import EditIcon from "@mui/icons-material/Edit";
 import SearchIcon from "@mui/icons-material/Search";
-import CloseIcon from "@mui/icons-material/Close";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 
 import { useNavigate } from "react-router-dom";
 import axios from "../../api/axios";
 
 /* ==========================================================================
-   CONSISTENT THEME PALETTE
-   ========================================================================== */
+   THEME PALETTE
+========================================================================== */
 const themePalette = {
   primary: "#4F46E5",
   primaryLight: "#EEF2FF",
@@ -49,11 +51,12 @@ const themePalette = {
   success: "#10B981",
   warning: "#F59E0B",
   danger: "#EF4444",
+   white: "#FFFFFF",
 };
 
-/* =======================
-   Types
-======================= */
+/* ==========================================================================
+   TYPES
+========================================================================== */
 interface Factory {
   id: number;
   name: string;
@@ -69,14 +72,20 @@ export default function FactoryList() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Edit Dialog States
   const [editOpen, setEditOpen] = useState(false);
   const [editingFactory, setEditingFactory] = useState<Factory | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
 
+  // Delete Dialog States
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [factoryToDelete, setFactoryToDelete] = useState<Factory | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
   const fetchFactories = async () => {
     try {
-      const res = await axios.get("/factories");
+      const res = await axios.get("/factories/");
       setFactories(res.data);
     } catch (err) {
       console.error("Failed to load factories", err);
@@ -89,18 +98,34 @@ export default function FactoryList() {
     fetchFactories();
   }, []);
 
-  const handleDelete = async (e: React.MouseEvent, factoryId: number) => {
+  /* =======================
+     HANDLERS
+  ======================= */
+
+  const openDeleteConfirm = (e: React.MouseEvent, factory: Factory) => {
+    e.preventDefault();
     e.stopPropagation();
-    if (!confirm("Delete this factory and all its data?")) return;
+    setFactoryToDelete(factory);
+    setDeleteOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!factoryToDelete) return;
     try {
-      await axios.delete(`/factories/${factoryId}`);
-      setFactories((prev) => prev.filter((f) => f.id !== factoryId));
+      setDeleteLoading(true);
+      await axios.delete(`/factories/${factoryToDelete.id}`);
+      setFactories((prev) => prev.filter((f) => f.id !== factoryToDelete.id));
+      setDeleteOpen(false);
+      setFactoryToDelete(null);
     } catch (err) {
-      console.error("Failed to delete factory", err);
+      console.error("Delete failed", err);
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
   const openEdit = (e: React.MouseEvent, factory: Factory) => {
+    e.preventDefault();
     e.stopPropagation();
     setEditingFactory(factory);
     setEditName(factory.name);
@@ -118,76 +143,74 @@ export default function FactoryList() {
       await fetchFactories();
       setEditOpen(false);
     } catch (err) {
-      console.error("Failed to update factory", err);
+      console.error("Update failed", err);
     }
   };
 
   const filteredFactories = factories.filter(
-    (factory) =>
-      factory.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      factory.description?.toLowerCase().includes(searchQuery.toLowerCase())
+    (f) =>
+      f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      f.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   if (loading) {
     return (
-      <Box sx={{ height: "70vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <Box sx={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: themePalette.background }}>
         <CircularProgress size={40} sx={{ color: themePalette.primary }} />
       </Box>
     );
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: themePalette.background, pb: 8 }}>
+    <Box sx={{ minHeight: "100vh", bgcolor: themePalette.background, pb: 10 }}>
       <Container maxWidth="xl">
         {/* Header Section */}
-        <Box sx={{ pt: 4, pb: 6 }}>
-          <Grid container justifyContent="space-between" alignItems="flex-end" spacing={3}>
-            <Grid item>
-              <Typography variant="h4" fontWeight={800} sx={{ color: themePalette.textMain, mb: 1, letterSpacing: "-0.02em" }}>
+        <Box sx={{ pt: 6, pb: 6 }}>
+          <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={3}>
+            <Box>
+              <Typography variant="h3" fontWeight={900} sx={{ color: themePalette.textMain, letterSpacing: "-0.04em" }}>
                 Production <Box component="span" sx={{ color: themePalette.primary }}>Factories</Box>
               </Typography>
-              <Typography variant="body1" sx={{ color: themePalette.textMuted, fontWeight: 500 }}>
-                Oversee your ML production pipelines and model architectures.
+              <Typography variant="body1" sx={{ color: themePalette.textMuted, mt: 1, fontWeight: 500 }}>
+                Manage your high-level infrastructure clusters and pipeline nodes.
               </Typography>
-            </Grid>
-            <Grid item>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => navigate("/factories/create")}
-                sx={{
-                  bgcolor: themePalette.primary,
-                  px: 3,
-                  py: 1.2,
-                  borderRadius: "12px",
-                  fontWeight: 700,
-                  textTransform: "none",
-                  boxShadow: `0 10px 15px -3px ${alpha(themePalette.primary, 0.3)}`,
-                  "&:hover": { bgcolor: "#4338CA", transform: "translateY(-2px)" },
-                  transition: "all 0.2s"
-                }}
-              >
-                New Factory
-              </Button>
-            </Grid>
-          </Grid>
+            </Box>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => navigate("/factories/create")}
+              sx={{
+                bgcolor: themePalette.primary,
+                borderRadius: "14px",
+                px: 4,
+                py: 1.5,
+                fontWeight: 800,
+                textTransform: "none",
+                boxShadow: `0 10px 15px -3px ${alpha(themePalette.primary, 0.3)}`,
+                "&:hover": { bgcolor: "#4338CA", transform: "translateY(-2px)" },
+                transition: "all 0.2s",
+              }}
+            >
+              New Factory
+            </Button>
+          </Stack>
         </Box>
 
-        {/* Search Bar */}
-        <Paper 
+        {/* Search Bar Section */}
+        <Paper
           elevation={0}
-          sx={{ 
-            p: 0.5, 
-            mb: 6, 
-            borderRadius: "16px", 
+          sx={{
+            p: 1,
+            mb: 6,
+            borderRadius: "16px",
             border: `1px solid ${themePalette.border}`,
-            maxWidth: 500,
-            bgcolor: "#fff"
+            bgcolor: themePalette.white,
+            maxWidth: 600,
           }}
         >
           <TextField
             fullWidth
-            placeholder="Search factories..."
+            placeholder="Search resources, nodes, or clusters..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             variant="standard"
@@ -199,90 +222,91 @@ export default function FactoryList() {
                 </InputAdornment>
               ),
             }}
-            sx={{ "& .MuiInputBase-input": { py: 1.5, fontSize: "0.95rem" } }}
+            sx={{ "& .MuiInputBase-input": { py: 1, fontSize: "1rem" } }}
           />
         </Paper>
 
+        {/* Main Grid */}
         {filteredFactories.length === 0 ? (
-          <Box sx={{ textAlign: "center", py: 12, bgcolor: "#fff", borderRadius: "24px", border: `1px dashed ${themePalette.border}` }}>
-            <FactoryIcon sx={{ fontSize: 64, color: alpha(themePalette.primary, 0.2), mb: 2 }} />
-            <Typography variant="h6" fontWeight={700} color={themePalette.textMain}>
-              {searchQuery ? "No results found" : "No factories yet"}
-            </Typography>
-            <Typography variant="body2" color={themePalette.textMuted} sx={{ mb: 3 }}>
-              {searchQuery ? "Try a different search term" : "Get started by creating your first production factory."}
-            </Typography>
+          <Box sx={{ py: 10, textAlign: 'center', bgcolor: alpha(themePalette.white, 0.5), borderRadius: '32px', border: `2px dashed ${themePalette.border}` }}>
+            <FactoryIcon sx={{ fontSize: 64, color: alpha(themePalette.textMuted, 0.2), mb: 2 }} />
+            <Typography variant="h6" fontWeight={700} color={themePalette.textMain}>No factories match your search</Typography>
+            <Typography variant="body2" color={themePalette.textMuted}>Try adjusting your filters or create a new cluster.</Typography>
           </Box>
         ) : (
           <Grid container spacing={4}>
             {filteredFactories.map((factory) => (
               <Grid item xs={12} sm={6} md={4} key={factory.id}>
-                <Card
-                  onClick={() => navigate(`/factories/${factory.id}/algorithms`)}
-                  sx={{
-                    borderRadius: "20px",
-                    cursor: "pointer",
-                    height: "100%",
-                    bgcolor: "#fff",
-                    border: `1px solid ${themePalette.border}`,
-                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                    "&:hover": {
-                      transform: "translateY(-6px)",
-                      boxShadow: `0 20px 25px -5px ${alpha("#000", 0.05)}`,
-                      borderColor: themePalette.primary,
-                      "& .arrow-icon": { opacity: 1, transform: "translateX(0)" }
-                    },
-                  }}
+                <Card 
                   elevation={0}
+                  sx={{ 
+                    borderRadius: "24px", 
+                    border: `1px solid ${themePalette.border}`,
+                    bgcolor: themePalette.white,
+                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                    "&:hover": { 
+                      borderColor: themePalette.primary,
+                      boxShadow: `0 20px 25px -5px ${alpha("#000", 0.05)}`,
+                      transform: "translateY(-6px)"
+                    }
+                  }}
                 >
-                  <CardContent sx={{ p: 3.5 }}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 3 }}>
-                      <Box sx={{ p: 1.5, bgcolor: alpha(themePalette.primary, 0.1), borderRadius: "12px" }}>
-                        <FactoryIcon sx={{ color: themePalette.primary, fontSize: 28 }} />
-                      </Box>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <IconButton size="small" onClick={(e) => openEdit(e, factory)} sx={{ color: themePalette.textMuted }}>
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-                        <IconButton size="small" onClick={(e) => handleDelete(e, factory.id)} sx={{ color: alpha(themePalette.danger, 0.7) }}>
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
+                  {/* Card Actions (Edit/Delete) */}
+                  <Box sx={{ px: 3, pt: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <Box sx={{ p: 1, bgcolor: alpha(themePalette.primary, 0.1), borderRadius: "10px", display: 'flex' }}>
+                      <FactoryIcon sx={{ color: themePalette.primary, fontSize: 20 }} />
                     </Box>
-
-                    <Typography variant="h6" fontWeight={800} sx={{ color: themePalette.textMain, mb: 1 }}>
-                      {factory.name}
-                    </Typography>
-                    
-                    <Typography variant="body2" sx={{ color: themePalette.textMuted, mb: 3, minHeight: 40, lineHeight: 1.6 }}>
-                      {factory.description || "No description provided for this factory."}
-                    </Typography>
-
-                    <Box sx={{ display: "flex", gap: 1.5, mb: 4 }}>
-                      <Chip 
-                        icon={<SchemaIcon style={{ fontSize: 16 }} />} 
-                        label={`${factory.algorithms_count} Algos`} 
-                        size="small" 
-                        sx={{ bgcolor: alpha(themePalette.success, 0.1), color: themePalette.success, fontWeight: 700, borderRadius: "8px" }} 
-                      />
-                      <Chip 
-                        icon={<HubIcon style={{ fontSize: 16 }} />} 
-                        label={`${factory.models_count} Models`} 
-                        size="small" 
-                        sx={{ bgcolor: alpha(themePalette.warning, 0.1), color: themePalette.warning, fontWeight: 700, borderRadius: "8px" }} 
-                      />
+                    <Box>
+                      <IconButton size="small" onClick={(e) => openEdit(e, factory)} sx={{ mr: 0.5 }}>
+                        <EditIcon fontSize="small" sx={{ color: themePalette.textMuted }} />
+                      </IconButton>
+                      <IconButton size="small" onClick={(e) => openDeleteConfirm(e, factory)} sx={{ color: alpha(themePalette.danger, 0.7) }}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
                     </Box>
+                  </Box>
 
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 2, borderTop: `1px solid ${themePalette.border}` }}>
-                      <Typography variant="caption" sx={{ color: themePalette.textMuted, fontWeight: 600 }}>
-                        ID: #{factory.id.toString().padStart(3, '0')}
+                  <CardActionArea 
+                    onClick={() => navigate(`/factories/${factory.id}/algorithms`)}
+                    sx={{ "& .MuiCardActionArea-focusHighlight": { bgcolor: "transparent" } }}
+                  >
+                    <CardContent sx={{ px: 3, pb: 4 }}>
+                      <Typography variant="h5" fontWeight={800} sx={{ color: themePalette.textMain, mb: 1 }}>
+                        {factory.name}
                       </Typography>
-                      <Box className="arrow-icon" sx={{ opacity: 0, transform: "translateX(-10px)", transition: "all 0.3s", display: 'flex', alignItems: 'center', color: themePalette.primary }}>
-                        <Typography variant="caption" fontWeight={700} sx={{ mr: 0.5 }}>View</Typography>
-                        <ArrowForwardIcon fontSize="small" />
+
+                      <Typography variant="body2" sx={{ color: themePalette.textMuted, mb: 3, minHeight: 40, lineHeight: 1.6 }}>
+                        {factory.description || "No specific configuration summary provided for this factory node."}
+                      </Typography>
+
+                      <Stack direction="row" spacing={1.5} sx={{ mb: 3 }}>
+                        <Chip 
+                          icon={<SchemaIcon sx={{ fontSize: '14px !important' }} />} 
+                          label={`${factory.algorithms_count} Algos`} 
+                          size="small" 
+                          sx={{ bgcolor: alpha(themePalette.success, 0.08), color: themePalette.success, fontWeight: 700, borderRadius: '8px' }} 
+                        />
+                        <Chip 
+                          icon={<HubIcon sx={{ fontSize: '14px !important' }} />} 
+                          label={`${factory.models_count} Models`} 
+                          size="small" 
+                          sx={{ bgcolor: alpha(themePalette.warning, 0.08), color: themePalette.warning, fontWeight: 700, borderRadius: '8px' }} 
+                        />
+                      </Stack>
+
+                      <Divider sx={{ mb: 2, borderColor: alpha(themePalette.border, 0.5) }} />
+
+                      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <Typography variant="caption" fontWeight={700} sx={{ color: themePalette.textMuted, textTransform: 'uppercase' }}>
+                          ID: #{factory.id}
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', color: themePalette.primary, gap: 0.5 }}>
+                           <Typography variant="button" fontWeight={800} sx={{ fontSize: '0.7rem' }}>ENTER</Typography>
+                           <ArrowForwardIcon sx={{ fontSize: 16 }} />
+                        </Box>
                       </Box>
-                    </Box>
-                  </CardContent>
+                    </CardContent>
+                  </CardActionArea>
                 </Card>
               </Grid>
             ))}
@@ -290,26 +314,100 @@ export default function FactoryList() {
         )}
       </Container>
 
-      {/* Edit Dialog */}
-      <Dialog open={editOpen} onClose={() => setEditOpen(false)} PaperProps={{ sx: { borderRadius: "20px", p: 1 } }} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800, color: themePalette.textMain }}>Edit Factory</DialogTitle>
-        <DialogContent>
-          <TextField 
-            fullWidth label="Name" value={editName} onChange={(e) => setEditName(e.target.value)} 
-            margin="normal" variant="outlined" sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px" } }} 
-          />
-          <TextField 
-            fullWidth label="Description" multiline rows={3} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} 
-            margin="normal" variant="outlined" sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px" } }} 
-          />
+      {/* Modern Edit Dialog */}
+      <Dialog 
+        open={editOpen} 
+        onClose={() => setEditOpen(false)}
+        PaperProps={{ sx: { borderRadius: "24px", p: 1, maxWidth: 450, width: '100%' } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, color: themePalette.textMain }}>Edit Configuration</DialogTitle>
+        <DialogContent sx={{ py: 1 }}>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <TextField 
+              fullWidth 
+              label="Factory Name" 
+              variant="outlined"
+              value={editName} 
+              onChange={(e) => setEditName(e.target.value)} 
+              InputProps={{ sx: { borderRadius: '12px' } }}
+            />
+            <TextField
+              fullWidth
+              label="Description"
+              multiline
+              rows={4}
+              variant="outlined"
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+              InputProps={{ sx: { borderRadius: '12px' } }}
+            />
+          </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setEditOpen(false)} sx={{ color: themePalette.textMuted, fontWeight: 700 }}>Cancel</Button>
+          <Button onClick={() => setEditOpen(false)} sx={{ color: themePalette.textMuted, fontWeight: 700, textTransform: 'none' }}>Cancel</Button>
           <Button 
-            onClick={saveEdit} variant="contained" 
-            sx={{ bgcolor: themePalette.primary, borderRadius: "10px", fontWeight: 700, px: 3 }}
+            onClick={saveEdit} 
+            variant="contained" 
+            sx={{ bgcolor: themePalette.primary, borderRadius: '10px', px: 4, fontWeight: 700, textTransform: 'none' }}
           >
             Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modern Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteOpen}
+        onClose={() => !deleteLoading && setDeleteOpen(false)}
+        PaperProps={{ sx: { borderRadius: "28px", p: 1, maxWidth: 400 } }}
+      >
+        <Box sx={{ p: 3, textAlign: 'center' }}>
+          <Box sx={{ 
+            width: 64, 
+            height: 64, 
+            borderRadius: '20px', 
+            bgcolor: alpha(themePalette.danger, 0.1), 
+            color: themePalette.danger,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            mx: 'auto',
+            mb: 2
+          }}>
+            <WarningAmberIcon sx={{ fontSize: 32 }} />
+          </Box>
+          <Typography variant="h5" fontWeight={900} sx={{ color: themePalette.textMain, mb: 1 }}>
+            Delete Factory?
+          </Typography>
+          <Typography variant="body2" sx={{ color: themePalette.textMuted, lineHeight: 1.6 }}>
+            Are you sure you want to delete <strong>{factoryToDelete?.name}</strong>? This action will permanently remove all associated algorithms and models.
+          </Typography>
+        </Box>
+        <DialogActions sx={{ p: 3, justifyContent: 'center', gap: 2 }}>
+          <Button 
+            fullWidth
+            onClick={() => setDeleteOpen(false)} 
+            disabled={deleteLoading}
+            sx={{ color: themePalette.textMuted, fontWeight: 800, textTransform: 'none', py: 1.2, borderRadius: '12px', border: `1px solid ${themePalette.border}` }}
+          >
+            Keep Factory
+          </Button>
+          <Button 
+            fullWidth
+            onClick={handleDelete} 
+            variant="contained" 
+            disabled={deleteLoading}
+            sx={{ 
+              bgcolor: themePalette.danger, 
+              borderRadius: '12px', 
+              fontWeight: 800, 
+              textTransform: 'none',
+              py: 1.2,
+              "&:hover": { bgcolor: "#DC2626" },
+              boxShadow: `0 8px 16px -4px ${alpha(themePalette.danger, 0.4)}`
+            }}
+          >
+            {deleteLoading ? <CircularProgress size={24} color="inherit" /> : "Yes, Delete"}
           </Button>
         </DialogActions>
       </Dialog>

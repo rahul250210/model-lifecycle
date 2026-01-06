@@ -23,7 +23,14 @@ import axios from "../../api/axios";
    Types
 ======================= */
 
-type ArtifactType = "text" | "json" | "csv" | "image" | "binary";
+type ArtifactType =
+  | "text"
+  | "json"
+  | "csv"
+  | "image"
+  | "binary"
+  | "code";
+
 
 interface Artifact {
   id: number;
@@ -44,6 +51,15 @@ export default function ArtifactViewer() {
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [content, setContent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  const getExtension = (name: string) =>
+  name.split(".").pop()?.toLowerCase();
+
+  const isCodeFile = (ext?: string) =>
+    ["py", "js", "ts", "cpp", "c", "h", "hpp", "java", "go", "rs"].includes(ext || "");
+
+  const isTextFile = (ext?: string) =>
+    ["txt", "log", "md"].includes(ext || "");
 
   /* =======================
      Fetch artifact metadata + preview
@@ -91,79 +107,107 @@ export default function ArtifactViewer() {
     );
   }
 
+  const normalizeContent = (value: any): string => {
+        if (typeof value === "string") return value;
+
+        if (value && typeof value === "object") {
+          if ("message" in value) return value.message;
+          return JSON.stringify(value, null, 2);
+        }
+
+        return "";
+      };
+
+      
+
   /* =======================
      Renderers
   ======================= */
 
-  const renderContent = () => {
-    switch (artifact.type) {
-      case "text":
-        return (
-          <pre style={{ whiteSpace: "pre-wrap" }}>
-            {content}
-          </pre>
-        );
+ const renderContent = () => {
+  const ext = getExtension(artifact.name);
 
-      case "json":
-        return (
-          <pre>
-            {JSON.stringify(content, null, 2)}
-          </pre>
-        );
+  // ---------- CODE ----------
+  if (isCodeFile(ext)) {
+    return (
+      <pre
+        style={{
+          whiteSpace: "pre-wrap",
+          background: "#0f172a",
+          color: "#e5e7eb",
+          padding: "16px",
+          borderRadius: "8px",
+          overflowX: "auto",
+          fontSize: "14px",
+          lineHeight: 1.6,
+        }}
+      >
+        {normalizeContent(content)}
+      </pre>
+    );
+  }
 
-      case "csv":
-        if (!Array.isArray(content) || content.length === 0) {
-          return (
-            <Typography color="text.secondary">
-              No preview available.
-            </Typography>
-          );
-        }
+  // ---------- JSON ----------
+  if (ext === "json") {
+    return <pre>{JSON.stringify(content, null, 2)}</pre>;
+  }
 
-        const headers = Object.keys(content[0]);
-
-        return (
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                {headers.map((h) => (
-                  <TableCell key={h}>{h}</TableCell>
-                ))}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {content.slice(0, 20).map((row, idx) => (
-                <TableRow key={idx}>
-                  {headers.map((h) => (
-                    <TableCell key={h}>
-                      {row[h]}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        );
-
-      case "image":
-        return (
-          <Box sx={{ textAlign: "center" }}>
-            <img
-              src={`/api/artifacts/${artifact.id}/download`}
-              alt={artifact.name}
-              style={{ maxWidth: "100%" }}
-            />
-          </Box>
-        );
-
-      default:
-        return (
-          <Typography color="text.secondary">
-            Preview not supported for this file type.
-          </Typography>
-        );
+  // ---------- CSV ----------
+  if (ext === "csv") {
+    if (!Array.isArray(content) || content.length === 0) {
+      return <Typography>No preview available.</Typography>;
     }
-  };
+
+    const headers = Object.keys(content[0]);
+
+    return (
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            {headers.map((h) => (
+              <TableCell key={h}>{h}</TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {content.map((row, idx) => (
+            <TableRow key={idx}>
+              {headers.map((h) => (
+                <TableCell key={h}>{row[h]}</TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  }
+
+  // ---------- IMAGE ----------
+  if (["png", "jpg", "jpeg", "webp"].includes(ext || "")) {
+    return (
+      <Box sx={{ textAlign: "center" }}>
+        <img
+          src={`/api/artifacts/${artifact.id}/download`}
+          alt={artifact.name}
+          style={{ maxWidth: "100%" }}
+        />
+      </Box>
+    );
+  }
+
+  // ---------- TEXT ----------
+  if (isTextFile(ext)) {
+    return <pre>{normalizeContent(content)}</pre>;
+  }
+
+  // ---------- FALLBACK ----------
+  return (
+    <Typography color="text.secondary">
+      {normalizeContent(content) || "Preview not supported for this file type."}
+    </Typography>
+  );
+};
+
 
   return (
     <Box sx={{ p: 4 }}>

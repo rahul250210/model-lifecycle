@@ -20,15 +20,34 @@ class ModelVersion(Base):
         "Artifact",
         back_populates="version",
         cascade="all, delete-orphan",
+        passive_deletes=True
     )
-    delta = relationship("VersionDelta", backref="version", uselist=False)
+    delta = relationship("VersionDelta", back_populates="version",
+    cascade="all, delete-orphan",
+    passive_deletes=True, uselist=False)
+
+    model = relationship(
+        "Model",
+        back_populates="versions"
+    )
 
 class VersionDelta(Base):
     __tablename__ = "version_deltas"
 
     id = Column(Integer, primary_key=True)
-    version_id = Column(Integer, ForeignKey("model_versions.id"), unique=True)
-
-    added_count = Column(Integer)
+    version_id = Column(Integer, ForeignKey("model_versions.id",  ondelete="CASCADE"),unique=True)
+    total_count = Column(Integer)
+    new_count = Column(Integer)
+    reused_count = Column(Integer)
     removed_count = Column(Integer)
     unchanged_count = Column(Integer)
+    dataset_count = Column(Integer)   
+    label_count = Column(Integer)  
+    dataset_new = Column(Integer, default=0)
+    dataset_reused = Column(Integer, default=0)
+    dataset_removed = Column(Integer, default=0)
+
+    label_new = Column(Integer, default=0)
+    label_reused = Column(Integer, default=0)
+    label_removed = Column(Integer, default=0)
+    version = relationship("ModelVersion", back_populates="delta",passive_deletes=True)

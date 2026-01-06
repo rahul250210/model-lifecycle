@@ -10,7 +10,7 @@ from app.models.artifact import Artifact
 from app.schemas.artifact import ArtifactOut
 
 router = APIRouter()
-
+MAX_PREVIEW_BYTES = 10_000 
 
 # ======================================================
 # GET ARTIFACT METADATA
@@ -68,34 +68,32 @@ def preview_artifact(
     if not file_path.exists():
         raise HTTPException(404, "File missing on server")
 
-    suffix = file_path.suffix.lower()
+    # 🔥 USE ORIGINAL FILENAME (NOT CACHE NAME)
+    suffix = Path(artifact.name).suffix.lower()
 
     # ---------- JSON ----------
     if suffix == ".json":
-        with open(file_path, "r") as f:
+        with open(file_path, "r", errors="ignore") as f:
             return json.load(f)
 
     # ---------- CSV ----------
     if suffix == ".csv":
-        with open(file_path, newline="") as csvfile:
+        with open(file_path, newline="", errors="ignore") as csvfile:
             reader = csv.DictReader(csvfile)
             rows = []
             for i, row in enumerate(reader):
                 rows.append(row)
-                if i >= 20:  # preview first 20 rows
+                if i >= 20:
                     break
             return rows
 
-    # ---------- TEXT / LOG ----------
-    if suffix in [".txt", ".log", ".py"]:
+    # ---------- CODE / TEXT ----------
+    if suffix in [".txt", ".log", ".md", ".py", ".js", ".ts", ".cpp", ".c", ".h", ".hpp", ".java"]:
         with open(file_path, "r", errors="ignore") as f:
-            return f.read(10_000)  # max 10KB preview
+            return f.read(50_000)  # 50 KB preview
 
     # ---------- UNSUPPORTED ----------
     return {"message": "Preview not supported for this file type"}
-
-
-
 
 @router.delete("/{artifact_id}", status_code=204)
 def delete_artifact(

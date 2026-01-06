@@ -69,7 +69,7 @@ export default function DashboardLayout() {
       >
         <Toolbar sx={{ justifyContent: "space-between", px: 4 }}>
           <Typography 
-            variant="h6" 
+            variant="h4" 
             fontWeight={800} 
             sx={{ 
               letterSpacing: "-0.02em",
@@ -78,7 +78,7 @@ export default function DashboardLayout() {
               WebkitTextFillColor: "transparent"
             }}
           >
-            MLOps Platform
+            NexusForge
           </Typography>
 
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>

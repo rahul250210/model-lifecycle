@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
 from sqlalchemy.sql import func
 from app.database import Base
+from sqlalchemy.orm import relationship
 
 class Model(Base):
     __tablename__ = "models"
@@ -13,3 +14,14 @@ class Model(Base):
 
     # runtime only
     versions_count: int = 0
+
+    algorithm = relationship(
+        "Algorithm",
+        back_populates="models"
+    )
+
+    versions = relationship(
+        "ModelVersion",
+        back_populates="model",
+        cascade="all, delete-orphan"
+    )

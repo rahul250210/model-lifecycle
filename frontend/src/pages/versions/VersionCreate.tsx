@@ -16,6 +16,7 @@ import {
   Container,
   Paper,
   Stack,
+  Tooltip,
 } from "@mui/material";
 
 import UploadFileIcon from "@mui/icons-material/UploadFile";
@@ -24,12 +25,15 @@ import AssessmentIcon from "@mui/icons-material/Assessment";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import DescriptionIcon from "@mui/icons-material/Description";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
+import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axios";
 
-/* ==========================================================================
-   CONSISTENT THEME PALETTE
-   ========================================================================== */
+const ALLOWED_MODEL_EXTENSIONS = [".pt", ".pth", ".onnx", ".h5", ".ckpt"];
+const ALLOWED_CODE_EXTENSIONS = [".py"];
+const ALLOWED_LABEL_EXTENSIONS = [".txt", ".json", ".xml"];
+
 const themePalette = {
   primary: "#4F46E5",
   primaryLight: "#EEF2FF",
@@ -39,6 +43,7 @@ const themePalette = {
   border: "#E2E8F0",
   white: "#FFFFFF",
   success: "#10B981",
+  error: "#EF4444",
 };
 
 export default function VersionCreate() {
@@ -46,9 +51,7 @@ export default function VersionCreate() {
   const navigate = useNavigate();
 
   const [datasetFiles, setDatasetFiles] = useState<File[]>([]);
-  const [datasetFolderSelected, setDatasetFolderSelected] = useState(false);
-  const [datasetImagesSelected, setDatasetImagesSelected] = useState(false);
-
+  const [labelFiles, setLabelFiles] = useState<File[]>([]);
   const [modelFile, setModelFile] = useState<File | null>(null);
   const [codeFile, setCodeFile] = useState<File | null>(null);
 
@@ -63,36 +66,38 @@ export default function VersionCreate() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const addDatasetFiles = (files: File[]) => {
-    setDatasetFiles((prev) => {
-      const map = new Map<string, File>();
-      [...prev, ...files].forEach((f) =>
-        map.set(`${f.name}-${f.size}`, f)
-      );
-      return Array.from(map.values());
-    });
+  const mergeFiles = (prev: File[], next: File[]) => {
+    const map = new Map<string, File>();
+    [...prev, ...next].forEach((f) => map.set(`${f.name}-${f.size}`, f));
+    return Array.from(map.values());
   };
 
-  const getButtonProps = (active: boolean) => ({
-    variant: "outlined" as const,
-    sx: {
-      textTransform: "none",
-      borderRadius: "12px",
-      py: 1.5,
-      border: active ? `2px solid ${themePalette.success}` : `1px dashed ${themePalette.border}`,
-      bgcolor: active ? alpha(themePalette.success, 0.05) : "transparent",
-      color: active ? themePalette.success : themePalette.textMuted,
-      fontWeight: 700,
-      "&:hover": {
-        bgcolor: active ? alpha(themePalette.success, 0.08) : alpha(themePalette.primary, 0.04),
-        borderColor: active ? themePalette.success : themePalette.primary,
-      }
+  const filterLabelFiles = (files: File[]) =>
+    files.filter((f) =>
+      ALLOWED_LABEL_EXTENSIONS.some((ext) =>
+        f.name.toLowerCase().endsWith(ext)
+      )
+    );
+
+  const getButtonStyles = (isStaged: boolean) => ({
+    width: "100%",
+    py: 2.5,
+    borderRadius: "16px",
+    textTransform: "none",
+    fontWeight: 700,
+    border: isStaged ? `2px solid ${themePalette.success}` : `1px dashed ${themePalette.border}`,
+    bgcolor: isStaged ? alpha(themePalette.success, 0.05) : themePalette.white,
+    color: isStaged ? themePalette.success : themePalette.textMuted,
+    transition: "all 0.3s ease",
+    "&:hover": {
+      bgcolor: isStaged ? alpha(themePalette.success, 0.1) : alpha(themePalette.primary, 0.05),
+      borderColor: themePalette.primary,
     },
   });
 
   const handleSubmit = async () => {
-    if (datasetFiles.length === 0 || !modelFile) {
-      setError("Dataset (folder or images) and Model file are required");
+    if (datasetFiles.length === 0 || !labelFiles.length || !modelFile) {
+      setError("Dataset images, labels, and model file are required");
       return;
     }
 
@@ -101,6 +106,7 @@ export default function VersionCreate() {
       setError("");
       const formData = new FormData();
       datasetFiles.forEach((f) => formData.append("dataset_files", f));
+      labelFiles.forEach((f) => formData.append("label_files", f));
       formData.append("model", modelFile);
       if (codeFile) formData.append("code", codeFile);
       formData.append("note", note);
@@ -108,13 +114,10 @@ export default function VersionCreate() {
         if (value !== "") formData.append(key, value);
       });
 
-      await axios.post(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`,
-        formData
-      );
+      await axios.post(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`, formData);
       navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`);
     } catch {
-      setError("Failed to create version");
+      setError("Failed to create version. Check file sizes and formats.");
     } finally {
       setLoading(false);
     }
@@ -123,71 +126,75 @@ export default function VersionCreate() {
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: themePalette.background, pb: 10 }}>
       <Container maxWidth="md">
-        {/* Header */}
-        <Box sx={{ pt: 4, pb: 4, display: "flex", alignItems: "center" }}>
-          <IconButton 
-            onClick={() => navigate(-1)}
-            sx={{ 
-              mr: 2, 
-              bgcolor: themePalette.white, 
-              border: `1px solid ${themePalette.border}`,
-              "&:hover": { bgcolor: themePalette.primaryLight, color: themePalette.primary }
-            }}
-          >
-            <ArrowBackIcon fontSize="small" />
-          </IconButton>
-          <Box>
-            <Typography variant="h4" fontWeight={800} sx={{ color: themePalette.textMain, letterSpacing: "-0.02em" }}>
-              New Model Iteration
-            </Typography>
-            <Typography variant="body2" sx={{ color: themePalette.textMuted, fontWeight: 500 }}>
-              Upload artifacts and evaluation results to create a new version.
-            </Typography>
-          </Box>
+        {/* HEADER */}
+        <Box sx={{ pt: 6, pb: 4, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <IconButton 
+              onClick={() => navigate(-1)}
+              sx={{ bgcolor: themePalette.white, border: `1px solid ${themePalette.border}`, '&:hover': { bgcolor: themePalette.primaryLight } }}
+            >
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+            <Box>
+              <Typography variant="h4" fontWeight={900} sx={{ color: themePalette.textMain, letterSpacing: "-0.02em" }}>
+                Commit <Box component="span" sx={{ color: themePalette.primary }}>New Version</Box>
+              </Typography>
+              <Typography variant="body2" sx={{ color: themePalette.textMuted, fontWeight: 500 }}>
+                Register a new iteration with optimized weights and updated datasets.
+              </Typography>
+            </Box>
+          </Stack>
         </Box>
 
         <Stack spacing={4}>
-          {/* Artifacts Selection */}
+          {/* STEP 1: DATASET ARTIFACTS */}
           <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>
             <CardContent sx={{ p: 4 }}>
               <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                 <InventoryIcon sx={{ color: themePalette.primary }} />
-                <Typography variant="h6" fontWeight={800}>Required Artifacts</Typography>
+                <Typography variant="h6" fontWeight={800}>Dataset Artifacts</Typography>
               </Stack>
               
-              <Grid container spacing={3}>
+              <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" fontWeight={700} sx={{ color: themePalette.textMuted, mb: 1, display: 'block' }}>DATASET BUNDLE</Typography>
-                  <Stack spacing={1.5}>
-                    <Button component="label" startIcon={datasetFolderSelected ? <CheckCircleIcon /> : <UploadFileIcon />} {...getButtonProps(datasetFolderSelected)}>
-                      Folder Upload
-                      <input type="file" hidden multiple webkitdirectory="true" onChange={(e) => { if (e.target.files) { addDatasetFiles(Array.from(e.target.files)); setDatasetFolderSelected(true); } }} />
-                    </Button>
-                    <Button component="label" startIcon={datasetImagesSelected ? <CheckCircleIcon /> : <UploadFileIcon />} {...getButtonProps(datasetImagesSelected)}>
-                      Image Selection
-                      <input type="file" hidden multiple accept="image/*" onChange={(e) => { if (e.target.files) { addDatasetFiles(Array.from(e.target.files)); setDatasetImagesSelected(true); } }} />
-                    </Button>
-                  </Stack>
+                  <Button component="label" sx={getButtonStyles(datasetFiles.length > 0)} startIcon={datasetFiles.length > 0 ? <CheckCircleIcon /> : <FolderOpenIcon />}>
+                    {datasetFiles.length > 0 ? `${datasetFiles.length} Images Staged` : "Upload Images Folder"}
+                    <input hidden type="file" webkitdirectory="true" multiple  onChange={(e) => e.target.files && setDatasetFiles(mergeFiles(datasetFiles, Array.from(e.target.files)))} />
+                  </Button>
                 </Grid>
-
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="caption" fontWeight={700} sx={{ color: themePalette.textMuted, mb: 1, display: 'block' }}>WEIGHTS & SOURCE</Typography>
-                  <Stack spacing={1.5}>
-                    <Button component="label" startIcon={modelFile ? <CheckCircleIcon /> : <UploadFileIcon />} {...getButtonProps(!!modelFile)}>
-                      Model weights (.pt, .h5) *
-                      <input hidden type="file" onChange={(e) => setModelFile(e.target.files?.[0] || null)} />
-                    </Button>
-                    <Button component="label" startIcon={codeFile ? <CheckCircleIcon /> : <UploadFileIcon />} {...getButtonProps(!!codeFile)}>
-                      Training script (optional)
-                      <input hidden type="file" onChange={(e) => setCodeFile(e.target.files?.[0] || null)} />
-                    </Button>
-                  </Stack>
+                  <Button component="label" sx={getButtonStyles(labelFiles.length > 0)} startIcon={labelFiles.length > 0 ? <CheckCircleIcon /> : <UploadFileIcon />}>
+                    {labelFiles.length > 0 ? `${labelFiles.length} Labels Staged` : "Upload Labels Folder"}
+                    <input hidden type="file" webkitdirectory="true" multiple onChange={(e) => e.target.files && setLabelFiles(mergeFiles(labelFiles, filterLabelFiles(Array.from(e.target.files))))} />
+                  </Button>
                 </Grid>
               </Grid>
             </CardContent>
           </Card>
 
-          {/* Metrics Input */}
+          {/* STEP 2: MODEL WEIGHTS */}
+          <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>
+            <CardContent sx={{ p: 4 }}>
+              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+                <HistoryEduIcon sx={{ color: themePalette.primary }} />
+                <Typography variant="h6" fontWeight={800}>Weights & Source</Typography>
+              </Stack>
+              
+              <Stack spacing={2}>
+                <Button component="label" sx={getButtonStyles(!!modelFile)} startIcon={modelFile ? <CheckCircleIcon /> : <UploadFileIcon />}>
+                  {modelFile ? `Weights: ${modelFile.name}` : "Upload Model Weights (.pt, .pth, .onnx) *"}
+                  <input hidden type="file" onChange={(e) => setModelFile(e.target.files?.[0] || null)} />
+                </Button>
+
+                <Button component="label" sx={getButtonStyles(!!codeFile)} startIcon={codeFile ? <CheckCircleIcon /> : <UploadFileIcon />}>
+                  {codeFile ? `Script: ${codeFile.name}` : "Upload Training Script (.py) - optional"}
+                  <input hidden type="file" onChange={(e) => setCodeFile(e.target.files?.[0] || null)} />
+                </Button>
+              </Stack>
+            </CardContent>
+          </Card>
+
+          {/* STEP 3: PERFORMANCE METRICS */}
           <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>
             <CardContent sx={{ p: 4 }}>
               <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
@@ -196,28 +203,15 @@ export default function VersionCreate() {
               </Stack>
               
               <Grid container spacing={3}>
-                {[
-                  ["accuracy", "Accuracy"],
-                  ["precision", "Precision"],
-                  ["recall", "Recall"],
-                  ["f1_score", "F1 Score"],
-                ].map(([key, label]) => (
-                  <Grid item xs={12} sm={3} key={key}>
-                    <Typography variant="body2" fontWeight={700} sx={{ mb: 1, color: themePalette.textMain }}>{label}</Typography>
+                {Object.keys(metrics).map((k) => (
+                  <Grid item xs={12} sm={6} key={k}>
+                    <Typography variant="caption" fontWeight={800} sx={{ color: themePalette.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{k.replace('_', ' ')} (%)</Typography>
                     <TextField
                       fullWidth
-                      type="number"
                       placeholder="0.00"
-                      inputProps={{ step: "0.01", min: 0, max: 1 }}
-                      value={(metrics as any)[key]}
-                      onChange={(e) => setMetrics({ ...metrics, [key]: e.target.value })}
-                      sx={{
-                        "& .MuiOutlinedInput-root": {
-                          borderRadius: "12px",
-                          bgcolor: themePalette.background,
-                          "& fieldset": { borderColor: themePalette.border }
-                        }
-                      }}
+                      value={(metrics as any)[k]}
+                      onChange={(e) => setMetrics({ ...metrics, [k]: e.target.value })}
+                      sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px", bgcolor: themePalette.background } }}
                     />
                   </Grid>
                 ))}
@@ -225,41 +219,36 @@ export default function VersionCreate() {
             </CardContent>
           </Card>
 
-          {/* Note Input */}
+          {/* FINAL NOTES */}
           <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>
             <CardContent sx={{ p: 4 }}>
-              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
                 <DescriptionIcon sx={{ color: themePalette.primary }} />
-                <Typography variant="h6" fontWeight={800}>Deployment Note</Typography>
+                <Typography variant="h6" fontWeight={800}>Version Summary</Typography>
               </Stack>
               <TextField
                 fullWidth
                 multiline
                 rows={3}
-                placeholder="Describe key changes in this version (e.g., hyperparameter tuning, new data augmentations)..."
+                placeholder="What changes were made in this iteration? (e.g., Improved lighting augmentations)"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                sx={{
-                  "& .MuiOutlinedInput-root": {
-                    borderRadius: "16px",
-                    bgcolor: themePalette.background,
-                    "& fieldset": { borderColor: themePalette.border }
-                  }
-                }}
+                sx={{ "& .MuiOutlinedInput-root": { borderRadius: "16px", bgcolor: themePalette.background } }}
               />
             </CardContent>
           </Card>
 
           {error && (
-            <Paper elevation={0} sx={{ p: 2, bgcolor: "#FEF2F2", border: "1px solid #FEE2E2", borderRadius: "12px" }}>
-              <Typography variant="body2" fontWeight={600} color="#B91C1C">{error}</Typography>
+            <Paper elevation={0} sx={{ p: 2, bgcolor: alpha(themePalette.error, 0.05), border: `1px solid ${themePalette.error}`, borderRadius: "12px" }}>
+              <Typography color="error" variant="body2" fontWeight={700}>{error}</Typography>
             </Paper>
           )}
 
-          <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2 }}>
+          {/* SUBMIT ACTION */}
+          <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, pt: 2 }}>
             <Button 
               variant="text" 
-              onClick={() => navigate(-1)}
+              onClick={() => navigate(-1)} 
               sx={{ px: 4, borderRadius: "12px", fontWeight: 700, color: themePalette.textMuted }}
             >
               Cancel
@@ -269,16 +258,11 @@ export default function VersionCreate() {
               onClick={handleSubmit}
               disabled={loading}
               sx={{ 
-                px: 6, 
-                py: 1.5,
-                borderRadius: "14px", 
-                bgcolor: themePalette.primary,
-                fontWeight: 700,
-                boxShadow: `0 10px 15px -3px ${alpha(themePalette.primary, 0.3)}`,
-                "&:hover": { bgcolor: "#4338CA" }
+                px: 6, py: 1.5, borderRadius: "14px", fontWeight: 700, textTransform: 'none',
+                boxShadow: `0 10px 15px -3px ${alpha(themePalette.primary, 0.3)}` 
               }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : "Deploy Version"}
+              {loading ? <CircularProgress size={24} color="inherit" /> : "Commit Version"}
             </Button>
           </Box>
         </Stack>

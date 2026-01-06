@@ -42,10 +42,10 @@ def create_version(
     algorithm_id: int,
     model_id: int,
     dataset_files: list[UploadFile] = File(...),
+    label_files: list[UploadFile] = File(...),
     model: UploadFile = File(...),
     code: UploadFile | None = File(None),
 
-    # Metrics (stored in DB, not files)
     accuracy: float | None = Form(None),
     precision: float | None = Form(None),
     recall: float | None = Form(None),
@@ -54,9 +54,9 @@ def create_version(
     note: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    # --------------------------------------------------
+    # -------------------------------
     # Validate model
-    # --------------------------------------------------
+    # -------------------------------
     model_obj = (
         db.query(Model)
         .filter(Model.id == model_id, Model.algorithm_id == algorithm_id)
@@ -65,9 +65,9 @@ def create_version(
     if not model_obj:
         raise HTTPException(404, "Model not found")
 
-    # --------------------------------------------------
+    # -------------------------------
     # Validate metrics
-    # --------------------------------------------------
+    # -------------------------------
     for name, value in {
         "accuracy": accuracy,
         "precision": precision,
@@ -77,9 +77,19 @@ def create_version(
         if value is not None and not (0.0 <= value <= 100.0):
             raise HTTPException(400, f"{name} must be between 0 and 100")
 
-    # --------------------------------------------------
+    # -------------------------------
+    # GLOBAL dataset index (ALL versions)
+    # -------------------------------
+    global_artifacts = {
+        a.checksum: a
+        for a in db.query(Artifact)
+        .filter(Artifact.type.in_(["dataset", "label"]))
+        .distinct(Artifact.checksum)
+    }
+
+    # -------------------------------
     # Create new version
-    # --------------------------------------------------
+    # -------------------------------
     latest = (
         db.query(func.max(ModelVersion.version_number))
         .filter(ModelVersion.model_id == model_id)
@@ -106,103 +116,115 @@ def create_version(
     db.commit()
     db.refresh(version)
 
-    # --------------------------------------------------
-    # Load previous dataset snapshot
-    # --------------------------------------------------
+    # -------------------------------
+    # Previous version snapshot
+    # -------------------------------
     prev_version = (
         db.query(ModelVersion)
         .filter(
             ModelVersion.model_id == model_id,
-            ModelVersion.id != version.id,
+            ModelVersion.version_number == version_number - 1,
         )
-        .order_by(ModelVersion.version_number.desc())
         .first()
     )
 
-    prev_dataset = {}
-    if prev_version:
-        for a in prev_version.artifacts:
-            if a.type == "dataset":
-                prev_dataset[a.checksum] = a
+    prev_dataset_checksums = {
+        a.checksum
+        for a in prev_version.artifacts
+        if a.type == "dataset"
+    } if prev_version else set()
 
-    prev_checksums = set(prev_dataset.keys())
+    prev_label_checksums = {
+        a.checksum
+        for a in prev_version.artifacts
+        if a.type == "label"
+    } if prev_version else set()
 
-    # --------------------------------------------------
-    #  Compute current dataset checksums
-    # --------------------------------------------------
+
+    # -------------------------------
+    # Build snapshot + delta
+    # -------------------------------
+    new_count = reused_count = unchanged_count = 0
     current_checksums = set()
-    current_files = {}
-    added = 0
-    unchanged = 0
+    dataset_checksums: set[str] = set()
+    label_checksums: set[str] = set()
 
-
-    for file in dataset_files:
-        data = file.file.read()
-        file.file.seek(0)  # 🔥 IMPORTANT
-        checksum = sha256_bytes(data)
-        current_checksums.add(checksum)
-        current_files[checksum]=(file.filename,data)
-
+    dataset_new = dataset_reused = 0
+    label_new = label_reused = 0
     # --------------------------------------------------
-    # Decide dataset mode (incremental vs new)
+    # Shared processor (DVC-style)
     # --------------------------------------------------
-    inherit_previous = bool(prev_checksums & current_checksums)
+    def process_files(files, artifact_type, checksum_set, prev_set):
+        nonlocal dataset_new, dataset_reused, label_new, label_reused
 
-    added = unchanged = 0
+        for file in files:
+            data = file.file.read()
+            file.file.seek(0)
+            checksum = sha256_bytes(data)
+            
+            checksum_set.add(checksum)
 
-    # --------------------------------------------------
-    # Build SNAPSHOT (this is the key fix)
-    # --------------------------------------------------
-    for checksum, (filename, data) in current_files.items():
+            # Reuse globally
+            if checksum in global_artifacts:
+                old = global_artifacts[checksum]
+                db.add(
+                    Artifact(
+                        version_id=version.id,
+                        name=old.name,
+                        type=artifact_type,
+                        path=old.path,
+                        size=old.size,
+                        checksum=old.checksum,
+                    )
+                )
+                if artifact_type == "dataset":
+                    dataset_reused += 1
+                else:
+                    label_reused += 1
+                continue
 
-        # Reuse old file
-        if inherit_previous and checksum in prev_dataset:
-            a = prev_dataset[checksum]
+            # New file → cache
+            cache_dir = CACHE_ROOT / checksum[:2] / checksum[2:4]
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_path = cache_dir / checksum
+
+            if not cache_path.exists():
+                with open(cache_path, "wb") as f:
+                    f.write(data)
+
             db.add(
                 Artifact(
                     version_id=version.id,
-                    name=a.name,
-                    type="dataset",
-                    group_path="dataset/",
-                    path=a.path,
-                    size=a.size,
-                    checksum=a.checksum,
+                    name=file.filename,
+                    type=artifact_type,
+                    path=str(cache_path),
+                    size=len(data),
+                    checksum=checksum,
                 )
             )
-            unchanged += 1
-            continue
+            if artifact_type == "dataset":
+                dataset_new += 1
+            else:
+                label_new += 1
 
-        # New file
-        cache_dir = CACHE_ROOT / checksum[:2] / checksum[2:4]
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        cache_path = cache_dir / checksum
+    # --------------------------------------------------
+    # Process DATASET IMAGES + LABELS
+    # --------------------------------------------------
+    process_files(dataset_files, "dataset", dataset_checksums, prev_dataset_checksums)
+    process_files(label_files, "label", label_checksums, prev_label_checksums)
 
-        if not cache_path.exists():
-            with open(cache_path, "wb") as f:
-                f.write(data)
+    dataset_removed = len(prev_dataset_checksums - dataset_checksums)
+    label_removed = len(prev_label_checksums - label_checksums)
 
-        db.add(
-            Artifact(
-                version_id=version.id,
-                name=filename,
-                type="dataset",
-                group_path="dataset/",
-                path=str(cache_path),
-                size=len(data),
-                checksum=checksum,
-            )
-        )
-        added += 1
-
-    removed = (
-        len(prev_checksums - current_checksums)
-        if inherit_previous
-        else 0
+    unchanged_count = (
+        len(dataset_checksums & prev_dataset_checksums)
+        + len(label_checksums & prev_label_checksums)
     )
 
-    # --------------------------------------------------
-    # Save MODEL / CODE
-    # --------------------------------------------------
+
+    # -------------------------------
+    # Save model / code
+    # -------------------------------
     def save_single(file: UploadFile, artifact_type: str):
         data = file.file.read()
         file.file.seek(0)
@@ -231,17 +253,29 @@ def create_version(
     if code:
         save_single(code, "code")
 
-    # --------------------------------------------------
+    # -------------------------------
     # Save delta
-    # --------------------------------------------------
+    # -------------------------------
     db.add(
         VersionDelta(
             version_id=version.id,
-            added_count=added,
-            removed_count=removed,
-            unchanged_count=unchanged,
+            dataset_count=len(dataset_checksums),
+            label_count=len(label_checksums),
+            dataset_new=dataset_new,
+            dataset_reused=dataset_reused,
+            dataset_removed=dataset_removed,
+
+            label_new=label_new,
+            label_reused=label_reused,
+            label_removed=label_removed,
+
+            new_count=dataset_new + label_new,
+            reused_count=dataset_reused + label_reused,
+            removed_count=dataset_removed + label_removed,
         )
     )
+    print("Images:", len(dataset_files))
+    print("Labels:", len(label_files))
 
     db.commit()
     return version
@@ -345,10 +379,20 @@ def get_version_delta(
         raise HTTPException(404, "Delta not found")
 
     return {
-        "added": delta.added_count,
-        "removed": delta.removed_count,
+        "dataset": {
+            "count": delta.dataset_count or 0,
+            "new": delta.dataset_new,
+            "reused": delta.dataset_reused,
+            "removed": delta.dataset_removed,
+        },
+        "label": {
+            "count": delta.label_count or 0,
+            "new": delta.label_new,
+            "reused": delta.label_reused,
+            "removed": delta.label_removed,
+        },
         "unchanged": delta.unchanged_count,
-    }
+}
 
 
 @router.get(
@@ -359,7 +403,6 @@ def download_version(
     version_id: int,
     dataset: bool = Query(False),
     model: bool = Query(False),
-    metrics: bool = Query(False),
     code: bool = Query(False),
     db: Session = Depends(get_db),
 ):
@@ -378,7 +421,7 @@ def download_version(
     # Map selection → artifact types
     selected_types = []
     if dataset:
-        selected_types.append("dataset")
+         selected_types.extend(["dataset", "label"])
     if model:
         selected_types.append("model")
    
@@ -412,9 +455,14 @@ def download_version(
             if not file_path.exists():
                 continue
 
-            # Dataset → keep folder structure
+           # Dataset images
             if artifact.type == "dataset":
-                arcname = f"dataset/{artifact.name}"
+                arcname = f"dataset/images/{artifact.name}"
+
+            # Dataset labels
+            elif artifact.type == "label":
+                arcname = f"dataset/labels/{artifact.name}"
+
             else:
                 arcname = f"{artifact.type}/{artifact.name}"
 
@@ -459,9 +507,15 @@ def delete_version(
 def edit_version(
     version_id: int,
     dataset_files: list[UploadFile] | None = File(None),
+    label_files: list[UploadFile] | None = File(None),
     model: UploadFile | None = File(None),
     code: UploadFile | None = File(None),
-    metrics: UploadFile | None = File(None),
+
+    accuracy: float | None = Form(None),
+    precision: float | None = Form(None),
+    recall: float | None = Form(None),
+    f1_score: float | None = Form(None),
+
     note: str = Form(""),
     db: Session = Depends(get_db),
 ):
@@ -469,48 +523,95 @@ def edit_version(
     if not version:
         raise HTTPException(404, "Version not found")
 
-    # ---- existing dataset checksums
-    existing = {
-        a.checksum
-        for a in version.artifacts
-        if a.type == "dataset"
+    # -------------------------------
+    # Update metrics
+    # -------------------------------
+    for k, v in {
+        "accuracy": accuracy,
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1_score,
+    }.items():
+        if v is not None:
+            setattr(version, k, v)
+
+    if note:
+        version.note = note
+
+    # -------------------------------
+    # GLOBAL artifact index
+    # -------------------------------
+    global_artifacts = {
+        a.checksum: a
+        for a in db.query(Artifact)
+        .filter(Artifact.type.in_(["dataset", "label"]))
+        .distinct(Artifact.checksum)
     }
+   
+     # --------------------------------------------------
+    # Helper to replace snapshot (DVC-style)
+    # --------------------------------------------------
+    def replace_files(files: list[UploadFile], artifact_type: str):
+        for file in files:
+            data = file.file.read()
+            file.file.seek(0)
+            checksum = sha256_bytes(data)
 
-    added = 0
-    unchanged = 0
-
-    if dataset_files:
-        for file in dataset_files:
-            contents = file.file.read()
-            checksum = sha256_bytes(contents)
-
-            if checksum in existing:
-                unchanged += 1
+            # Reuse globally cached file
+            if checksum in global_artifacts:
+                old = global_artifacts[checksum]
+                db.add(
+                    Artifact(
+                        version_id=version.id,
+                        name=old.name,
+                        type=artifact_type,
+                        path=old.path,
+                        size=old.size,
+                        checksum=old.checksum,
+                    )
+                )
                 continue
 
+            # New file
             cache_dir = CACHE_ROOT / checksum[:2] / checksum[2:4]
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_path = cache_dir / checksum
 
             if not cache_path.exists():
                 with open(cache_path, "wb") as f:
-                    f.write(contents)
+                    f.write(data)
 
             db.add(
                 Artifact(
                     version_id=version.id,
                     name=file.filename,
-                    type="dataset",
+                    type=artifact_type,
                     path=str(cache_path),
-                    size=len(contents),
+                    size=len(data),
                     checksum=checksum,
                 )
             )
-            added += 1
+    if dataset_files is not None  or label_files is not None:
 
+        # Remove existing snapshot
+        db.query(Artifact).filter(
+            Artifact.version_id == version.id,
+            Artifact.type.in_(["dataset", "label"]),
+        ).delete(synchronize_session=False)
+
+        if dataset_files:
+            replace_files(dataset_files, "dataset")
+
+        if label_files:
+            replace_files(label_files, "label")
+
+    # -------------------------------
+    # Replace model / code
+    # -------------------------------
     def save_single(file, t):
-        contents = file.file.read()
-        checksum = sha256_bytes(contents)
+        data = file.file.read()
+        file.file.seek(0)
+        checksum = sha256_bytes(data)
 
         cache_dir = CACHE_ROOT / checksum[:2] / checksum[2:4]
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -518,7 +619,7 @@ def edit_version(
 
         if not cache_path.exists():
             with open(cache_path, "wb") as f:
-                f.write(contents)
+                f.write(data)
 
         db.add(
             Artifact(
@@ -526,7 +627,7 @@ def edit_version(
                 name=file.filename,
                 type=t,
                 path=str(cache_path),
-                size=len(contents),
+                size=len(data),
                 checksum=checksum,
             )
         )
@@ -535,20 +636,10 @@ def edit_version(
         save_single(model, "model")
     if code:
         save_single(code, "code")
-    if metrics:
-        save_single(metrics, "metrics")
-
-    if note:
-        version.note = note
 
     db.commit()
 
-    return {
-        "message": "Version updated successfully",
-        "dataset_added": added,
-        "dataset_unchanged": unchanged,
-    }
-
+    return {"message": "Version updated successfully"}
 
 # ======================================================
 # LIST ARTIFACTS OF A VERSION

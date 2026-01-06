@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import {
   Box,
-  Grid,
   Typography,
   Card,
   CardContent,
@@ -22,6 +21,7 @@ import {
   Stack,
 } from "@mui/material";
 
+import Grid from "@mui/material/Grid";
 import AddIcon from "@mui/icons-material/Add";
 import SchemaIcon from "@mui/icons-material/Schema";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";

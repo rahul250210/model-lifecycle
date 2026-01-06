@@ -34,3 +34,5 @@ class ExperimentRun(Base):
     model_version_id = Column(Integer, ForeignKey("model_versions.id"), nullable=True)
     started_at = Column(DateTime)
     finished_at = Column(DateTime, nullable=True)
+
+    

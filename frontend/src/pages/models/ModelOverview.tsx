@@ -11,77 +11,69 @@ import {
   Divider,
   Chip,
   Grid,
+  IconButton,
+  alpha,
+  Container,
+  Stack,
+  Tooltip as MuiTooltip,
+  Paper,
 } from "@mui/material";
 
 import HubIcon from "@mui/icons-material/Hub";
 import LayersIcon from "@mui/icons-material/Layers";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import AssessmentIcon from "@mui/icons-material/Assessment";
+import TimelineIcon from "@mui/icons-material/Timeline";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import SpeedIcon from "@mui/icons-material/Speed";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  AreaChart,
+  Area,
 } from "recharts";
 
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axios";
 
-/* =======================
-   Types
-======================= */
-
-interface Model {
-  id: number;
-  name: string;
-  description?: string;
-  versions_count: number;
-  created_at: string;
-}
-
-interface VersionMetrics {
-  id: number;
-  version_number: number;
-  accuracy?: number;
-  precision?: number;
-  recall?: number;
-  f1_score?: number;
-  created_at: string;
-}
-
-/* =======================
-   Component
-======================= */
+/* ==========================================================================
+   CONSISTENT THEME PALETTE
+   ========================================================================== */
+const themePalette = {
+  primary: "#4F46E5",
+  primaryLight: "#EEF2FF",
+  textMain: "#1E293B",
+  textMuted: "#64748B",
+  background: "#F8FAFC",
+  border: "#E2E8F0",
+  white: "#FFFFFF",
+  success: "#10B981",
+  warning: "#F59E0B",
+  error: "#EF4444",
+};
 
 export default function ModelOverview() {
   const { factoryId, algorithmId, modelId } = useParams();
   const navigate = useNavigate();
 
-  const [model, setModel] = useState<Model | null>(null);
-  const [versions, setVersions] = useState<VersionMetrics[]>([]);
+  const [model, setModel] = useState<any>(null);
+  const [versions, setVersions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  /* =======================
-     Fetch data
-  ======================= */
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [modelRes, versionsRes] = await Promise.all([
-          axios.get(
-            `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}`
-          ),
-          axios.get(
-            `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`
-          ),
+          axios.get(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}`),
+          axios.get(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`),
         ]);
 
-        // sort versions by version_number ASC for graphs
         const sortedVersions = [...versionsRes.data].sort(
           (a, b) => a.version_number - b.version_number
         );
@@ -94,28 +86,20 @@ export default function ModelOverview() {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [factoryId, algorithmId, modelId]);
 
   if (loading || !model) {
     return (
-      <Box
-        sx={{
-          height: "70vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-        }}
-      >
-        <CircularProgress size={42} />
+      <Box sx={{ height: "80vh", display: "flex", justifyContent: "center", alignItems: "center" }}>
+        <CircularProgress size={42} sx={{ color: themePalette.primary }} />
       </Box>
     );
   }
 
-  /* =======================
-     Prepare chart data
-  ======================= */
+  const activeVersion =
+    versions.find((v) => v.is_active) ||
+    versions[versions.length - 1];
 
   const chartData = versions.map((v) => ({
     version: `v${v.version_number}`,
@@ -125,169 +109,238 @@ export default function ModelOverview() {
     f1_score: v.f1_score ?? null,
   }));
 
-  /* =======================
-     Metric Chart Component
-  ======================= */
-
-  const MetricChart = ({
-    title,
-    dataKey,
-    color,
-  }: {
-    title: string;
-    dataKey: string;
-    color: string;
-  }) => (
-    <Card sx={{ borderRadius: 3, height: "100%" }}>
-      <CardContent>
-        <Typography fontWeight={600} sx={{ mb: 2 }}>
+  const MetricCard = ({ title, value, icon, color }: any) => (
+    <Paper elevation={0} sx={{ 
+      p: 3, 
+      borderRadius: "24px", 
+      border: `1px solid ${themePalette.border}`, 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: 2, 
+      bgcolor: themePalette.white,
+      transition: "transform 0.2s",
+      "&:hover": { transform: "translateY(-4px)" }
+    }}>
+      <Box sx={{ p: 1.5, bgcolor: alpha(color, 0.1), color: color, borderRadius: "14px", display: 'flex' }}>
+        {icon}
+      </Box>
+      <Box>
+        <Typography variant="caption" fontWeight={800} color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>
           {title}
         </Typography>
+        <Typography variant="h5" fontWeight={900}>{value}</Typography>
+      </Box>
+    </Paper>
+  );
 
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="version" />
-            <YAxis domain={[0, 100]} />
-            <Tooltip />
-            <Line
-              type="monotone"
-              dataKey={dataKey}
-              stroke={color}
-              strokeWidth={3}
-              dot={{ r: 4 }}
+  const MetricChart = ({ title, dataKey, color, activeVersion }: any) => (
+    <Card 
+      elevation={0} 
+      sx={{ 
+        borderRadius: "28px", 
+        border: `1px solid ${themePalette.border}`,
+        bgcolor: themePalette.white,
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        "&:hover": { boxShadow: `0 25px 50px -12px ${alpha("#000", 0.08)}` },
+        overflow: 'visible'
+      }}
+    >
+      <CardContent sx={{ p: { xs: 3, md: 5 } }}>
+        {/* IMPROVED HEADER: Spaced out to prevent overlapping */}
+        <Stack 
+          direction={{ xs: 'column', sm: 'row' }} 
+          justifyContent="space-between" 
+          alignItems={{ xs: 'flex-start', sm: 'flex-end' }} 
+          spacing={2} 
+          sx={{ mb: 6 }}
+        >
+          <Box>
+            <Typography 
+              variant="overline" 
+              fontWeight={800} 
+              sx={{ color: themePalette.primary, letterSpacing: 2, display: 'block', mb: 1 }}
+            >
+              Performance Tracking
+            </Typography>
+            <Typography 
+              variant="h3" 
+              fontWeight={900} 
+              sx={{ color: themePalette.textMain, letterSpacing: "-0.02em" }}
+            >
+              {title}
+            </Typography>
+          </Box>
+          <Box sx={{ minWidth: 140, textAlign: { xs: 'left', sm: 'right' } }}>
+            <Typography variant="h2" fontWeight={900} sx={{ color: color, lineHeight: 1 }}>
+              {activeVersion && activeVersion[dataKey] != null ? `${activeVersion[dataKey]}%` : "N/A"}
+            </Typography>
+            <Typography variant="caption" fontWeight={800} sx={{ color: themePalette.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Current Milestone
+            </Typography>
+          </Box>
+        </Stack>
+
+        {/* IMPROVED GRAPH: Better texture, visibility and clean aesthetic */}
+        <ResponsiveContainer width="100%" height={380}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+            <defs>
+              <linearGradient id={`gradient-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={color} stopOpacity={0.4}/>
+                <stop offset="95%" stopColor={color} stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid 
+              strokeDasharray="4 4" 
+              vertical={false} 
+              stroke={alpha(themePalette.border, 0.7)} 
             />
-          </LineChart>
+            <XAxis 
+              dataKey="version" 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fill: themePalette.textMuted, fontSize: 14, fontWeight: 700 }}
+              dy={15}
+            />
+            <YAxis 
+              domain={[0, 100]} 
+              axisLine={false} 
+              tickLine={false} 
+              tick={{ fill: themePalette.textMuted, fontSize: 14, fontWeight: 700 }}
+            />
+            <Tooltip 
+              contentStyle={{ 
+                borderRadius: '16px', 
+                border: `1px solid ${themePalette.border}`, 
+                boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', 
+                padding: '16px',
+                backgroundColor: alpha(themePalette.white, 0.95),
+                backdropFilter: 'blur(4px)'
+              }}
+              itemStyle={{ fontWeight: 800, color: themePalette.textMain }}
+              labelStyle={{ fontWeight: 900, marginBottom: '8px', color: themePalette.primary }}
+            />
+            <Area 
+              type="monotone" 
+              dataKey={dataKey} 
+              stroke={color} 
+              strokeWidth={5} 
+              fillOpacity={1} 
+              fill={`url(#gradient-${dataKey})`} 
+              dot={{ 
+                r: 6, 
+                fill: themePalette.white, 
+                stroke: color, 
+                strokeWidth: 3 
+              }} 
+              activeDot={{ 
+                r: 8, 
+                strokeWidth: 0,
+                fill: color 
+              }} 
+            />
+          </AreaChart>
         </ResponsiveContainer>
       </CardContent>
     </Card>
   );
 
   return (
-    <Box sx={{ p: 4 }}>
-      {/* ================= HEADER ================= */}
-      <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() =>
-            navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models`)
-          }
-          sx={{ mr: 2 }}
-        >
-          Back
-        </Button>
+    <Box sx={{ minHeight: "100vh", bgcolor: themePalette.background, pb: 10 }}>
+      <Container maxWidth="xl">
+        {/* Header Hero Section */}
+        <Box sx={{ pt: 6, pb: 6 }}>
+          <Grid container justifyContent="space-between" alignItems="center">
+            <Grid item xs={12} md={7}>
+              <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+                <IconButton 
+                  onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models`)}
+                  sx={{ bgcolor: themePalette.white, border: `1px solid ${themePalette.border}` }}
+                >
+                  <ArrowBackIcon fontSize="small" />
+                </IconButton>
+                <Chip label="Analysis Hub" size="small" sx={{ bgcolor: themePalette.primaryLight, color: themePalette.primary, fontWeight: 900, px: 1 }} />
+              </Stack>
+              <Typography variant="h2" fontWeight={900} sx={{ color: themePalette.textMain, letterSpacing: "-0.04em" }}>
+                {model.name}
+              </Typography>
+              <Typography variant="h6" sx={{ color: themePalette.textMuted, mt: 1, fontWeight: 400, maxWidth: 600 }}>
+                {model.description || "Detailed analysis of model performance metrics and iteration convergence."}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} md={5}>
+              <Stack direction="row" spacing={2} justifyContent={{ md: 'flex-end' }}>
+                <Button 
+                  variant="outlined" 
+                  onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`)}
+                  sx={{ borderRadius: "14px", fontWeight: 800, px: 3, py: 1.2, textTransform: 'none', border: `2px solid ${themePalette.border}` }}
+                >
+                  Timeline
+                </Button>
+                <Button 
+                  variant="contained" 
+                  startIcon={<AddIcon />} 
+                  onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/create`)}
+                  sx={{ bgcolor: themePalette.primary, borderRadius: "14px", fontWeight: 800, px: 3, py: 1.2, textTransform: 'none', boxShadow: `0 10px 15px -3px ${alpha(themePalette.primary, 0.4)}` }}
+                >
+                  Create Version
+                </Button>
+              </Stack>
+            </Grid>
+          </Grid>
+        </Box>
 
-        <Typography variant="h4" fontWeight={700}>
-          {model.name}
-        </Typography>
-      </Box>
-
-      {/* ================= MODEL SUMMARY ================= */}
-      <Card sx={{ borderRadius: 3, mb: 4 }}>
-        <CardContent>
-          <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-            <HubIcon color="primary" sx={{ mr: 1 }} />
-            <Typography variant="h6" fontWeight={600}>
-              Model Overview
-            </Typography>
-          </Box>
-
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            {model.description || "No description provided."}
-          </Typography>
-
-          <Divider sx={{ mb: 2 }} />
-
-          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-            <Chip
-              icon={<LayersIcon />}
-              label={`${model.versions_count} Versions`}
-            />
-            <Chip
-              label={`Created on ${new Date(
-                model.created_at
-              ).toLocaleDateString()}`}
-            />
-          </Box>
-        </CardContent>
-      </Card>
-
-      {/* ================= ACTIONS ================= */}
-      <Grid container spacing={2} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={6}>
-          <Button
-            fullWidth
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() =>
-              navigate(
-                `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/create`
-              )
-            }
-          >
-            Create Version
-          </Button>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Button
-            fullWidth
-            variant="outlined"
-            onClick={() =>
-              navigate(
-                `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`
-              )
-            }
-          >
-            View All Versions
-          </Button>
-        </Grid>
-      </Grid>
-
-      {/* ================= METRICS COMPARISON ================= */}
-      <Typography variant="h5" fontWeight={700} sx={{ mb: 3 }}>
-        Model Evaluation Comparison
-      </Typography>
-
-      {versions.length === 0 ? (
-        <Typography color="text.secondary">
-          No versions created yet.
-        </Typography>
-      ) : (
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={6}>
-            <MetricChart
-              title="Accuracy (%)"
-              dataKey="accuracy"
-              color="#22c55e"
+        {/* KPI SCORECARDS */}
+        <Grid container spacing={3} sx={{ mb: 6 }}>
+          <Grid item xs={12} sm={6} md={3}>
+            <MetricCard title="Versions" value={model.versions_count} icon={<LayersIcon />} color={themePalette.primary} />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <MetricCard 
+              title="Peak Accuracy" 
+              value={versions.length ? `${Math.max(...versions.map(v => v.accuracy || 0))}%` : "0%"} 
+              icon={<SpeedIcon />} 
+              color={themePalette.success} 
             />
           </Grid>
-
-          <Grid item xs={12} md={6}>
-            <MetricChart
-              title="Precision (%)"
-              dataKey="precision"
-              color="#6366f1"
+          <Grid item xs={12} sm={6} md={3}>
+            <MetricCard 
+              title="Avg F1-Score" 
+              value={versions.length ? `${(versions.reduce((acc, v) => acc + (v.f1_score || 0), 0) / versions.length).toFixed(1)}%` : "0%"} 
+              icon={<TrendingUpIcon />} 
+              color={themePalette.warning} 
             />
           </Grid>
-
-          <Grid item xs={12} md={6}>
-            <MetricChart
-              title="Recall (%)"
-              dataKey="recall"
-              color="#f97316"
-            />
-          </Grid>
-
-          <Grid item xs={12} md={6}>
-            <MetricChart
-              title="F1 Score (%)"
-              dataKey="f1_score"
-              color="#ec4899"
-            />
+          <Grid item xs={12} sm={6} md={3}>
+            <MetricCard title="Model ID" value={`MOD-${model.id}`} icon={<HubIcon />} color={themePalette.error} />
           </Grid>
         </Grid>
-      )}
+
+        {/* ANALYTICS GRID */}
+        <Stack spacing={4}>
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <AssessmentIcon sx={{ color: themePalette.primary, fontSize: 32 }} />
+            <Typography variant="h4" fontWeight={900}>Model Performance Convergence</Typography>
+            <MuiTooltip title="Analysis across all registered iterations">
+              <IconButton size="small"><InfoOutlinedIcon fontSize="small" /></IconButton>
+            </MuiTooltip>
+          </Stack>
+          
+          <Grid container spacing={4}>
+            <Grid item xs={12} lg={6}>
+              <MetricChart title="Model Accuracy" dataKey="accuracy" color={themePalette.success} activeVersion={activeVersion} />
+            </Grid>
+            <Grid item xs={12} lg={6}>
+              <MetricChart title="Precision Score" dataKey="precision" color={themePalette.primary} activeVersion={activeVersion} />
+            </Grid>
+            <Grid item xs={12} lg={6}>
+              <MetricChart title="Recall Sensitivity" dataKey="recall" color={themePalette.warning} activeVersion={activeVersion} />
+            </Grid>
+            <Grid item xs={12} lg={6}>
+              <MetricChart title="F1-Score Stability" dataKey="f1_score" color={themePalette.error} activeVersion={activeVersion} />
+            </Grid>
+          </Grid>
+        </Stack>
+      </Container>
     </Box>
   );
 }
