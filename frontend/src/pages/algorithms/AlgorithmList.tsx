@@ -159,6 +159,7 @@ export default function AlgorithmList() {
                     borderRadius: "24px",
                     cursor: "pointer",
                     height: "100%",
+                    minWidth: 450,
                     bgcolor: themePalette.white,
                     border: `1px solid ${themePalette.border}`,
                     transition: "border-color 0.3s",

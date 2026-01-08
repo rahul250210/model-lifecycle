@@ -164,6 +164,7 @@ export default function ModelList() {
                     borderRadius: "24px",
                     cursor: "pointer",
                     height: "100%",
+                    minWidth: 420,
                     bgcolor: themePalette.white,
                     border: `1px solid ${themePalette.border}`,
                     transition: "all 0.3s",

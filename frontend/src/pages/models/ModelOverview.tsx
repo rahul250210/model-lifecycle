@@ -145,7 +145,7 @@ export default function ModelOverview() {
         overflow: 'visible'
       }}
     >
-      <CardContent sx={{ p: { xs: 3, md: 5 } }}>
+      <CardContent sx={{ p: { xs: 3, md: 5 }, pb: 6  }}>
         {/* IMPROVED HEADER: Spaced out to prevent overlapping */}
         <Stack 
           direction={{ xs: 'column', sm: 'row' }} 
@@ -181,8 +181,8 @@ export default function ModelOverview() {
         </Stack>
 
         {/* IMPROVED GRAPH: Better texture, visibility and clean aesthetic */}
-        <ResponsiveContainer width="100%" height={380}>
-          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height={430}>
+          <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -30, bottom: 20 }}>
             <defs>
               <linearGradient id={`gradient-${dataKey}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor={color} stopOpacity={0.4}/>
@@ -196,15 +196,17 @@ export default function ModelOverview() {
             />
             <XAxis 
               dataKey="version" 
-              axisLine={false} 
-              tickLine={false} 
+              interval={0}
+              height={20}
+              axisLine={{ stroke: themePalette.border, strokeWidth: 2 }} 
+              tickLine={{ stroke: themePalette.border }} 
               tick={{ fill: themePalette.textMuted, fontSize: 14, fontWeight: 700 }}
-              dy={15}
+              dy={1}
             />
             <YAxis 
               domain={[0, 100]} 
-              axisLine={false} 
-              tickLine={false} 
+              axisLine={{ stroke: themePalette.border, strokeWidth: 2 }} 
+              tickLine={{ stroke: themePalette.border }} 
               tick={{ fill: themePalette.textMuted, fontSize: 14, fontWeight: 700 }}
             />
             <Tooltip 

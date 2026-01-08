@@ -28,9 +28,11 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import HistoryEduIcon from "@mui/icons-material/HistoryEdu";
 import { useNavigate, useParams } from "react-router-dom";
+import SettingsIcon from "@mui/icons-material/Settings";
+
 import axios from "../../api/axios";
 
-const ALLOWED_MODEL_EXTENSIONS = [".pt", ".pth", ".onnx", ".h5", ".ckpt"];
+const ALLOWED_MODEL_EXTENSIONS = [".pt", ".engine", ".pth", ".onnx", ".h5", ".ckpt"];
 const ALLOWED_CODE_EXTENSIONS = [".py"];
 const ALLOWED_LABEL_EXTENSIONS = [".txt", ".json", ".xml"];
 
@@ -52,7 +54,7 @@ export default function VersionCreate() {
 
   const [datasetFiles, setDatasetFiles] = useState<File[]>([]);
   const [labelFiles, setLabelFiles] = useState<File[]>([]);
-  const [modelFile, setModelFile] = useState<File | null>(null);
+  const [modelFiles, setModelFiles] = useState<File[]>([]);
   const [codeFile, setCodeFile] = useState<File | null>(null);
 
   const [metrics, setMetrics] = useState({
@@ -60,6 +62,14 @@ export default function VersionCreate() {
     precision: "",
     recall: "",
     f1_score: "",
+  });
+
+  const [parameters, setParameters] = useState({
+    batch_size: "",
+    epochs: "",
+    learning_rate: "",
+    optimizer: "",
+    image_size: "",
   });
 
   const [note, setNote] = useState("");
@@ -95,8 +105,23 @@ export default function VersionCreate() {
     },
   });
 
+    const addModelFile = (file: File) => {
+    if (!ALLOWED_MODEL_EXTENSIONS.some(ext => file.name.endsWith(ext))) return;
+
+    setModelFiles(prev => {
+      const exists = prev.some(
+        f => f.name === file.name && f.size === file.size
+      );
+      return exists ? prev : [...prev, file];
+    });
+  };
+
+  const removeModelFile = (index: number) => {
+    setModelFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async () => {
-    if (datasetFiles.length === 0 || !labelFiles.length || !modelFile) {
+    if (datasetFiles.length === 0 || !labelFiles.length || modelFiles.length==0) {
       setError("Dataset images, labels, and model file are required");
       return;
     }
@@ -107,11 +132,19 @@ export default function VersionCreate() {
       const formData = new FormData();
       datasetFiles.forEach((f) => formData.append("dataset_files", f));
       labelFiles.forEach((f) => formData.append("label_files", f));
-      formData.append("model", modelFile);
+      modelFiles.forEach((f) => {
+        formData.append("model_files", f);
+      });
+
       if (codeFile) formData.append("code", codeFile);
       formData.append("note", note);
       Object.entries(metrics).forEach(([key, value]) => {
         if (value !== "") formData.append(key, value);
+      });
+      Object.entries(parameters).forEach(([key, value]) => {
+        if (value !== "") {
+          formData.append(key, value);
+        }
       });
 
       await axios.post(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`, formData);
@@ -159,13 +192,13 @@ export default function VersionCreate() {
                 <Grid item xs={12} sm={6}>
                   <Button component="label" sx={getButtonStyles(datasetFiles.length > 0)} startIcon={datasetFiles.length > 0 ? <CheckCircleIcon /> : <FolderOpenIcon />}>
                     {datasetFiles.length > 0 ? `${datasetFiles.length} Images Staged` : "Upload Images Folder"}
-                    <input hidden type="file" webkitdirectory="true" multiple  onChange={(e) => e.target.files && setDatasetFiles(mergeFiles(datasetFiles, Array.from(e.target.files)))} />
+                    <input hidden type="file" webkitdirectory="true" multiple  onChange={(e) => e.target.files && setDatasetFiles( Array.from(e.target.files))} />
                   </Button>
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <Button component="label" sx={getButtonStyles(labelFiles.length > 0)} startIcon={labelFiles.length > 0 ? <CheckCircleIcon /> : <UploadFileIcon />}>
                     {labelFiles.length > 0 ? `${labelFiles.length} Labels Staged` : "Upload Labels Folder"}
-                    <input hidden type="file" webkitdirectory="true" multiple onChange={(e) => e.target.files && setLabelFiles(mergeFiles(labelFiles, filterLabelFiles(Array.from(e.target.files))))} />
+                    <input hidden type="file" webkitdirectory="true" multiple onChange={(e) => e.target.files && setLabelFiles(filterLabelFiles(Array.from(e.target.files)))} />
                   </Button>
                 </Grid>
               </Grid>
@@ -173,26 +206,67 @@ export default function VersionCreate() {
           </Card>
 
           {/* STEP 2: MODEL WEIGHTS */}
-          <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>
-            <CardContent sx={{ p: 4 }}>
-              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
-                <HistoryEduIcon sx={{ color: themePalette.primary }} />
-                <Typography variant="h6" fontWeight={800}>Weights & Source</Typography>
-              </Stack>
-              
-              <Stack spacing={2}>
-                <Button component="label" sx={getButtonStyles(!!modelFile)} startIcon={modelFile ? <CheckCircleIcon /> : <UploadFileIcon />}>
-                  {modelFile ? `Weights: ${modelFile.name}` : "Upload Model Weights (.pt, .pth, .onnx) *"}
-                  <input hidden type="file" onChange={(e) => setModelFile(e.target.files?.[0] || null)} />
-                </Button>
+         <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>
+  <CardContent sx={{ p: 4 }}>
+    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+      <HistoryEduIcon sx={{ color: themePalette.primary }} />
+      <Typography variant="h6" fontWeight={800}>
+        Model Weights
+      </Typography>
+    </Stack>
 
-                <Button component="label" sx={getButtonStyles(!!codeFile)} startIcon={codeFile ? <CheckCircleIcon /> : <UploadFileIcon />}>
-                  {codeFile ? `Script: ${codeFile.name}` : "Upload Training Script (.py) - optional"}
-                  <input hidden type="file" onChange={(e) => setCodeFile(e.target.files?.[0] || null)} />
-                </Button>
-              </Stack>
-            </CardContent>
-          </Card>
+    <Stack spacing={2}>
+      {/* Existing model files */}
+      {modelFiles.map((file, idx) => (
+        <Paper
+          key={idx}
+          elevation={0}
+          sx={{
+            p: 2,
+            borderRadius: "14px",
+            border: `1px solid ${themePalette.border}`,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            bgcolor: alpha(themePalette.success, 0.05),
+          }}
+        >
+          <Typography fontWeight={700} sx={{ color: themePalette.success }}>
+            {file.name}
+          </Typography>
+
+          <Tooltip title="Remove model">
+            <IconButton color="error" onClick={() => removeModelFile(idx)}>
+              ✕
+            </IconButton>
+          </Tooltip>
+        </Paper>
+      ))}
+
+      {/* Add model button */}
+      <Button
+        component="label"
+        sx={getButtonStyles(modelFiles.length > 0)}
+        startIcon={<UploadFileIcon />}
+      >
+        Add Model File (.pt, .onnx, .pth)
+        <input
+          hidden
+          type="file"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) addModelFile(file);
+          }}
+        />
+      </Button>
+
+      <Typography variant="caption" sx={{ color: themePalette.textMuted }}>
+        You can upload multiple model variants (fp32, fp16, ONNX, etc.)
+      </Typography>
+    </Stack>
+  </CardContent>
+</Card>
+
 
           {/* STEP 3: PERFORMANCE METRICS */}
           <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>
@@ -218,6 +292,47 @@ export default function VersionCreate() {
               </Grid>
             </CardContent>
           </Card>
+
+          {/* PARAMETERS */}
+            <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>
+          <CardContent sx={{ p: 4 }}>
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+              <SettingsIcon sx={{ color: themePalette.primary }} />
+              <Typography variant="h6" fontWeight={800}>
+                Training Parameters
+              </Typography>
+            </Stack>
+
+            <Grid container spacing={3}>
+              {Object.entries(parameters).map(([key, value]) => (
+                <Grid item xs={12} sm={6} key={key}>
+                  <Typography
+                    variant="caption"
+                    fontWeight={800}
+                    sx={{ color: themePalette.textMuted, textTransform: "uppercase" }}
+                  >
+                    {key.replace("_", " ")}
+                  </Typography>
+
+                  <TextField
+                    fullWidth
+                    placeholder="Enter value"
+                    value={value}
+                    onChange={(e) =>
+                      setParameters({ ...parameters, [key]: e.target.value })
+                    }
+                    sx={{
+                      "& .MuiOutlinedInput-root": {
+                        borderRadius: "12px",
+                        bgcolor: themePalette.background,
+                      },
+                    }}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          </CardContent>
+        </Card>
 
           {/* FINAL NOTES */}
           <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>

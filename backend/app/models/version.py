@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, Boolean, DateTime, ForeignKey, String, F
 from sqlalchemy.sql import func
 from app.database import Base
 from sqlalchemy.orm import relationship
-
+from sqlalchemy.dialects.postgresql import JSONB
 class ModelVersion(Base):
     __tablename__ = "model_versions"
 
@@ -16,6 +16,8 @@ class ModelVersion(Base):
     precision = Column(Float, nullable=True)
     recall = Column(Float, nullable=True)
     f1_score = Column(Float, nullable=True)
+    parameters = Column(JSONB, default=dict)
+    
     artifacts = relationship(
         "Artifact",
         back_populates="version",

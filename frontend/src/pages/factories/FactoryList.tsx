@@ -236,12 +236,14 @@ export default function FactoryList() {
         ) : (
           <Grid container spacing={4}>
             {filteredFactories.map((factory) => (
-              <Grid item xs={12} sm={6} md={4} key={factory.id}>
+              <Grid item xs={12} sm={12} md={6} key={factory.id}>
                 <Card 
                   elevation={0}
                   sx={{ 
                     borderRadius: "24px", 
                     border: `1px solid ${themePalette.border}`,
+                    height: "100%",
+                    minWidth: 400,
                     bgcolor: themePalette.white,
                     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                     "&:hover": { 

@@ -43,13 +43,20 @@ def create_version(
     model_id: int,
     dataset_files: list[UploadFile] = File(...),
     label_files: list[UploadFile] = File(...),
-    model: UploadFile = File(...),
+    model_files: list[UploadFile] = File(...),
     code: UploadFile | None = File(None),
 
     accuracy: float | None = Form(None),
     precision: float | None = Form(None),
     recall: float | None = Form(None),
     f1_score: float | None = Form(None),
+
+    # Training parameters
+    batch_size: int | None = Form(None),
+    epochs: int | None = Form(None),
+    learning_rate: float | None = Form(None),
+    optimizer: str | None = Form(None),
+    image_size: int | None = Form(None),
 
     note: str = Form(""),
     db: Session = Depends(get_db),
@@ -77,6 +84,26 @@ def create_version(
         if value is not None and not (0.0 <= value <= 100.0):
             raise HTTPException(400, f"{name} must be between 0 and 100")
 
+    parameters = {}
+
+    if batch_size is not None:
+        parameters["batch_size"] = batch_size
+
+    if epochs is not None:
+        parameters["epochs"] = epochs
+
+    if learning_rate is not None:
+        parameters["learning_rate"] = learning_rate
+
+    if optimizer:
+        parameters["optimizer"] = optimizer
+
+    if image_size is not None:
+        parameters["image_size"] = image_size
+
+    
+    
+    
     # -------------------------------
     # GLOBAL dataset index (ALL versions)
     # -------------------------------
@@ -86,6 +113,7 @@ def create_version(
         .filter(Artifact.type.in_(["dataset", "label"]))
         .distinct(Artifact.checksum)
     }
+
 
     # -------------------------------
     # Create new version
@@ -111,6 +139,7 @@ def create_version(
         precision=precision,
         recall=recall,
         f1_score=f1_score,
+        parameters=parameters,
     )
     db.add(version)
     db.commit()
@@ -249,7 +278,9 @@ def create_version(
             )
         )
 
-    save_single(model, "model")
+    for model_file in model_files:
+        save_single(model_file, "model")
+
     if code:
         save_single(code, "code")
 
@@ -402,6 +433,7 @@ def download_version(
     model_id: int,
     version_id: int,
     dataset: bool = Query(False),
+    labels: bool = Query(False),
     model: bool = Query(False),
     code: bool = Query(False),
     db: Session = Depends(get_db),
@@ -421,7 +453,11 @@ def download_version(
     # Map selection → artifact types
     selected_types = []
     if dataset:
-         selected_types.extend(["dataset", "label"])
+         selected_types.append("dataset")
+
+    if labels:
+         selected_types.append("label")
+
     if model:
         selected_types.append("model")
    
@@ -457,11 +493,11 @@ def download_version(
 
            # Dataset images
             if artifact.type == "dataset":
-                arcname = f"dataset/images/{artifact.name}"
+                arcname = f"dataset/{artifact.name}"
 
             # Dataset labels
             elif artifact.type == "label":
-                arcname = f"dataset/labels/{artifact.name}"
+                arcname = f"dataset/{artifact.name}"
 
             else:
                 arcname = f"{artifact.type}/{artifact.name}"
@@ -508,13 +544,19 @@ def edit_version(
     version_id: int,
     dataset_files: list[UploadFile] | None = File(None),
     label_files: list[UploadFile] | None = File(None),
-    model: UploadFile | None = File(None),
+    model_files: list[UploadFile] | None = File(None),
     code: UploadFile | None = File(None),
 
     accuracy: float | None = Form(None),
     precision: float | None = Form(None),
     recall: float | None = Form(None),
     f1_score: float | None = Form(None),
+
+    batch_size: int | None = Form(None),
+    epochs: int | None = Form(None),
+    learning_rate: float | None = Form(None),
+    optimizer: str | None = Form(None),
+    image_size: int | None = Form(None),
 
     note: str = Form(""),
     db: Session = Depends(get_db),
@@ -537,6 +579,30 @@ def edit_version(
 
     if note:
         version.note = note
+
+    if version.parameters is None:
+        version.parameters = {}
+
+
+    params = dict(version.parameters or {})
+
+    if batch_size is not None:
+        params["batch_size"] = batch_size
+
+    if epochs is not None:
+        params["epochs"] = epochs
+
+    if learning_rate is not None:
+        params["learning_rate"] = learning_rate
+
+    if optimizer:
+        params["optimizer"] = optimizer
+
+    if image_size is not None:
+        params["image_size"] = image_size
+
+    version.parameters = params  # 🔥 THIS LINE IS REQUIRED
+
 
     # -------------------------------
     # GLOBAL artifact index
@@ -632,8 +698,10 @@ def edit_version(
             )
         )
 
-    if model:
-        save_single(model, "model")
+    if model_files:
+        for model_file in model_files:
+            save_single(model_file, "model")
+
     if code:
         save_single(code, "code")
 

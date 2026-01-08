@@ -37,6 +37,7 @@ import CodeIcon from "@mui/icons-material/Code";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import HistoryIcon from "@mui/icons-material/History";
 import DescriptionIcon from "@mui/icons-material/Description";
+import SettingsIcon from "@mui/icons-material/Settings";
 
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axios";
@@ -214,6 +215,46 @@ export default function VersionDetails() {
                   <Typography variant="caption" fontWeight={800} sx={{ color: themePalette.textMuted }}>REGISTRATION DATE: {new Date(version.created_at).toLocaleString().toUpperCase()}</Typography>
                 </CardContent>
               </Card>
+
+              <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>
+  <CardContent sx={{ p: 4 }}>
+    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+      <SettingsIcon sx={{ color: themePalette.primary }} />
+      <Typography variant="h6" fontWeight={800}>
+        Training Parameters
+      </Typography>
+    </Stack>
+
+    {Object.entries(version.parameters || {}).length === 0 ? (
+      <Typography variant="body2" color="text.secondary">
+        No parameters recorded.
+      </Typography>
+    ) : (
+      <Grid container spacing={2}>
+        {Object.entries(version.parameters).map(([key, value]) => (
+          <Grid item xs={6} md={4} key={key}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: 2,
+                borderRadius: "16px",
+                border: `1px solid ${themePalette.border}`,
+                textAlign: "center",
+              }}
+            >
+              <Typography variant="caption" fontWeight={800} color="text.secondary">
+                {key.toUpperCase()}
+              </Typography>
+              <Typography variant="h6" fontWeight={900}>
+                {value}
+              </Typography>
+            </Paper>
+          </Grid>
+        ))}
+      </Grid>
+    )}
+  </CardContent>
+</Card>
 
               {/* EVALUATION DASHBOARD */}
               <Box>

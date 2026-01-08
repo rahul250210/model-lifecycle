@@ -67,11 +67,19 @@ export default function VersionEdit() {
     f1_score: "",
   });
 
+  const [parameters, setParameters] = useState({
+    batch_size: "",
+    epochs: "",
+    learning_rate: "",
+    optimizer: "",
+    image_size: "",
+  });
+
   // Artifact States
   const [datasetFiles, setDatasetFiles] = useState<File[]>([]);
   const [labelFiles, setLabelFiles] = useState<File[]>([]);
 
-  const [modelFile, setModelFile] = useState<File | null>(null);
+  const [modelFiles, setModelFiles] = useState<File[]>([]);
   const [codeFile, setCodeFile] = useState<File | null>(null);
   
   const [loading, setLoading] = useState(true);
@@ -81,6 +89,14 @@ export default function VersionEdit() {
   const hasValidExtension = (file: File, allowed: string[]) => {
     const name = file.name.toLowerCase();
     return allowed.some((ext) => name.endsWith(ext));
+  };
+
+  const mergeUniqueFiles = (prev: File[], next: File[]) => {
+    const map = new Map<string, File>();
+    [...prev, ...next].forEach((f) =>
+      map.set(`${f.name}-${f.size}`, f)
+    );
+    return Array.from(map.values());
   };
 
   useEffect(() => {
@@ -98,6 +114,14 @@ export default function VersionEdit() {
           recall: data.recall?.toString() || "",
           f1_score: data.f1_score?.toString() || "",
         });
+        setParameters({
+          batch_size: data.parameters?.batch_size?.toString() || "",
+          epochs: data.parameters?.epochs?.toString() || "",
+          learning_rate: data.parameters?.learning_rate?.toString() || "",
+          optimizer: data.parameters?.optimizer || "",
+          image_size: data.parameters?.image_size?.toString() || "",
+        });
+
       } catch (err) {
         console.error("Failed to load version", err);
         setError("Failed to load version details");
@@ -108,13 +132,7 @@ export default function VersionEdit() {
     fetchVersion();
   }, [factoryId, algorithmId, modelId, versionId]);
 
-  const addDatasetFiles = (files: File[]) => {
-    setDatasetFiles((prev) => [...prev, ...files]);
-  };
-
-  const addLabelFiles = (files: File[]) => {
-    setLabelFiles((prev) => [...prev, ...files]);
-  };
+  
 
   const getButtonProps = (active: boolean) => ({
     variant: "outlined" as const,
@@ -133,15 +151,29 @@ export default function VersionEdit() {
     },
   });
 
+  const addModelFiles = (files: File[]) => {
+  const valid = files.filter(f =>
+    ALLOWED_MODEL_EXTENSIONS.some(ext =>
+      f.name.toLowerCase().endsWith(ext)
+    )
+  );
+
+  setModelFiles(prev => {
+      const map = new Map<string, File>();
+      [...prev, ...valid].forEach(f => map.set(`${f.name}-${f.size}`, f));
+      return Array.from(map.values());
+    });
+  };
+
+  const removeModelFile = (index: number) => {
+    setModelFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSave = async () => {
   try {
     setSaving(true);
     setError("");
-    if (modelFile && !hasValidExtension(modelFile, ALLOWED_MODEL_EXTENSIONS)) {
-        setError("Invalid model file format.");
-        return;
-      }
-
+   
     if (codeFile && !hasValidExtension(codeFile, ALLOWED_CODE_EXTENSIONS)) {
         setError("Invalid code file format.");
         return;
@@ -150,13 +182,36 @@ export default function VersionEdit() {
     const formData = new FormData();
     formData.append("note", note);
 
-    Object.entries(metrics).forEach(([key, value]) => {
-      if (value !== "") formData.append(key, value);
+   Object.entries(metrics).forEach(([key, value]) => {
+      if (value !== "") {
+        formData.append(key, value);
+      }
     });
 
-    datasetFiles.forEach((f) => formData.append("dataset_files", f));
-    labelFiles.forEach((f) => formData.append("label_files", f));
-    if (modelFile) formData.append("model", modelFile);
+   Object.entries(parameters).forEach(([key, value]) => {
+      if (value !== "") {
+        formData.append(key, value);
+      }
+    });
+
+
+    if (datasetFiles.length > 0) {
+          datasetFiles.forEach((f) =>
+            formData.append("dataset_files", f)
+          );
+    }
+
+    if (labelFiles.length > 0) {
+          labelFiles.forEach((f) =>
+            formData.append("label_files", f)
+          );
+    }
+    
+    if (modelFiles.length > 0){
+          modelFiles.forEach((f) => {
+              formData.append("model_files", f);
+            });
+    }
     if (codeFile) formData.append("code", codeFile);
 
     // 1️⃣ Edit version (files + metrics)
@@ -235,25 +290,27 @@ export default function VersionEdit() {
         REPLACE DATASET
       </Typography>
 
-      <Button
+     <Button
         component="label"
         fullWidth
-        startIcon={datasetFiles.length > 0 ? <CheckCircleIcon /> : <UploadFileIcon />}
+        startIcon={<UploadFileIcon />}
         {...getButtonProps(datasetFiles.length > 0)}
       >
-        {datasetFiles.length > 0
-          ? `${datasetFiles.length} New Files`
-          : "Upload Dataset"}
+        Replace Dataset
         <input
-          type="file"
           hidden
-          multiple
+          type="file"
           webkitdirectory="true"
+          multiple
           onChange={(e) => {
-            if (e.target.files) addDatasetFiles(Array.from(e.target.files));
+            if (!e.target.files) return;
+            setDatasetFiles(Array.from(e.target.files)); // 🔁 REPLACE
+            e.target.value = "";
           }}
         />
       </Button>
+     
+
     </Stack>
   </Grid>
 
@@ -267,57 +324,103 @@ export default function VersionEdit() {
       <Button
         component="label"
         fullWidth
-        startIcon={labelFiles.length > 0 ? <CheckCircleIcon /> : <UploadFileIcon />}
+        startIcon={<UploadFileIcon />}
         {...getButtonProps(labelFiles.length > 0)}
       >
-        {labelFiles.length > 0
-          ? `${labelFiles.length} Label Files`
-          : "Upload Labels"}
+        Replace Labels
         <input
-          type="file"
           hidden
-          multiple
+          type="file"
           webkitdirectory="true"
+          multiple
           accept=".txt,.json,.xml"
           onChange={(e) => {
-            if (e.target.files) addLabelFiles(Array.from(e.target.files));
+            if (!e.target.files) return;
+            setLabelFiles(Array.from(e.target.files)); // 🔁 REPLACE
+            e.target.value = "";
           }}
         />
       </Button>
+
+     
+
     </Stack>
   </Grid>
 
   {/* ================= REPLACE MODEL ================= */}
-  <Grid item xs={12} md={3}>
-    <Stack spacing={1.5} alignItems="center">
-      <Typography variant="caption" fontWeight={700} sx={{ color: themePalette.textMuted }}>
-        REPLACE MODEL
-      </Typography>
+ <Grid item xs={12} md={3}>
+  <Stack spacing={1.5} alignItems="center">
+    <Typography
+      variant="caption"
+      fontWeight={700}
+      sx={{ color: themePalette.textMuted }}
+    >
+      ADD MODELS
+    </Typography>
 
-      <Button
-        component="label"
-        fullWidth
-        startIcon={modelFile ? <CheckCircleIcon /> : <UploadFileIcon />}
-        {...getButtonProps(!!modelFile)}
+    <Button
+      component="label"
+      fullWidth
+      startIcon={
+        modelFiles.length > 0 ? <CheckCircleIcon /> : <UploadFileIcon />
+      }
+      {...getButtonProps(modelFiles.length > 0)}
+    >
+      {modelFiles.length > 0
+        ? `${modelFiles.length} Models Selected`
+        : "Add Model Files"}
+      <input
+        hidden
+        type="file"
+        multiple
+        onChange={(e) => {
+          if (e.target.files) {
+            addModelFiles(Array.from(e.target.files));
+          }
+        }}
+      />
+    </Button>
+
+    {/* Selected models list */}
+    {modelFiles.map((file, idx) => (
+      <Paper
+        key={idx}
+        variant="outlined"
+        sx={{
+          width: "100%",
+          px: 1.5,
+          py: 1,
+          borderRadius: "10px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          fontSize: 13,
+        }}
       >
-        {modelFile ? "New Model Selected" : "Replace Model"}
-        <input
-          hidden
-          type="file"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            if (!hasValidExtension(file, ALLOWED_MODEL_EXTENSIONS)) {
-              setError("Invalid model format");
-              return;
-            }
-            setError("");
-            setModelFile(file);
+        <Typography
+          variant="caption"
+          sx={{
+            maxWidth: 150,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
           }}
-        />
-      </Button>
-    </Stack>
-  </Grid>
+        >
+          {file.name}
+        </Typography>
+
+        <IconButton
+          size="small"
+          color="error"
+          onClick={() => removeModelFile(idx)}
+        >
+          ✕
+        </IconButton>
+      </Paper>
+    ))}
+  </Stack>
+</Grid>
+
 
   {/* ================= REPLACE CODE ================= */}
   <Grid item xs={12} md={3}>
@@ -375,6 +478,45 @@ export default function VersionEdit() {
                       value={value}
                       onChange={(e) => setMetrics({ ...metrics, [key]: e.target.value })}
                       sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px", bgcolor: themePalette.background } }}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </CardContent>
+          </Card>
+          
+          <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}` }}>
+            <CardContent sx={{ p: 4 }}>
+              <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
+                <SettingsIcon sx={{ color: themePalette.primary }} />
+                <Typography variant="h6" fontWeight={800}>
+                  Training Parameters
+                </Typography>
+              </Stack>
+
+              <Grid container spacing={3}>
+                {Object.entries(parameters).map(([key, value]) => (
+                  <Grid item xs={12} sm={6} key={key}>
+                    <Typography
+                      variant="caption"
+                      fontWeight={800}
+                      sx={{ color: themePalette.textMuted, textTransform: "uppercase" }}
+                    >
+                      {key.replace("_", " ")}
+                    </Typography>
+
+                    <TextField
+                      fullWidth
+                      value={value}
+                      onChange={(e) =>
+                        setParameters({ ...parameters, [key]: e.target.value })
+                      }
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                          bgcolor: themePalette.background,
+                        },
+                      }}
                     />
                   </Grid>
                 ))}
