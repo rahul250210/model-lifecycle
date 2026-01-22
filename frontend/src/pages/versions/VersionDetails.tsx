@@ -157,7 +157,8 @@ export default function VersionDetails() {
               </Box>
             </Stack>
             <Stack direction="row" spacing={0.5}>
-              <Tooltip title="View Metadata"><IconButton size="small" onClick={() => navigate(`/artifacts/${a.id}`)}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
+              <Tooltip title="View Metadata"><IconButton size="small" onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}/artifacts/${a.id}`
+  )}><VisibilityIcon fontSize="small" /></IconButton></Tooltip>
               <Tooltip title="Download"><IconButton size="small" component="a" href={`http://127.0.0.1:8000/artifacts/${a.id}/download`}><DownloadIcon fontSize="small" /></IconButton></Tooltip>
               <Tooltip title="Remove"><IconButton size="small" color="error" onClick={async () => { if (confirm("Delete this artifact?")) { await axios.delete(`/artifacts/${a.id}`); setArtifacts(prev => prev.filter(x => x.id !== a.id)); }}}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
             </Stack>

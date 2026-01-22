@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import factories, algorithms, models, versions, experiments, artifacts
+from app.api.knowledge_base import router as kb_router
 from app.database import Base, engine
 
 # Create tables
@@ -16,9 +17,9 @@ app = FastAPI(
 # CORS (for React)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[ "http://localhost:5173",   # Vite
+     allow_origins=[ "http://localhost:5173",   # Vite
         "http://127.0.0.1:5173",
-    ],  # later restrict
+    ],   # later restrict
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -31,6 +32,7 @@ app.include_router(models.router, prefix="/factories", tags=["Models"])
 app.include_router(versions.router, prefix="/factories", tags=["Versions"])
 app.include_router(experiments.router, prefix="/factories", tags=["Experiments"])
 app.include_router(artifacts.router, prefix="/artifacts", tags=["Artifacts"])  
+app.include_router(kb_router)
 
 
 @app.get("/")

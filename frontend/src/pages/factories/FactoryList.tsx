@@ -210,7 +210,7 @@ export default function FactoryList() {
         >
           <TextField
             fullWidth
-            placeholder="Search resources, nodes, or clusters..."
+            placeholder="Search factories..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             variant="standard"
@@ -300,7 +300,7 @@ export default function FactoryList() {
 
                       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <Typography variant="caption" fontWeight={700} sx={{ color: themePalette.textMuted, textTransform: 'uppercase' }}>
-                          ID: #{factory.id}
+                         
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', color: themePalette.primary, gap: 0.5 }}>
                            <Typography variant="button" fontWeight={800} sx={{ fontSize: '0.7rem' }}>ENTER</Typography>

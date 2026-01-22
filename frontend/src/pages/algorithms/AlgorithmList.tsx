@@ -218,7 +218,7 @@ export default function AlgorithmList() {
                           }} 
                         />
                          <Typography variant="caption" sx={{ color: themePalette.textMuted, alignSelf: 'center', fontWeight: 600 }}>
-                          ID: ARCH-{algo.id}
+                         
                         </Typography>
                       </Stack>
                       

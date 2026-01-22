@@ -13,7 +13,6 @@ import {
   CssBaseline,
   Avatar,
   alpha,
-  Tooltip,
 } from "@mui/material";
 import FactoryIcon from "@mui/icons-material/Factory";
 import ScienceIcon from "@mui/icons-material/Science";
@@ -24,38 +23,33 @@ import { useNavigate, useLocation, Outlet } from "react-router-dom";
 
 const drawerWidth = 280;
 
-/* ==========================================================================
-   GLOBAL COLOR PALETTE (Use these hex codes across other pages for consistency)
-   ========================================================================== */
 export const themePalette = {
   primary: "#4F46E5",       // Indigo (Brand Color)
   primaryLight: "#EEF2FF",  // Soft Indigo Wash
-  sidebarBg: "#0F172A",     // Deep Navy/Slate (Dark Mode Sidebar)
-  sidebarActive: "#1E293B", // Lighter Slate for active items
+  sidebarBg: "#0F172A",     // Deep Navy/Slate
+  sidebarActive: "#1E293B", // Lighter Slate for active background
   textMuted: "#94A3B8",     // Slate Gray for inactive text
-  background: "#F8FAFC",    // Clean White-Gray page background
-  border: "#E2E8F0",        // Light subtle borders
+  background: "#F8FAFC",    // Page background
+  border: "#E2E8F0",        // subtle borders
 };
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Updated paths to be unique so the color change is specific to the page
   const menuItems = [
     { label: "Factories", icon: <FactoryIcon />, path: "/factories" },
-    { label: "Models", icon: <LayersIcon />, path: "/factories" },
-    { label: "Versions", icon: <TimelineIcon />, path: "/factories" },
-    { label: "Experiments", icon: <ScienceIcon />, path: "/factories" },
-    { label: "Artifacts", icon: <StorageIcon />, path: "/factories" },
+    { label: "Models", icon: <LayersIcon />, path: "/models" },
+    { label: "Versions", icon: <TimelineIcon />, path: "/versions" },
+    { label: "Experiments", icon: <ScienceIcon />, path: "/experiments" },
+    { label: "Artifacts", icon: <StorageIcon />, path: "/artifacts" },
   ];
 
   return (
     <Box sx={{ display: "flex", bgcolor: themePalette.background, minHeight: "100vh" }}>
       <CssBaseline />
 
-      {/* =======================
-          Top App Bar
-      ======================= */}
       <AppBar
         position="fixed"
         sx={{
@@ -75,36 +69,27 @@ export default function DashboardLayout() {
               letterSpacing: "-0.02em",
               background: `linear-gradient(45deg, ${themePalette.primary}, #818CF8)`,
               WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent"
+              WebkitTextFillColor: "transparent",
+              cursor: "pointer"
             }}
+            onClick={() => navigate("/")}
           >
             NexusForge
           </Typography>
 
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-             <Typography variant="body2" sx={{ color: themePalette.textMuted, fontWeight: 500 }}>
-              System Status: <Box component="span" sx={{ color: "#10B981" }}>● Online</Box>
-            </Typography>
-            <Avatar 
-              sx={{ 
-                width: 36, 
-                height: 36, 
-                bgcolor: themePalette.primary,
-                fontSize: "0.875rem",
-                fontWeight: 600,
-                cursor: "pointer",
-                boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${alpha(themePalette.primary, 0.1)}`
-              }}
-            >
-              JD
-            </Avatar>
-          </Box>
+          <Avatar 
+            sx={{ 
+              width: 36, height: 36, 
+              bgcolor: themePalette.primary, 
+              fontWeight: 600,
+              boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${alpha(themePalette.primary, 0.1)}`
+            }}
+          >
+            RS
+          </Avatar>
         </Toolbar>
       </AppBar>
 
-      {/* =======================
-          Sidebar (Dark Theme)
-      ======================= */}
       <Drawer
         variant="permanent"
         sx={{
@@ -123,15 +108,18 @@ export default function DashboardLayout() {
         <Box sx={{ px: 2, py: 4 }}>
           <List>
             {menuItems.map((item) => {
+              // Strict active check: specific to the path
               const isActive = location.pathname.startsWith(item.path);
+
               return (
                 <ListItemButton
                   key={item.label}
                   onClick={() => navigate(item.path)}
-                  sx={{
+                   sx={{
                     mx: 1,
                     mb: 1,
                     borderRadius: "10px",
+                    py:1.5,
                     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                     backgroundColor: isActive ? alpha(themePalette.primary, 0.15) : "transparent",
                     borderLeft: isActive ? `3px solid ${themePalette.primary}` : "3px solid transparent",
@@ -143,9 +131,11 @@ export default function DashboardLayout() {
                 >
                   <ListItemIcon 
                     sx={{ 
-                      minWidth: 42, 
+                      minWidth: 40, 
+                      // Icon color stays muted unless active
                       color: isActive ? themePalette.primary : themePalette.textMuted,
-                      transition: "color 0.3s"
+                      transform: isActive ? "scale(1.1)" : "scale(1)",
+                      transition: "all 0.3s ease"
                     }}
                   >
                     {item.icon}
@@ -153,9 +143,11 @@ export default function DashboardLayout() {
                   <ListItemText 
                     primary={item.label} 
                     primaryTypographyProps={{ 
-                      fontSize: "0.925rem", 
+                      fontSize: "0.9rem", 
                       fontWeight: isActive ? 700 : 500,
-                      color: isActive ? "#fff" : themePalette.textMuted
+                      // Text color turns white when active, otherwise muted
+                      color: isActive ? "#FFFFFF" : themePalette.textMuted,
+                      transition: "color 0.3s"
                     }} 
                   />
                 </ListItemButton>
@@ -165,29 +157,9 @@ export default function DashboardLayout() {
         </Box>
       </Drawer>
 
-      {/* =======================
-          Main Content
-      ======================= */}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          p: 5,
-          transition: "padding 0.3s ease",
-        }}
-      >
+      <Box component="main" sx={{ flexGrow: 1, p: 5 }}>
         <Toolbar />
-        <Box 
-          sx={{ 
-            maxWidth: "1400px", 
-            mx: "auto",
-            animation: "fadeInUp 0.6s ease-out",
-            "@keyframes fadeInUp": {
-              "0%": { opacity: 0, transform: "translateY(20px)" },
-              "100%": { opacity: 1, transform: "translateY(0)" }
-            }
-          }}
-        >
+        <Box sx={{ maxWidth: "1400px", mx: "auto" }}>
           <Outlet />
         </Box>
       </Box>

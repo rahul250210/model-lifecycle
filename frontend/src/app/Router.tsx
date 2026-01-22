@@ -42,6 +42,7 @@ import ExperimentRun from "../pages/experiments/ExperimentRun";
 ======================= */
 import ArtifactBrowser from "../pages/artifacts/ArtifactBrowser";
 import ArtifactViewer from "../pages/artifacts/ArtifactViewer";
+import AlgorithmArtifactPage from "../pages/artifacts/AlgorithmArtifactPage";
 
 export default function Router() {
   return (
@@ -132,14 +133,18 @@ export default function Router() {
       {/* =======================
           Artifacts
       ======================= */}
+      <Route path="/artifacts" element={<ArtifactBrowser />} />
       <Route
-        path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/versions/:versionId/artifacts"
-        element={<ArtifactBrowser />}
+        path="/artifacts/algorithms/:algorithmId"
+        element={<AlgorithmArtifactPage />}
       />
+
+      {/* Version-level artifacts */}
       <Route
-        path="/artifacts/:artifactId"
+        path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/versions/:versionId/artifacts/:artifactId"
         element={<ArtifactViewer />}
       />
+
 
       {/* =======================
           Fallback
