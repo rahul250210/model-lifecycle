@@ -126,8 +126,8 @@ export default function VersionCompare() {
           Comparison Cards
       ======================= */}
       <Grid container spacing={3}>
-        {[left, right].map((v, idx) => (
-          <Grid  xs={12} md={6} key={v.id}>
+        {[left, right].map((v) => (
+          <Grid size={{ xs: 12, md: 6 }} key={v.id}>
             <Card elevation={2} sx={{ borderRadius: 3 }}>
               <CardContent>
                 <Typography variant="h6" fontWeight={600}>
@@ -196,7 +196,7 @@ export default function VersionCompare() {
                     : "-";
 
                 return (
-                  <Grid  xs={12} key={key}>
+                  <Grid size={{ xs: 12 }} key={key}>
                     <Box
                       sx={{
                         display: "grid",

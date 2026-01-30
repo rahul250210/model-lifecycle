@@ -19,9 +19,9 @@ import {
   Container,
   Paper,
   Stack,
+  Grid,
 } from "@mui/material";
 
-import Grid from "@mui/material/Grid";
 import AddIcon from "@mui/icons-material/Add";
 import SchemaIcon from "@mui/icons-material/Schema";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
@@ -100,8 +100,8 @@ export default function AlgorithmList() {
       <Container maxWidth="xl">
         {/* Header Section */}
         <Box sx={{ pt: 4, pb: 6 }}>
-          <Grid container justifyContent="space-between" alignItems="flex-end" spacing={3}>
-            <Grid item xs={12} md={8}>
+          <Grid  justifyContent="space-between" alignItems="flex-end" spacing={3}>
+            <Grid size={{xs:12, md:8}}>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
                 <IconButton 
                   onClick={() => navigate(`/factories`)}
@@ -124,7 +124,7 @@ export default function AlgorithmList() {
                 Manage high-level architectural blueprints and view their associated production models.
               </Typography>
             </Grid>
-            <Grid item xs={12} md={4} sx={{ textAlign: { md: 'right' } }}>
+              <Grid size={{ xs: 12, md: 4 }} sx={{ textAlign: { md: 'right' } }}>
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -149,9 +149,9 @@ export default function AlgorithmList() {
         </Box>
 
         {/* Algorithm Grid - Increased size to xs=12, sm=6, md=6 for larger cards */}
-        <Grid container spacing={4}>
+        <Grid container spacing={4} justifyContent="flex-start">
           {algorithms.map((algo) => (
-            <Grid item xs={12} sm={12} md={6} key={algo.id}>
+            <Grid size={{xs:12, sm:12, md:6}} key={algo.id}>
               <motion.div whileHover={{ y: -8 }} transition={{ type: "spring", stiffness: 300 }}>
                 <Card
                   onClick={() => navigate(`/factories/${factoryId}/algorithms/${algo.id}/models`)}
@@ -201,7 +201,7 @@ export default function AlgorithmList() {
                     </Typography>
                     
                     <Typography variant="body1" sx={{ color: themePalette.textMuted, mb: 4, minHeight: 60, lineHeight: 1.7, fontSize: '1.1rem' }}>
-                      {algo.description || "No description provided for this architecture. Add a description to help team members understand the logic."}
+                      {algo.description || "No description provided for this algorithm."}
                     </Typography>
 
                     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ pt: 3, borderTop: `1px solid ${themePalette.border}` }}>

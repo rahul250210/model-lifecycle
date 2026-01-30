@@ -20,7 +20,7 @@ export default function ModelsDashboard({ models, factoryId, algorithmId }: {
   return (
     <Grid container spacing={3}>
       {models.map((model) => (
-        <Grid xs={12} md={4} key={model.id}>
+        <Grid size={{ xs: 12, md: 4 }} key={model.id}>
           <Card elevation={2} sx={{ borderRadius: 3 }}>
             <CardContent>
               <Typography variant="h6" fontWeight={600}>

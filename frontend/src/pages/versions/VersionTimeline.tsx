@@ -35,8 +35,6 @@ import {
   ArrowBack as ArrowBackIcon,
   Timeline as TimelineIcon,
   History as HistoryIcon,
-  Description as DescriptionIcon,
-  Assessment as AssessmentIcon,
   Visibility as ViewIcon,
   SettingsBackupRestore as RollbackIcon,
   Delete as DeleteIcon,

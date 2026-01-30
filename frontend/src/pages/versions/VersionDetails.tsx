@@ -9,7 +9,6 @@ import {
   CircularProgress,
   Chip,
   Button,
-  Divider,
   Stack,
   Grid,
   Dialog,
@@ -58,6 +57,34 @@ const themePalette = {
   error: "#EF4444",
 };
 
+interface Version {
+  id: number;
+  version: string;
+  version_number: number;
+  note?: string;
+  parameters?: Record<string, unknown>;
+  accuracy?: number;
+  precision?: number;
+  recall?: number;
+  f1_score?: number;
+  metrics?: Record<string, number>;
+  created_at: string;
+  is_active: boolean;
+}
+
+interface Artifact {
+  id: number;
+  name: string;
+  type: string;
+  size: number;
+}
+
+interface VersionDelta {
+  id: number;
+  created_at: string;
+  [key: string]: any;
+}
+
 export default function VersionDetails() {
   const { factoryId, algorithmId, modelId, versionId } = useParams();
   const navigate = useNavigate();
@@ -66,7 +93,6 @@ export default function VersionDetails() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [delta, setDelta] = useState<VersionDelta | null>(null);
   const [loading, setLoading] = useState(true);
-  const [visibleImageCount, setVisibleImageCount] = useState(6);
   const [showFullDataset, setShowFullDataset] = useState(false);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [downloadSelect, setDownloadSelect] = useState({
@@ -112,9 +138,7 @@ export default function VersionDetails() {
   const modelFiles = artifacts.filter((a) => a.type === "model");
   const codeFiles = artifacts.filter((a) => a.type === "code");
   const isFirstVersion = version.version_number === 1;
-  const imageFiles = datasetFiles.filter(a =>
-    a.name.match(/\.(jpg|jpeg|png|webp)$/i)
-  );
+ 
 
   const displayedDataset = (() => {
     if (isFirstVersion || showFullDataset) return datasetFiles;
@@ -201,7 +225,7 @@ export default function VersionDetails() {
         </Box>
 
         <Grid container spacing={4}>
-          <Grid item xs={12} lg={8}>
+          <Grid size={{ xs: 12 }}>
             <Stack spacing={4}>
               {/* SUMMARY CARD */}
               <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}`, bgcolor: themePalette.white }}>
@@ -232,8 +256,8 @@ export default function VersionDetails() {
       </Typography>
     ) : (
       <Grid container spacing={2}>
-        {Object.entries(version.parameters).map(([key, value]) => (
-          <Grid item xs={6} md={4} key={key}>
+        {Object.entries(version.parameters || {}).map(([key, value]) => (
+          <Grid size={{ xs: 6, md: 4 }} key={key}>
             <Paper
               elevation={0}
               sx={{
@@ -247,7 +271,7 @@ export default function VersionDetails() {
                 {key.toUpperCase()}
               </Typography>
               <Typography variant="h6" fontWeight={900}>
-                {value}
+                {String(value)}
               </Typography>
             </Paper>
           </Grid>
@@ -270,7 +294,7 @@ export default function VersionDetails() {
                     { label: "Recall", value: version.recall },
                     { label: "F1 Score", value: version.f1_score },
                   ].map((m) => (
-                    <Grid item xs={12} sm={6} md={3} key={m.label}>
+                    <Grid size={{ xs: 12, sm: 6, md: 3 }} key={m.label}>
                       <Paper elevation={0} sx={{ p: 3, borderRadius: "20px", border: `1px solid ${themePalette.border}`, textAlign: 'center', bgcolor: themePalette.white }}>
                         <Typography variant="caption" fontWeight={800} sx={{ color: themePalette.textMuted, textTransform: 'uppercase' }}>{m.label}</Typography>
                         <Typography variant="h4" fontWeight={900} sx={{ my: 1.5, color: metricColor(m.value) }}>{m.value ? `${m.value}%` : "--"}</Typography>
@@ -286,7 +310,7 @@ export default function VersionDetails() {
               {/* DATASET EXPLORER */}
               <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${themePalette.border}`, bgcolor: themePalette.white }}>
                 <CardContent sx={{ p: 4 }}>
-                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                     <Stack direction="row" spacing={1.5} alignItems="center">
                       <ImageIcon sx={{ color: themePalette.primary }} />
                       <Typography variant="h6" fontWeight={800}>Dataset Browser</Typography>
@@ -301,169 +325,170 @@ export default function VersionDetails() {
                   </Stack>
 
                   {!isFirstVersion && (
-                    <Stack direction="row" spacing={2} sx={{ mb: 4 }}>
+                    <Stack direction="row" spacing={2} >
                       <Chip label={`+ ${delta.dataset.new} New`} size="small" sx={{ bgcolor: alpha(themePalette.success, 0.1), color: themePalette.success, fontWeight: 700 }} />
                       <Chip label={`Δ ${delta.dataset.reused} Reused`} size="small" sx={{ bgcolor: alpha(themePalette.primary, 0.1), color: themePalette.primary, fontWeight: 700 }} />
-                      <Chip label={`- ${delta.dataset.removed} Removed`} size="small" sx={{ bgcolor: alpha(themePalette.error, 0.1), color: themePalette.error, fontWeight: 700 }} />
                     </Stack>
                   )}
 
-                  <Box sx={{ display: "flex", gap: 2.5, overflowX: "auto", pb: 2, cursor: 'grab', '&::-webkit-scrollbar': { height: '6px' }, '&::-webkit-scrollbar-thumb': { bgcolor: alpha(themePalette.primary, 0.1), borderRadius: '10px' } }}>
-                    {displayedDataset.map(img => (
-                      <Box key={img.id} sx={{ minWidth: 190, maxWidth: 190, flexShrink: 0 }}>
-                        <Card elevation={0} sx={{ border: `1px solid ${themePalette.border}`, borderRadius: '16px', overflow: 'hidden', transition: '0.3s', "&:hover": { transform: 'scale(1.03)', borderColor: themePalette.primary } }}>
-                          <img src={`http://127.0.0.1:8000/artifacts/${img.id}/image`} alt={img.name} style={{ width: "100%", height: 140, objectFit: "cover" }} />
-                          <Typography variant="caption" sx={{ p: 1.5, display: 'block', textAlign: 'center', fontWeight: 700, bgcolor: themePalette.white, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{img.name}</Typography>
-                        </Card>
+                  <Box sx={{ display: "flex", gap: 2.5, overflowX: "auto", pb: 2, cursor: 'grab', minHeight: displayedDataset.length === 0 ? 200 : 'auto', '&::-webkit-scrollbar': { height: '6px' }, '&::-webkit-scrollbar-thumb': { bgcolor: alpha(themePalette.primary, 0.1), borderRadius: '10px' } }}>
+                    {displayedDataset.length === 0 ? (
+                      <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+                        <Typography variant="body2" color="text.secondary">No dataset images available</Typography>
                       </Box>
-                    ))}
+                    ) : (
+                      displayedDataset.map(img => (
+                        <Box key={img.id} sx={{ minWidth: 190, maxWidth: 190, flexShrink: 0 }}>
+                          <Card elevation={0} sx={{ border: `1px solid ${themePalette.border}`, borderRadius: '16px', overflow: 'hidden', transition: '0.3s', "&:hover": { transform: 'scale(1.03)', borderColor: themePalette.primary } }}>
+                            <img src={`http://127.0.0.1:8000/artifacts/${img.id}/image`} alt={img.name} style={{ width: "100%", height: 140, objectFit: "cover" }} />
+                            <Typography variant="caption" sx={{ p: 1.5, display: 'block', textAlign: 'center', fontWeight: 700, bgcolor: themePalette.white, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{img.name}</Typography>
+                          </Card>
+                        </Box>
+                      ))
+                    )}
                   </Box>
                 </CardContent>
               </Card>
-            </Stack>
-          </Grid>
-          {/* DATASET LABELS EXPLORER */}
-          <Card
-            elevation={0}
-            sx={{
-              borderRadius: "24px",
-              border: `1px solid ${themePalette.border}`,
-              bgcolor: themePalette.white,
-            }}
-          >
-            <CardContent sx={{ p: 4 }}>
-              <Stack
-                direction="row"
-                justifyContent="space-between"
-                alignItems="center"
-                sx={{ mb: 4 }}
-              >
-                <Stack direction="row" spacing={1.5} alignItems="center">
-                  <DescriptionIcon sx={{ color: themePalette.primary }} />
-                  <Typography variant="h6" fontWeight={800}>
-                    Dataset Labels
-                  </Typography>
-                  <Chip
-                    label={`${labelFiles.length} Files`}
-                    size="small"
-                    variant="outlined"
-                    sx={{ fontWeight: 700 }}
-                  />
-                </Stack>
-              </Stack>
 
-              {!isFirstVersion && (
-                <Stack direction="row" spacing={2} sx={{ mb: 4 }}>
-                  <Chip
-                    label={`+ ${delta.label.new} New`}
-                    size="small"
-                    sx={{
-                      bgcolor: alpha(themePalette.success, 0.1),
-                      color: themePalette.success,
-                      fontWeight: 700,
-                    }}
-                  />
-                  <Chip
-                    label={`Δ ${delta.label.reused} Reused`}
-                    size="small"
-                    sx={{
-                      bgcolor: alpha(themePalette.primary, 0.1),
-                      color: themePalette.primary,
-                      fontWeight: 700,
-                    }}
-                  />
-                  <Chip
-                    label={`- ${delta.label.removed} Removed`}
-                    size="small"
-                    sx={{
-                      bgcolor: alpha(themePalette.error, 0.1),
-                      color: themePalette.error,
-                      fontWeight: 700,
-                    }}
-                  />
-                </Stack>
-              )}
-
-              <Box
+              {/* DATASET LABELS EXPLORER */}
+              <Card
+                elevation={0}
                 sx={{
-                  display: "flex",
-                  gap: 2,
-                  overflowX: "auto",
-                  pb: 1,
-                  "&::-webkit-scrollbar": { height: "6px" },
-                  "&::-webkit-scrollbar-thumb": {
-                    bgcolor: alpha(themePalette.primary, 0.15),
-                    borderRadius: "10px",
-                  },
+                  borderRadius: "24px",
+                  border: `1px solid ${themePalette.border}`,
+                  bgcolor: themePalette.white,
                 }}
               >
-                {displayedLabels.map((label) => (
-                  <Box
-                    key={label.id}
-                    sx={{ minWidth: 220, maxWidth: 220, flexShrink: 0 }}
+                <CardContent sx={{ p: 4 }}>
+                  <Stack
+                    direction="row"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    sx={{ mb: 4 }}
                   >
-                    <Paper
-                      elevation={0}
-                      sx={{
-                        p: 2,
-                        borderRadius: "16px",
-                        border: `1px solid ${themePalette.border}`,
-                        bgcolor: themePalette.background,
-                        transition: "0.25s",
-                        "&:hover": {
-                          borderColor: themePalette.primary,
-                          bgcolor: alpha(themePalette.primary, 0.04),
-                        },
-                      }}
-                    >
-                      <Stack spacing={1}>
-                        <Typography
-                          variant="body2"
-                          fontWeight={700}
-                          sx={{
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                          }}
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <DescriptionIcon sx={{ color: themePalette.primary }} />
+                      <Typography variant="h6" fontWeight={800}>
+                        Dataset Labels
+                      </Typography>
+                      <Chip
+                        label={`${labelFiles.length} Files`}
+                        size="small"
+                        variant="outlined"
+                        sx={{ fontWeight: 700 }}
+                      />
+                    </Stack>
+                  </Stack>
+
+                  {!isFirstVersion && (
+                    <Stack direction="row" spacing={2} sx={{ mb: 4 }}>
+                      <Chip
+                        label={`+ ${delta.label.new} New`}
+                        size="small"
+                        sx={{
+                          bgcolor: alpha(themePalette.success, 0.1),
+                          color: themePalette.success,
+                          fontWeight: 700,
+                        }}
+                      />
+                      <Chip
+                        label={`Δ ${delta.label.reused} Reused`}
+                        size="small"
+                        sx={{
+                          bgcolor: alpha(themePalette.primary, 0.1),
+                          color: themePalette.primary,
+                          fontWeight: 700,
+                        }}
+                      />
+                    
+                    </Stack>
+                  )}
+
+                  <Box
+                    sx={{
+                      display: "flex",
+                      gap: 2,
+                      overflowX: "auto",
+                      pb: 1,
+                      minHeight: displayedLabels.length === 0 ? 200 : 'auto',
+                      "&::-webkit-scrollbar": { height: "6px" },
+                      "&::-webkit-scrollbar-thumb": {
+                        bgcolor: alpha(themePalette.primary, 0.15),
+                        borderRadius: "10px",
+                      },
+                    }}
+                  >
+                    {displayedLabels.length === 0 ? (
+                      <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+                        <Typography variant="body2" color="text.secondary">No label files available</Typography>
+                      </Box>
+                    ) : (
+                      displayedLabels.map((label) => (
+                        <Box
+                          key={label.id}
+                          sx={{ minWidth: 220, maxWidth: 220, flexShrink: 0 }}
                         >
-                          {label.name}
-                        </Typography>
+                          <Paper
+                            elevation={0}
+                            sx={{
+                              p: 2,
+                              borderRadius: "16px",
+                              border: `1px solid ${themePalette.border}`,
+                              bgcolor: themePalette.background,
+                              transition: "0.25s",
+                              "&:hover": {
+                                borderColor: themePalette.primary,
+                                bgcolor: alpha(themePalette.primary, 0.04),
+                              },
+                            }}
+                          >
+                            <Stack spacing={1}>
+                              <Typography
+                                variant="body2"
+                                fontWeight={700}
+                                sx={{
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                              >
+                                {label.name}
+                              </Typography>
 
-                        <Typography variant="caption" color="text.secondary">
-                          {(label.size / 1024).toFixed(2)} KB
-                        </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {(label.size / 1024).toFixed(2)} KB
+                              </Typography>
 
-                        <Stack direction="row" spacing={1}>
-                          <Tooltip title="View Metadata">
-                            <IconButton
-                              size="small"
-                              onClick={() => navigate(`/artifacts/${label.id}`)}
-                            >
-                              <VisibilityIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                              <Stack direction="row" spacing={1}>
+                                <Tooltip title="View Metadata">
+                                  <IconButton
+                                    size="small"
+                                    onClick={() => navigate(`/artifacts/${label.id}`)}
+                                  >
+                                    <VisibilityIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
 
-                          <Tooltip title="Download">
-                            <IconButton
-                              size="small"
-                              component="a"
-                              href={`http://127.0.0.1:8000/artifacts/${label.id}/download`}
-                            >
-                              <DownloadIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Stack>
-                      </Stack>
-                    </Paper>
+                                <Tooltip title="Download">
+                                  <IconButton
+                                    size="small"
+                                    component="a"
+                                    href={`http://127.0.0.1:8000/artifacts/${label.id}/download`}
+                                  >
+                                    <DownloadIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </Stack>
+                            </Stack>
+                          </Paper>
+                        </Box>
+                      ))
+                    )}
                   </Box>
-                ))}
-              </Box>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
 
-          {/* ================= RIGHT COLUMN ================= */}
-          <Grid item xs={12} lg={4}>
-            <Stack spacing={4}>
+              {/* MODEL WEIGHTS */}
               <Box>
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                   <HubIcon sx={{ color: themePalette.primary }} />
@@ -472,6 +497,7 @@ export default function VersionDetails() {
                 {renderFileList(modelFiles, <HistoryIcon fontSize="small" />)}
               </Box>
 
+              {/* TRAINING SOURCE */}
               <Box>
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                   <CodeIcon sx={{ color: themePalette.primary }} />
@@ -479,8 +505,6 @@ export default function VersionDetails() {
                 </Stack>
                 {renderFileList(codeFiles, <CodeIcon fontSize="small" />)}
               </Box>
-
-             
             </Stack>
           </Grid>
         </Grid>

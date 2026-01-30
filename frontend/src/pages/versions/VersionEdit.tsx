@@ -17,7 +17,6 @@ import {
   FormControlLabel,
   Switch,
   Grid,
-  Divider,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -90,14 +89,7 @@ export default function VersionEdit() {
     const name = file.name.toLowerCase();
     return allowed.some((ext) => name.endsWith(ext));
   };
-
-  const mergeUniqueFiles = (prev: File[], next: File[]) => {
-    const map = new Map<string, File>();
-    [...prev, ...next].forEach((f) =>
-      map.set(`${f.name}-${f.size}`, f)
-    );
-    return Array.from(map.values());
-  };
+ 
 
   useEffect(() => {
     const fetchVersion = async () => {
@@ -284,7 +276,7 @@ export default function VersionEdit() {
               
               <Grid container spacing={4}>
   {/* ================= REPLACE DATASET ================= */}
-  <Grid item xs={12} md={3}>
+  <Grid size={{ xs: 12, md: 3 }}>
     <Stack spacing={1.5} alignItems="center">
       <Typography variant="caption" fontWeight={700} sx={{ color: themePalette.textMuted }}>
         REPLACE DATASET
@@ -300,7 +292,9 @@ export default function VersionEdit() {
         <input
           hidden
           type="file"
-          webkitdirectory="true"
+          ref={(el) => {
+              if (el) (el as any).webkitdirectory = true;
+            }}
           multiple
           onChange={(e) => {
             if (!e.target.files) return;
@@ -315,7 +309,7 @@ export default function VersionEdit() {
   </Grid>
 
   {/* ================= REPLACE LABELS ================= */}
-  <Grid item xs={12} md={3}>
+  <Grid size={{ xs: 12, md: 3 }}>
     <Stack spacing={1.5} alignItems="center">
       <Typography variant="caption" fontWeight={700} sx={{ color: themePalette.textMuted }}>
         REPLACE LABELS
@@ -331,7 +325,9 @@ export default function VersionEdit() {
         <input
           hidden
           type="file"
-          webkitdirectory="true"
+          ref={(el) => {
+              if (el) (el as any).webkitdirectory = true;
+            }}          
           multiple
           accept=".txt,.json,.xml"
           onChange={(e) => {
@@ -348,7 +344,7 @@ export default function VersionEdit() {
   </Grid>
 
   {/* ================= REPLACE MODEL ================= */}
- <Grid item xs={12} md={3}>
+ <Grid size={{ xs: 12, md: 3 }}>
   <Stack spacing={1.5} alignItems="center">
     <Typography
       variant="caption"
@@ -423,7 +419,7 @@ export default function VersionEdit() {
 
 
   {/* ================= REPLACE CODE ================= */}
-  <Grid item xs={12} md={3}>
+  <Grid size={{ xs: 12, md: 3 }}>
     <Stack spacing={1.5} alignItems="center">
       <Typography variant="caption" fontWeight={700} sx={{ color: themePalette.textMuted }}>
         REPLACE CODE
@@ -468,7 +464,7 @@ export default function VersionEdit() {
               </Stack>
               <Grid container spacing={3}>
                 {Object.entries(metrics).map(([key, value]) => (
-                  <Grid item xs={12} sm={3} key={key}>
+                  <Grid size={{ xs: 12, sm: 3 }} key={key}>
                     <Typography variant="body2" fontWeight={700} sx={{ mb: 1, color: themePalette.textMain, textTransform: 'capitalize' }}>{key.replace('_', ' ')}</Typography>
                     <TextField
                       fullWidth
@@ -496,7 +492,7 @@ export default function VersionEdit() {
 
               <Grid container spacing={3}>
                 {Object.entries(parameters).map(([key, value]) => (
-                  <Grid item xs={12} sm={6} key={key}>
+                  <Grid size={{ xs: 12, sm: 6 }} key={key}>
                     <Typography
                       variant="caption"
                       fontWeight={800}

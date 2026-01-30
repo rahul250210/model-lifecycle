@@ -8,7 +8,6 @@ import {
   CardContent,
   Button,
   TextField,
-  Divider,
   CircularProgress,
   Grid,
   IconButton,
@@ -33,7 +32,6 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import axios from "../../api/axios";
 
 const ALLOWED_MODEL_EXTENSIONS = [".pt", ".engine", ".pth", ".onnx", ".h5", ".ckpt"];
-const ALLOWED_CODE_EXTENSIONS = [".py"];
 const ALLOWED_LABEL_EXTENSIONS = [".txt", ".json", ".xml"];
 
 const themePalette = {
@@ -55,7 +53,7 @@ export default function VersionCreate() {
   const [datasetFiles, setDatasetFiles] = useState<File[]>([]);
   const [labelFiles, setLabelFiles] = useState<File[]>([]);
   const [modelFiles, setModelFiles] = useState<File[]>([]);
-  const [codeFile, setCodeFile] = useState<File | null>(null);
+  const [codeFile] = useState<File | null>(null);
 
   const [metrics, setMetrics] = useState({
     accuracy: "",
@@ -75,12 +73,6 @@ export default function VersionCreate() {
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const mergeFiles = (prev: File[], next: File[]) => {
-    const map = new Map<string, File>();
-    [...prev, ...next].forEach((f) => map.set(`${f.name}-${f.size}`, f));
-    return Array.from(map.values());
-  };
 
   const filterLabelFiles = (files: File[]) =>
     files.filter((f) =>
@@ -189,16 +181,25 @@ export default function VersionCreate() {
               </Stack>
               
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <Button component="label" sx={getButtonStyles(datasetFiles.length > 0)} startIcon={datasetFiles.length > 0 ? <CheckCircleIcon /> : <FolderOpenIcon />}>
                     {datasetFiles.length > 0 ? `${datasetFiles.length} Images Staged` : "Upload Images Folder"}
-                    <input hidden type="file" webkitdirectory="true" multiple  onChange={(e) => e.target.files && setDatasetFiles( Array.from(e.target.files))} />
+                    <input 
+                    hidden 
+                    type="file" 
+                    ref={(el) => {
+                    if (el) (el as any).webkitdirectory = true;
+                    }} 
+                    multiple  
+                    onChange={(e) => e.target.files && setDatasetFiles( Array.from(e.target.files))} />
                   </Button>
                 </Grid>
-                <Grid item xs={12} sm={6}>
+                <Grid size={{ xs: 12, sm: 6 }}>
                   <Button component="label" sx={getButtonStyles(labelFiles.length > 0)} startIcon={labelFiles.length > 0 ? <CheckCircleIcon /> : <UploadFileIcon />}>
                     {labelFiles.length > 0 ? `${labelFiles.length} Labels Staged` : "Upload Labels Folder"}
-                    <input hidden type="file" webkitdirectory="true" multiple onChange={(e) => e.target.files && setLabelFiles(filterLabelFiles(Array.from(e.target.files)))} />
+                    <input hidden type="file"  ref={(el) => {
+                      if (el) (el as any).webkitdirectory = true;
+                    }} multiple onChange={(e) => e.target.files && setLabelFiles(filterLabelFiles(Array.from(e.target.files)))} />
                   </Button>
                 </Grid>
               </Grid>
@@ -278,7 +279,7 @@ export default function VersionCreate() {
               
               <Grid container spacing={3}>
                 {Object.keys(metrics).map((k) => (
-                  <Grid item xs={12} sm={6} key={k}>
+                  <Grid size={{ xs: 12, sm: 6 }} key={k}>
                     <Typography variant="caption" fontWeight={800} sx={{ color: themePalette.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{k.replace('_', ' ')} (%)</Typography>
                     <TextField
                       fullWidth
@@ -305,7 +306,7 @@ export default function VersionCreate() {
 
             <Grid container spacing={3}>
               {Object.entries(parameters).map(([key, value]) => (
-                <Grid item xs={12} sm={6} key={key}>
+                <Grid size={{ xs: 12, sm: 6 }} key={key}>
                   <Typography
                     variant="caption"
                     fontWeight={800}

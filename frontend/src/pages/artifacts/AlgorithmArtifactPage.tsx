@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import {
   Box, Typography, Card, CardContent, Button, IconButton,
-  Container, Stack, Paper, alpha, CircularProgress, Chip,Divider, CardMedia
+  Container, Stack, Paper, alpha, CircularProgress, Chip, CardMedia
 } from "@mui/material";
 import {
   ArrowBack as ArrowBackIcon,
   PictureAsPdf,
   Slideshow,
-  Image as ImageIcon,
   Description,
   Download,
   Delete,

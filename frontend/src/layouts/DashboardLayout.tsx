@@ -13,36 +13,44 @@ import {
   CssBaseline,
   Avatar,
   alpha,
+  Menu,
+  MenuItem,
 } from "@mui/material";
-import FactoryIcon from "@mui/icons-material/Factory";
-import ScienceIcon from "@mui/icons-material/Science";
-import LayersIcon from "@mui/icons-material/Layers";
-import TimelineIcon from "@mui/icons-material/Timeline";
+
 import StorageIcon from "@mui/icons-material/Storage";
+import LogoutIcon from "@mui/icons-material/Logout";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
+import { useState } from "react";
+import { useAuthStore } from "../app/authStore";
+import { FactoriesDropdown } from "../components/NestedDropdownComponent";
+import { themePalette } from "../theme/themePalette";
 
 const drawerWidth = 280;
 
-export const themePalette = {
-  primary: "#4F46E5",       // Indigo (Brand Color)
-  primaryLight: "#EEF2FF",  // Soft Indigo Wash
-  sidebarBg: "#0F172A",     // Deep Navy/Slate
-  sidebarActive: "#1E293B", // Lighter Slate for active background
-  textMuted: "#94A3B8",     // Slate Gray for inactive text
-  background: "#F8FAFC",    // Page background
-  border: "#E2E8F0",        // subtle borders
-};
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, logout } = useAuthStore();
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const open = Boolean(anchorEl);
+
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
 
   // Updated paths to be unique so the color change is specific to the page
   const menuItems = [
-    { label: "Factories", icon: <FactoryIcon />, path: "/factories" },
-    { label: "Models", icon: <LayersIcon />, path: "/models" },
-    { label: "Versions", icon: <TimelineIcon />, path: "/versions" },
-    { label: "Experiments", icon: <ScienceIcon />, path: "/experiments" },
+    // Factories will be handled separately with FactoriesDropdown
     { label: "Artifacts", icon: <StorageIcon />, path: "/artifacts" },
   ];
 
@@ -77,16 +85,45 @@ export default function DashboardLayout() {
             NexusForge
           </Typography>
 
-          <Avatar 
-            sx={{ 
-              width: 36, height: 36, 
-              bgcolor: themePalette.primary, 
-              fontWeight: 600,
-              boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${alpha(themePalette.primary, 0.1)}`
-            }}
-          >
-            RS
-          </Avatar>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Typography variant="body2" color="textSecondary">
+              {user?.first_name} {user?.last_name}
+            </Typography>
+            <Avatar 
+              onClick={handleMenuOpen}
+              sx={{ 
+                width: 36, height: 36, 
+                bgcolor: themePalette.primary, 
+                fontWeight: 600,
+                boxShadow: `0 0 0 2px #fff, 0 0 0 4px ${alpha(themePalette.primary, 0.1)}`,
+                cursor: "pointer",
+                transition: "transform 0.2s",
+                "&:hover": {
+                  transform: "scale(1.05)",
+                }
+              }}
+            >
+              {user?.first_name?.charAt(0)}{user?.last_name?.charAt(0)}
+            </Avatar>
+            <Menu
+              anchorEl={anchorEl}
+              open={open}
+              onClose={handleMenuClose}
+              anchorOrigin={{
+                vertical: "bottom",
+                horizontal: "right",
+              }}
+              transformOrigin={{
+                vertical: "top",
+                horizontal: "right",
+              }}
+            >
+              <MenuItem onClick={handleLogout}>
+                <LogoutIcon sx={{ mr: 1 }} fontSize="small" />
+                Logout
+              </MenuItem>
+            </Menu>
+          </Box>
         </Toolbar>
       </AppBar>
 
@@ -107,6 +144,10 @@ export default function DashboardLayout() {
         <Toolbar />
         <Box sx={{ px: 2, py: 4 }}>
           <List>
+          
+            <FactoriesDropdown />
+            
+            {/* Other Menu Items */}
             {menuItems.map((item) => {
               // Strict active check: specific to the path
               const isActive = location.pathname.startsWith(item.path);
@@ -147,7 +188,9 @@ export default function DashboardLayout() {
                       fontWeight: isActive ? 700 : 500,
                       // Text color turns white when active, otherwise muted
                       color: isActive ? "#FFFFFF" : themePalette.textMuted,
-                      transition: "color 0.3s"
+                       sx: {
+                            transition: "color 0.3s",
+                          },
                     }} 
                   />
                 </ListItemButton>

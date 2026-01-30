@@ -179,7 +179,7 @@ export default function ExperimentRun() {
       ======================= */}
       <Grid container spacing={3}>
         {/* Params */}
-        <Grid  xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card elevation={2} sx={{ borderRadius: 3 }}>
             <CardContent>
               <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
@@ -207,7 +207,7 @@ export default function ExperimentRun() {
         </Grid>
 
         {/* Metrics */}
-        <Grid  xs={12} md={6}>
+        <Grid size={{ xs: 12, md: 6 }}>
           <Card elevation={2} sx={{ borderRadius: 3 }}>
             <CardContent>
               <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>

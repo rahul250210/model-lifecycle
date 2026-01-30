@@ -23,8 +23,8 @@ import {
   CardActionArea,
   Stack,
   Divider,
+  Grid,
 } from "@mui/material";
-import Grid from "@mui/material/Grid";
 import AddIcon from "@mui/icons-material/Add";
 import FactoryIcon from "@mui/icons-material/Factory";
 import SchemaIcon from "@mui/icons-material/Schema";
@@ -236,7 +236,7 @@ export default function FactoryList() {
         ) : (
           <Grid container spacing={4}>
             {filteredFactories.map((factory) => (
-              <Grid item xs={12} sm={12} md={6} key={factory.id}>
+              <Grid size={{ xs: 12, md: 6 }} key={factory.id}>
                 <Card 
                   elevation={0}
                   sx={{ 
@@ -278,7 +278,7 @@ export default function FactoryList() {
                       </Typography>
 
                       <Typography variant="body2" sx={{ color: themePalette.textMuted, mb: 3, minHeight: 40, lineHeight: 1.6 }}>
-                        {factory.description || "No specific configuration summary provided for this factory node."}
+                        {factory.description || "No summary provided for this factory."}
                       </Typography>
 
                       <Stack direction="row" spacing={1.5} sx={{ mb: 3 }}>

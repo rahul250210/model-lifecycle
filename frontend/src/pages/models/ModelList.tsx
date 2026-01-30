@@ -106,7 +106,7 @@ export default function ModelList() {
         {/* Header Section */}
         <Box sx={{ pt: 4, pb: 6 }}>
           <Grid container justifyContent="space-between" alignItems="flex-end" spacing={3}>
-            <Grid item xs={12} md={8}>
+            <Grid size={{ xs: 12, md: 8 }}>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
                 <IconButton 
                   onClick={() => navigate(`/factories/${factoryId}/algorithms`)}
@@ -129,7 +129,7 @@ export default function ModelList() {
                 Manage specific model implementations and track their version history.
               </Typography>
             </Grid>
-            <Grid item xs={12} md={4} sx={{ textAlign: { md: 'right' } }}>
+            <Grid size={{ xs: 12, md: 4 }} sx={{ textAlign: { md: 'right' } }}>
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
@@ -154,9 +154,9 @@ export default function ModelList() {
         </Box>
 
         {/* Model Cards */}
-        <Grid container spacing={4}>
+          <Grid container spacing={4} justifyContent="flex-start">
           {models.map((model) => (
-            <Grid item xs={12} md={6} key={model.id}>
+            <Grid size={{ xs: 12, md: 6 }} key={model.id}>
               <motion.div whileHover={{ y: -8 }} transition={{ type: "spring", stiffness: 300 }}>
                 <Card
                   onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${model.id}`)}

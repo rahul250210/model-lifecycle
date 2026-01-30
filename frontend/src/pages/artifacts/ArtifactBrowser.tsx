@@ -141,13 +141,13 @@ export default function ArtifactBrowser() {
         </Paper>
 
         {/* ALGORITHM GRID */}
-        <Grid container spacing={3}>
+       <Grid container spacing={3} justifyContent="flex-start">
           {algorithms
             .filter((a) =>
               a.name.toLowerCase().includes(search.toLowerCase())
             )
             .map((algo) => (
-              <Grid item xs={12} sm={6} md={3} key={algo.id}>
+              <Grid size={{xs:12, sm:6, md:4}} key={algo.id}>
                 <Card elevation={0} sx={{
                   borderRadius: "20px",
                   border: `1px solid ${themePalette.border}`,

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import factories, algorithms, models, versions, experiments, artifacts
+from app.api import factories, algorithms, models, versions, experiments, artifacts, auth
 from app.api.knowledge_base import router as kb_router
 from app.database import Base, engine
 
@@ -17,8 +17,8 @@ app = FastAPI(
 # CORS (for React)
 app.add_middleware(
     CORSMiddleware,
-     allow_origins=[ "http://localhost:5173",   # Vite
-        "http://127.0.0.1:5173",
+     allow_origins=[ "http://192.168.1.50:81",  # Add your new frontend URL here
+        "http://localhost:5173"   # Keep this for local testing
     ],   # later restrict
     allow_credentials=True,
     allow_methods=["*"],
@@ -26,6 +26,7 @@ app.add_middleware(
 )
 
 # Register routers
+# app.include_router(auth.router)  # Temporarily commented for testing without auth
 app.include_router(factories.router, prefix="/factories", tags=["Factories"])
 app.include_router(algorithms.router, prefix="/factories", tags=["Algorithms"])
 app.include_router(models.router, prefix="/factories", tags=["Models"])

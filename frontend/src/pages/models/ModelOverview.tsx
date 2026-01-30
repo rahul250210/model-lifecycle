@@ -8,7 +8,6 @@ import {
   CardContent,
   Button,
   CircularProgress,
-  Divider,
   Chip,
   Grid,
   IconButton,
@@ -23,12 +22,10 @@ import HubIcon from "@mui/icons-material/Hub";
 import LayersIcon from "@mui/icons-material/Layers";
 import AddIcon from "@mui/icons-material/Add";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import AssessmentIcon from "@mui/icons-material/Assessment";
-import TimelineIcon from "@mui/icons-material/Timeline";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import SpeedIcon from "@mui/icons-material/Speed";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-
+import AssessmentIcon from "@mui/icons-material/Assessment";
 import {
   XAxis,
   YAxis,
@@ -252,7 +249,7 @@ export default function ModelOverview() {
         {/* Header Hero Section */}
         <Box sx={{ pt: 6, pb: 6 }}>
           <Grid container justifyContent="space-between" alignItems="center">
-            <Grid item xs={12} md={7}>
+            <Grid size={{ xs: 12, md: 7 }}>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
                 <IconButton 
                   onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models`)}
@@ -269,7 +266,7 @@ export default function ModelOverview() {
                 {model.description || "Detailed analysis of model performance metrics and iteration convergence."}
               </Typography>
             </Grid>
-            <Grid item xs={12} md={5}>
+              <Grid size={{ xs: 12, md: 5 }}>
               <Stack direction="row" spacing={2} justifyContent={{ md: 'flex-end' }}>
                 <Button 
                   variant="outlined" 
@@ -293,10 +290,10 @@ export default function ModelOverview() {
 
         {/* KPI SCORECARDS */}
         <Grid container spacing={3} sx={{ mb: 6 }}>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{xs:12, sm:6, md:3}}>
             <MetricCard title="Versions" value={model.versions_count} icon={<LayersIcon />} color={themePalette.primary} />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <MetricCard 
               title="Peak Accuracy" 
               value={versions.length ? `${Math.max(...versions.map(v => v.accuracy || 0))}%` : "0%"} 
@@ -304,7 +301,7 @@ export default function ModelOverview() {
               color={themePalette.success} 
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <MetricCard 
               title="Avg F1-Score" 
               value={versions.length ? `${(versions.reduce((acc, v) => acc + (v.f1_score || 0), 0) / versions.length).toFixed(1)}%` : "0%"} 
@@ -312,7 +309,7 @@ export default function ModelOverview() {
               color={themePalette.warning} 
             />
           </Grid>
-          <Grid item xs={12} sm={6} md={3}>
+          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <MetricCard title="Model ID" value={`MOD-${model.id}`} icon={<HubIcon />} color={themePalette.error} />
           </Grid>
         </Grid>
@@ -328,16 +325,16 @@ export default function ModelOverview() {
           </Stack>
           
           <Grid container spacing={4}>
-            <Grid item xs={12} lg={6}>
+            <Grid size={{ xs: 12, lg: 6 }}>
               <MetricChart title="Model Accuracy" dataKey="accuracy" color={themePalette.success} activeVersion={activeVersion} />
             </Grid>
-            <Grid item xs={12} lg={6}>
+            <Grid size={{ xs: 12, lg: 6 }}>
               <MetricChart title="Precision Score" dataKey="precision" color={themePalette.primary} activeVersion={activeVersion} />
             </Grid>
-            <Grid item xs={12} lg={6}>
+            <Grid size={{ xs: 12, lg: 6 }}>
               <MetricChart title="Recall Sensitivity" dataKey="recall" color={themePalette.warning} activeVersion={activeVersion} />
             </Grid>
-            <Grid item xs={12} lg={6}>
+            <Grid size={{ xs: 12, lg: 6 }}>
               <MetricChart title="F1-Score Stability" dataKey="f1_score" color={themePalette.error} activeVersion={activeVersion} />
             </Grid>
           </Grid>
