@@ -1,68 +1,196 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  /* Design tokens */
+  --font-sans: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  --font-weight-regular: 400;
+  --line-height: 1.45;
+
+  --color-bg: #0f1720;
+  /* dark surface */
+  --color-surface: #111217;
+  --color-card: #0f1725;
+  --color-text: rgba(255, 255, 255, 0.92);
+  --color-muted: rgba(255, 255, 255, 0.65);
+  --color-primary: #646cff;
+
+  --radius-1: 8px;
+  --radius-2: 12px;
+  --shadow-1: 0 6px 20px rgba(2, 6, 23, 0.6);
+
+  --max-width: 1200px;
+  --container-padding: 1rem;
+
+  --font-size-base: 16px;
+  --font-size-h1: 2rem;
+  /* 32px */
+  --font-size-h2: 1.25rem;
+  /* 20px */
+  --font-size-body: 0.95rem;
+  /* 15.2px */
+
+  font-family: var(--font-sans);
+  line-height: var(--line-height);
+  font-weight: var(--font-weight-regular);
 
   color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color: var(--color-text);
+  background-color: var(--color-bg);
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+  background-color: #0f1720; /* Ensure root is never white */
 }
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: var(--color-primary);
   text-decoration: inherit;
 }
+
 a:hover {
-  color: #535bf2;
+  color: color-mix(in srgb, var(--color-primary) 70%, black);
+}
+
+html {
+  box-sizing: border-box;
+  font-size: var(--font-size-base);
+  overscroll-behavior: none;
+  background-color: var(--color-bg);
+}
+
+*,
+*:before,
+*:after {
+  box-sizing: inherit;
 }
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  color: var(--color-text);
+  background: linear-gradient(180deg, var(--color-bg), #071019 220%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overscroll-behavior: none;
+}
+
+/* Page container to center content and control width */
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: var(--container-padding);
 }
 
 h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+  font-size: var(--font-size-h1);
+  line-height: 1.08;
+  margin: 0 0 0.5rem 0;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  margin: 0 0 0.5rem 0;
 }
 
 button {
-  border-radius: 8px;
+  border-radius: var(--radius-1);
   border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
+  padding: 0.55rem 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 600;
   font-family: inherit;
-  background-color: #1a1a1a;
+  background-color: transparent;
+  color: var(--color-text);
   cursor: pointer;
-  transition: border-color 0.25s;
+  transition: transform 120ms ease, box-shadow 160ms ease, background 160ms;
 }
+
 button:hover {
-  border-color: #646cff;
+  transform: translateY(-1px);
 }
+
 button:focus,
 button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+  box-shadow: 0 0 0 4px rgba(100, 108, 255, 0.12);
+}
+
+/* Card utility used across app */
+.card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.01));
+  color: var(--color-text);
+  padding: 1.25rem;
+  border-radius: var(--radius-2);
+  box-shadow: var(--shadow-1);
+  max-width: 900px;
+  margin: 1rem auto;
+}
+
+.muted {
+  color: var(--color-muted);
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    color: #213547;
-    background-color: #ffffff;
+    --color-bg: #f7fbff;
+    --color-surface: #ffffff;
+    --color-card: #ffffff;
+    --color-text: #0f1720;
+    --color-muted: rgba(15, 23, 32, 0.6);
   }
+
+  html, body {
+    background-color: #f7fbff !important;
+  }
+
   a:hover {
-    color: #747bff;
+    color: #535bf2;
   }
-  button {
-    background-color: #f9f9f9;
+}
+
+@media (max-width: 720px) {
+  :root {
+    --max-width: 720px;
   }
+
+  .card {
+    margin: 0.75rem;
+    padding: 1rem;
+  }
+
+  h1 {
+    font-size: 1.6rem;
+  }
+}
+
+/* Light MUI overrides to keep sizes consistent across the app */
+.MuiTypography-h1,
+.MuiTypography-h2,
+.MuiTypography-h3,
+.MuiTypography-h4 {
+  line-height: 1.08;
+}
+
+.MuiTypography-h4 {
+  font-size: 1.25rem;
+}
+
+.MuiTypography-h5 {
+  font-size: 1.05rem;
+}
+
+.MuiTypography-body1 {
+  font-size: var(--font-size-body);
+}
+
+.MuiCard-root {
+  border-radius: var(--radius-2) !important;
+  box-shadow: var(--shadow-1) !important;
+}
+
+.MuiCardContent-root {
+  padding: 12px 16px !important;
+}
+
+.MuiDrawer-paper {
+  background: linear-gradient(180deg, #071021, #081428);
 }

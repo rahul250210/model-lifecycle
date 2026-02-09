@@ -8,6 +8,19 @@ from app.database import Base, engine
 # Create tables
 Base.metadata.create_all(bind=engine)
 
+# --------------------------------------------------------------------------------
+# Patch python-multipart to allow >1000 files (DoS protection default)
+# --------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
+# Patch Starlette Request.form to allow >1000 files (Starlette 0.40+ default)
+# --------------------------------------------------------------------------------
+import starlette.requests
+starlette.requests.Request.form.__kwdefaults__["max_files"] = 100000
+starlette.requests.Request.form.__kwdefaults__["max_fields"] = 100000
+# --------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------
+
+
 app = FastAPI(
     title="MLOps Platform Backend",
     description="DVC + MLflow style backend",
@@ -17,9 +30,8 @@ app = FastAPI(
 # CORS (for React)
 app.add_middleware(
     CORSMiddleware,
-     allow_origins=[ "http://192.168.1.50:81",  # Add your new frontend URL here
-        "http://localhost:5173"   # Keep this for local testing
-    ],   # later restrict
+    # allow_origins=["*"],  # ❌ Cannot use "*" with allow_credentials=True
+    allow_origin_regex="https?://.*",  # ✅ Allow any http/https origin via regex
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

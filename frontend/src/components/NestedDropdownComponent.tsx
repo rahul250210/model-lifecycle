@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Collapse,
   List,
@@ -18,7 +18,7 @@ import LayersIcon from "@mui/icons-material/LayersOutlined";
 import TimelineIcon from "@mui/icons-material/TimelineOutlined";
 import { alpha } from "@mui/material";
 import instance from "../api/axios";
-import { themePalette } from "../theme/themePalette";
+import { useTheme } from "../theme/ThemeContext";
 
 export interface NestedItem {
   id: number;
@@ -39,6 +39,7 @@ interface NestedDropdownProps {
   onItemSelect?: (item: NestedItem) => void;
   parentFactoryId?: number;
   parentAlgorithmId?: number;
+  collapsed?: boolean;
 }
 
 const getIcon = (type: string) => {
@@ -62,8 +63,10 @@ export const NestedDropdown = ({
   onItemSelect,
   parentFactoryId,
   parentAlgorithmId,
+  collapsed = false,
 }: NestedDropdownProps) => {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<NestedItemWithState[]>([]);
   const [loading, setLoading] = useState(false);
@@ -127,7 +130,7 @@ export const NestedDropdown = ({
 
   // Auto-refresh when expanded
   useEffect(() => {
-    if (!expanded) return;
+    if (!expanded || collapsed) return;
 
     // Fetch immediately when expanded (show loading)
     fetchChildren(true);
@@ -147,7 +150,7 @@ export const NestedDropdown = ({
 
   const handleItemClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     if (onItemSelect) {
       onItemSelect(item);
     }
@@ -155,13 +158,13 @@ export const NestedDropdown = ({
     // Navigate based on item type
     switch (item.type) {
       case "factory":
-        navigate(`/factories`);
+        navigate(`/factories/${item.id}/algorithms`);
         break;
       case "algorithm":
-        navigate(`/factories/${parentFactoryId}/algorithms`);
+        navigate(`/factories/${parentFactoryId}/algorithms/${item.id}/models`);
         break;
       case "model":
-        navigate(`/factories/${parentFactoryId}/algorithms/${parentAlgorithmId}/models`);
+        navigate(`/factories/${parentFactoryId}/algorithms/${parentAlgorithmId}/models/${item.id}/versions`);
         break;
       case "version":
         navigate(`/factories/${parentFactoryId}/algorithms/${parentAlgorithmId}/models/${item.modelId}/versions/${item.id}`);
@@ -178,41 +181,56 @@ export const NestedDropdown = ({
     <>
       <ListItemButton
         onClick={(e) => {
-          if (hasLoadableChildren) {
-            handleToggle();
-          } else {
-            handleItemClick(e);
-          }
+          handleItemClick(e);
         }}
         sx={{
-          pl: `${level * 20}px`,
-          pr: 2,
-          py: 0.75,
-          borderRadius: "4px",
-          backgroundColor: alpha(themePalette.primary, level > 0 ? 0.03 : 0),
+          pl: collapsed ? 2.5 : `${level * 16 + 12}px`, // Adjusted padding calculation
+          justifyContent: collapsed ? "center" : "initial",
+          pr: collapsed ? 2.5 : 2,
+          py: 0.8,
+          my: 0.5,
+          mx: 1,
+          borderRadius: "8px",
+          backgroundColor: alpha(theme.primary, level > 0 ? 0.03 : 0),
+          borderLeft: `3px solid ${expanded ? theme.primary : "transparent"}`,
           "&:hover": {
-            backgroundColor: alpha(themePalette.primary, 0.1),
+            backgroundColor: alpha(theme.primary, 0.08),
+            "& .MuiListItemIcon-root": { color: theme.primary },
           },
           transition: "all 0.2s ease",
-          opacity: 1,
           cursor: "pointer",
         }}
       >
         <ListItemIcon
           sx={{
-            minWidth: 32,
-            color: themePalette.primary,
+            minWidth: 28,
+            color: expanded ? theme.primary : theme.textMuted,
             display: "flex",
             alignItems: "center",
-            gap: 0.5,
+            gap: 1,
+            transition: "color 0.2s"
           }}
         >
           {loading ? (
             <CircularProgress size={16} />
           ) : (
             <>
-              {hasLoadableChildren && (
-                <Box sx={{ display: "flex", width: 20 }}>
+              {hasLoadableChildren && !collapsed && (
+                <Box
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggle();
+                  }}
+                  sx={{
+                    display: "flex",
+                    width: 24,
+                    height: 24,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: '4px',
+                    "&:hover": { bgcolor: alpha(theme.primary, 0.1) }
+                  }}
+                >
                   {expanded ? (
                     <ExpandLessIcon fontSize="small" />
                   ) : (
@@ -226,18 +244,14 @@ export const NestedDropdown = ({
         </ListItemIcon>
         <ListItemText
           primary={item.name}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleItemClick(e as any);
-          }}
           primaryTypographyProps={{
             fontSize: "0.85rem",
             fontWeight: 500,
-            color: "#FFFFFF",
+            color: theme.textMain,
             sx: {
-              cursor: "pointer",
+              transition: "color 0.2s",
               "&:hover": {
-                textDecoration: "underline",
+                color: theme.primary,
               },
             },
           }}
@@ -259,7 +273,7 @@ export const NestedDropdown = ({
       )}
 
       <Collapse in={expanded} timeout="auto" unmountOnExit>
-        <List component="div" disablePadding>
+        <List component="ul" disablePadding>
           {loading ? (
             <Box
               sx={{
@@ -284,7 +298,7 @@ export const NestedDropdown = ({
                 primary="No items"
                 primaryTypographyProps={{
                   fontSize: "0.8rem",
-                  color: "#94A3B8",
+                  color: theme.textMuted,
                 }}
               />
             </ListItemButton>
@@ -317,13 +331,19 @@ export const NestedDropdown = ({
 
 interface FactoriesDropdownProps {
   onItemSelect?: (item: NestedItem) => void;
+  collapsed?: boolean;
 }
 
-export const FactoriesDropdown = ({ onItemSelect }: FactoriesDropdownProps) => {
+export const FactoriesDropdown = ({ onItemSelect, collapsed = false }: FactoriesDropdownProps) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { theme } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const [factories, setFactories] = useState<NestedItemWithState[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isActive = location.pathname.startsWith("/factories");
 
   const fetchFactories = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -361,60 +381,79 @@ export const FactoriesDropdown = ({ onItemSelect }: FactoriesDropdownProps) => {
     return () => clearInterval(pollInterval);
   }, [expanded]);
 
-  const handleToggle = () => {
-    setExpanded(!expanded);
+  const handleClick = () => {
+    navigate("/factories");
   };
 
   return (
     <>
       <ListItemButton
-        onClick={handleToggle}
+        onClick={handleClick}
         sx={{
-          px: 2,
+          px: 1.5,
           py: 1.5,
-          borderRadius: "8px",
-          backgroundColor: expanded
-            ? alpha(themePalette.primary, 0.15)
+          borderRadius: "14px",
+          backgroundColor: isActive
+            ? alpha(theme.primary, 0.15)
             : "transparent",
-          borderLeft: expanded
-            ? `3px solid ${themePalette.primary}`
+          borderLeft: isActive
+            ? `3px solid ${theme.primary}`
             : "3px solid transparent",
           transition: "all 0.3s ease",
           mx: 1,
           mb: 1,
           "&:hover": {
-            backgroundColor: alpha(themePalette.primary, 0.1),
+            backgroundColor: alpha(theme.primary, 0.1),
           },
         }}
       >
         <ListItemIcon
           sx={{
-            minWidth: 40,
-            color: expanded ? themePalette.primary : themePalette.textMuted,
+            minWidth: 36,
+            color: isActive ? theme.primary : theme.textMuted,
             display: "flex",
             alignItems: "center",
             gap: 0.5,
           }}
         >
           {loading && <CircularProgress size={20} />}
-          {!loading && (
-            <>
-              {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-              <FactoryIcon fontSize="small" />
-            </>
-          )}
+          {!loading && <FactoryIcon fontSize="small" />}
         </ListItemIcon>
         <ListItemText
           primary="Factories"
           primaryTypographyProps={{
-            fontSize: "0.9rem",
-            fontWeight: expanded ? 700 : 500,
-            color: expanded ? "#FFFFFF" : themePalette.textMuted,
+            fontSize: "0.95rem",
+            fontWeight: isActive ? 800 : 600,
+            color: isActive ? theme.primary : theme.textMain,
             sx: {
-                  transition: "color 0.3s",
-                }, 
+              transition: "color 0.3s",
+              letterSpacing: isActive ? "-0.01em" : "normal"
+            },
           }}
+          sx={{ opacity: collapsed ? 0 : 1, display: collapsed ? "none" : "block", flexGrow: 1 }}
         />
+        {!collapsed && !loading && (
+          <Box
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
+            sx={{
+              color: theme.textMuted,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              width: 32,
+              height: 32,
+              borderRadius: '8px',
+              "&:hover": { bgcolor: alpha(theme.primary, 0.1), color: theme.primary },
+              transition: "all 0.2s"
+            }}
+          >
+            {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+          </Box>
+        )}
       </ListItemButton>
 
       {error && (
@@ -426,16 +465,17 @@ export const FactoriesDropdown = ({ onItemSelect }: FactoriesDropdownProps) => {
         </Alert>
       )}
 
-      <Collapse in={expanded} timeout="auto" unmountOnExit>
+      <Collapse in={expanded && !collapsed} timeout="auto" unmountOnExit>
         <List
-          component="div"
+          component="ul"
           disablePadding
           sx={{
-            backgroundColor: "rgba(0, 0, 0, 0.2)",
-            borderRadius: "6px",
-            mx: 1,
-            mt: 1,
+            backgroundColor: alpha(theme.background, 0.5),
+            borderRadius: "12px",
+            mx: 1.5,
+            mt: 0.5,
             p: 1,
+            borderLeft: `1px solid ${alpha(theme.border, 0.5)}`
           }}
         >
           {factories.length === 0 && !loading ? (
@@ -444,7 +484,7 @@ export const FactoriesDropdown = ({ onItemSelect }: FactoriesDropdownProps) => {
                 primary="No factories created yet"
                 primaryTypographyProps={{
                   fontSize: "0.8rem",
-                  color: themePalette.textMuted,
+                  color: theme.textMuted,
                   textAlign: "center",
                 }}
               />
@@ -460,6 +500,7 @@ export const FactoriesDropdown = ({ onItemSelect }: FactoriesDropdownProps) => {
                   level={0}
                   item={factory}
                   onItemSelect={onItemSelect}
+                  collapsed={collapsed}
                 />
               </Box>
             ))

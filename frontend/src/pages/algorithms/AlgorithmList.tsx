@@ -7,259 +7,289 @@ import {
   Card,
   CardContent,
   Button,
-  CircularProgress,
-  Chip,
   IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  alpha,
   Container,
+  alpha,
   Paper,
   Stack,
+  Chip,
   Grid,
 } from "@mui/material";
-
 import AddIcon from "@mui/icons-material/Add";
 import SchemaIcon from "@mui/icons-material/Schema";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import Breadcrumbs from "@mui/material/Breadcrumbs";
+import Link from "@mui/material/Link";
+import NavigateNextIcon from "@mui/icons-material/NavigateNext";
+import CircularProgress from "@mui/material/CircularProgress";
 
-import { motion } from "framer-motion";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axios";
 
-/* ==========================================================================
-   CONSISTENT THEME PALETTE
-   ========================================================================== */
-const themePalette = {
-  primary: "#4F46E5",
-  primaryLight: "#EEF2FF",
-  textMain: "#1E293B",
-  textMuted: "#64748B",
-  background: "#F8FAFC",
-  border: "#E2E8F0",
-  white: "#FFFFFF",
-  danger: "#EF4444",
-};
-
-/* =======================
-   Types
-======================= */
-interface Algorithm {
-  id: number;
-  name: string;
-  description?: string;
-  models_count: number;
-  created_at: string;
-}
+import { useTheme } from "../../theme/ThemeContext";
 
 export default function AlgorithmList() {
   const { factoryId } = useParams();
   const navigate = useNavigate();
+  const { theme } = useTheme();
 
-  const [algorithms, setAlgorithms] = useState<Algorithm[]>([]);
+  const [algorithms, setAlgorithms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [factoryName, setFactoryName] = useState("Factory");
 
+  // Edit Dialog States
   const [editOpen, setEditOpen] = useState(false);
-  const [selectedAlgo, setSelectedAlgo] = useState<Algorithm | null>(null);
+  const [selectedAlgo, setSelectedAlgo] = useState<any | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Delete Dialog States
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   useEffect(() => {
-    const fetchAlgorithms = async () => {
+    const fetchData = async () => {
       try {
-        const res = await axios.get(`/factories/${factoryId}/algorithms`);
-        setAlgorithms(res.data);
+        setLoading(true);
+        const [algoRes, factoryRes] = await Promise.all([
+          axios.get(`/factories/${factoryId}/algorithms`),
+          axios.get(`/factories/${factoryId}`)
+        ]);
+        setAlgorithms(algoRes.data);
+        if (factoryRes.data && factoryRes.data.name) {
+          setFactoryName(factoryRes.data.name);
+        }
       } catch (err) {
-        console.error("Failed to load algorithms", err);
+        console.error("Failed to load data", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchAlgorithms();
+    fetchData();
   }, [factoryId]);
 
   if (loading) {
     return (
-      <Box sx={{ height: "70vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <CircularProgress size={40} sx={{ color: themePalette.primary }} />
+      <Box sx={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: theme.background }}>
+        <CircularProgress size={40} sx={{ color: theme.primary }} />
       </Box>
     );
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: themePalette.background, pb: 8 }}>
-      <Container maxWidth="xl">
+    <Box sx={{ minHeight: "100vh", bgcolor: theme.background, pb: 10 }}>
+      <Container maxWidth={false}>
         {/* Header Section */}
-        <Box sx={{ pt: 4, pb: 6 }}>
-          <Grid  justifyContent="space-between" alignItems="flex-end" spacing={3}>
-            <Grid size={{xs:12, md:8}}>
+        <Box sx={{ pt: 6, pb: 6 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={3}>
+            <Box>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-                <IconButton 
+                <IconButton
                   onClick={() => navigate(`/factories`)}
-                  sx={{ 
-                    bgcolor: themePalette.white, 
-                    border: `1px solid ${themePalette.border}`,
-                    "&:hover": { bgcolor: themePalette.primaryLight, color: themePalette.primary }
+                  sx={{
+                    bgcolor: theme.paper,
+                    border: `1px solid ${theme.border}`,
+                    "&:hover": { bgcolor: theme.primaryLight, color: theme.primary }
                   }}
                 >
-                  <ArrowBackIcon fontSize="small" />
+                  <ArrowBackIcon fontSize="small" sx={{ color: theme.textMain }} />
                 </IconButton>
-                <Typography variant="caption" fontWeight={700} sx={{ color: themePalette.primary, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                  Factory Resource
-                </Typography>
+
+                <Breadcrumbs separator={<NavigateNextIcon fontSize="small" sx={{ color: theme.textSecondary }} />} aria-label="breadcrumb">
+                  <Link
+                    underline="hover"
+                    color="inherit"
+                    onClick={() => navigate("/factories")}
+                    sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textSecondary }}
+                  >
+                    Factories
+                  </Link>
+                  <Typography fontWeight={700} sx={{ fontSize: '1.2rem', color: theme.textMain }}>{factoryName}</Typography>
+                </Breadcrumbs>
               </Stack>
-              <Typography variant="h3" fontWeight={800} sx={{ color: themePalette.textMain, letterSpacing: "-0.02em", mb: 1 }}>
-                Algorithm <Box component="span" sx={{ color: themePalette.primary }}>Library</Box>
+              <Typography variant="h5" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em", mb: 1 }}>
+                Algorithm <Box component="span" sx={{ color: theme.primary }}>Library</Box>
               </Typography>
-              <Typography variant="h6" sx={{ color: themePalette.textMuted, fontWeight: 400, maxWidth: 600 }}>
+              <Typography variant="h6" sx={{ color: theme.textMuted, fontWeight: 400, maxWidth: 600 }}>
                 Manage high-level architectural blueprints and view their associated production models.
               </Typography>
-            </Grid>
-              <Grid size={{ xs: 12, md: 4 }} sx={{ textAlign: { md: 'right' } }}>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => navigate(`/factories/${factoryId}/algorithms/create`)}
-                sx={{
-                  bgcolor: themePalette.primary,
-                  px: 4,
-                  py: 1.5,
-                  borderRadius: "14px",
-                  fontWeight: 700,
-                  fontSize: "1rem",
-                  textTransform: "none",
-                  boxShadow: `0 10px 15px -3px ${alpha(themePalette.primary, 0.3)}`,
-                  "&:hover": { bgcolor: "#4338CA", transform: "translateY(-2px)" },
-                  transition: "all 0.2s"
-                }}
-              >
-                Create Algorithm
-              </Button>
-            </Grid>
-          </Grid>
-        </Box>
+            </Box >
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => navigate(`/factories/${factoryId}/algorithms/create`)}
+              sx={{
+                bgcolor: theme.primary,
+                px: 4,
+                py: 1.5,
+                borderRadius: "14px",
+                fontWeight: 700,
+                fontSize: "1rem",
+                textTransform: "none",
+                boxShadow: `0 10px 15px -3px ${alpha(theme.primary, 0.3)}`,
+                "&:hover": { bgcolor: "#4338CA", transform: "translateY(-2px)" },
+                transition: "all 0.2s",
+              }}
+            >
+              Create Algorithm
+            </Button>
+          </Stack >
+        </Box >
 
-        {/* Algorithm Grid - Increased size to xs=12, sm=6, md=6 for larger cards */}
-        <Grid container spacing={4} justifyContent="flex-start">
-          {algorithms.map((algo) => (
-            <Grid size={{xs:12, sm:12, md:6}} key={algo.id}>
-              <motion.div whileHover={{ y: -8 }} transition={{ type: "spring", stiffness: 300 }}>
+        {/* Algorithm Grid */}
+        < Grid container spacing={4} justifyContent="flex-start" >
+          {
+            algorithms.map((algo) => (
+              <Grid size={{ xs: 12, md: 6, lg: 4 }} key={algo.id}>
                 <Card
-                  onClick={() => navigate(`/factories/${factoryId}/algorithms/${algo.id}/models`)}
                   sx={{
                     borderRadius: "24px",
-                    cursor: "pointer",
                     height: "100%",
-                    minWidth: 450,
-                    bgcolor: themePalette.white,
-                    border: `1px solid ${themePalette.border}`,
+                    bgcolor: theme.paper,
+                    border: `1px solid ${theme.border}`,
                     transition: "border-color 0.3s",
                     "&:hover": {
-                      borderColor: themePalette.primary,
+                      borderColor: theme.primary,
                       boxShadow: `0 25px 30px -5px ${alpha("#000", 0.08)}`,
                       "& .arrow-icon": { opacity: 1, transform: "translateX(0)" }
                     },
                   }}
                   elevation={0}
                 >
-                  <CardContent sx={{ p: 5 }}>
-                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 4 }}>
-                      <Box sx={{ p: 2, bgcolor: alpha(themePalette.primary, 0.08), borderRadius: "16px" }}>
-                        <SchemaIcon sx={{ color: themePalette.primary, fontSize: 32 }} />
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 4 }}>
+                      <Box sx={{ p: 1, bgcolor: alpha(theme.primary, 0.08), borderRadius: "10px" }}>
+                        <SchemaIcon sx={{ color: theme.primary, fontSize: 20 }} />
                       </Box>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <IconButton size="medium" onClick={(e) => {
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <IconButton size="small" onClick={(e) => {
                           e.stopPropagation();
                           setSelectedAlgo(algo);
                           setEditName(algo.name);
                           setEditDescription(algo.description || "");
                           setEditOpen(true);
-                        }} sx={{ color: themePalette.textMuted, bgcolor: themePalette.background }}>
-                          <EditIcon fontSize="small" />
+                        }}>
+                          <EditIcon fontSize="small" sx={{ color: theme.textMuted }} />
                         </IconButton>
-                        <IconButton size="medium" onClick={(e) => {
+                        <IconButton size="small" onClick={(e) => {
                           e.stopPropagation();
                           setSelectedAlgo(algo);
                           setDeleteOpen(true);
-                        }} sx={{ color: alpha(themePalette.danger, 0.6), bgcolor: themePalette.background }}>
+                        }} sx={{ color: alpha(theme.danger, 0.7) }}>
                           <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Box>
                     </Box>
 
-                    <Typography variant="h4" fontWeight={800} sx={{ color: themePalette.textMain, mb: 2 }}>
+                    <Typography variant="h5" fontWeight={600} sx={{ color: theme.textMain, mb: 1 }}>
                       {algo.name}
                     </Typography>
-                    
-                    <Typography variant="body1" sx={{ color: themePalette.textMuted, mb: 4, minHeight: 60, lineHeight: 1.7, fontSize: '1.1rem' }}>
+
+                    <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3, minHeight: 40, lineHeight: 1.6 }}>
                       {algo.description || "No description provided for this algorithm."}
                     </Typography>
 
-                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ pt: 3, borderTop: `1px solid ${themePalette.border}` }}>
+                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ pt: 3, borderTop: `1px solid ${theme.border}`, flexWrap: "wrap", gap: 1 }}>
                       <Stack direction="row" spacing={2}>
-                        <Chip 
-                          label={`${algo.models_count} Active Models`} 
-                          sx={{ 
-                            bgcolor: themePalette.primaryLight, 
-                            color: themePalette.primary, 
-                            fontWeight: 700, 
+                        <Chip
+                          label={`${algo.models_count} Active Models`}
+                          sx={{
+                            bgcolor: theme.primaryLight,
+                            color: theme.primary,
+                            fontWeight: 700,
                             borderRadius: "10px",
                             px: 1,
                             py: 2
-                          }} 
+                          }}
                         />
-                         <Typography variant="caption" sx={{ color: themePalette.textMuted, alignSelf: 'center', fontWeight: 600 }}>
-                         
-                        </Typography>
                       </Stack>
-                      
-                      <Box className="arrow-icon" sx={{ opacity: 0, transform: "translateX(-10px)", transition: "all 0.3s", color: themePalette.primary, display: 'flex', alignItems: 'center', gap: 1 }}>
+
+                      <Box
+                        className="arrow-icon"
+                        onClick={() => navigate(`/factories/${factoryId}/algorithms/${algo.id}/models`)}
+                        sx={{
+                          opacity: 0,
+                          transform: "translateX(-10px)",
+                          transition: "all 0.3s",
+                          color: theme.primary,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          cursor: 'pointer',
+                          p: 1,
+                          borderRadius: '8px',
+                          '&:hover': { bgcolor: alpha(theme.primary, 0.05) }
+                        }}
+                      >
                         <Typography variant="button" fontWeight={700}>View Models</Typography>
                         <ArrowForwardIcon />
                       </Box>
                     </Stack>
                   </CardContent>
                 </Card>
-              </motion.div>
-            </Grid>
-          ))}
-        </Grid>
+              </Grid>
+            ))
+          }
+        </Grid >
 
         {/* Empty State */}
-        {algorithms.length === 0 && (
-          <Paper variant="outlined" sx={{ py: 15, textAlign: 'center', borderRadius: '32px', borderStyle: 'dashed', bgcolor: 'transparent' }}>
-            <SchemaIcon sx={{ fontSize: 64, color: alpha(themePalette.textMuted, 0.2), mb: 3 }} />
-            <Typography variant="h5" fontWeight={700} color={themePalette.textMain}>No algorithms found</Typography>
-            <Typography variant="body1" color={themePalette.textMuted}>This factory is empty. Get started by creating your first algorithm architecture.</Typography>
-          </Paper>
-        )}
-      </Container>
+        {
+          algorithms.length === 0 && (
+            <Paper variant="outlined" sx={{ py: 15, textAlign: 'center', borderRadius: '32px', borderStyle: 'dashed', bgcolor: 'transparent' }}>
+              <SchemaIcon sx={{ fontSize: 64, color: alpha(theme.textMuted, 0.2), mb: 3 }} />
+              <Typography variant="h5" fontWeight={700} color={theme.textMain}>No algorithms found</Typography>
+              <Typography variant="body1" color={theme.textMuted}>This factory is empty. Get started by creating your first algorithm architecture.</Typography>
+            </Paper>
+          )
+        }
+      </Container >
 
       {/* Edit Dialog */}
-      <Dialog open={editOpen} onClose={() => setEditOpen(false)} PaperProps={{ sx: { borderRadius: "24px", p: 2 } }} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800, color: themePalette.textMain, fontSize: '1.5rem' }}>Update Architecture</DialogTitle>
-        <DialogContent>
-          <TextField 
-            fullWidth label="Algorithm Name" value={editName} onChange={(e) => setEditName(e.target.value)} 
-            margin="normal" variant="outlined" sx={{ "& .MuiOutlinedInput-root": { borderRadius: "14px" } }} 
-          />
-          <TextField 
-            fullWidth label="Description" multiline rows={4} value={editDescription} onChange={(e) => setEditDescription(e.target.value)} 
-            margin="normal" variant="outlined" sx={{ "& .MuiOutlinedInput-root": { borderRadius: "14px" } }} 
-          />
+      <Dialog
+        open={editOpen}
+        onClose={() => setEditOpen(false)}
+        PaperProps={{ sx: { borderRadius: "24px", p: 1, maxWidth: 500, width: '100%', bgcolor: theme.background } }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, color: theme.textMain, letterSpacing: "-0.02em", pt: 3 }}>
+          Update Architecture
+        </DialogTitle>
+        <DialogContent sx={{ py: 1 }}>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <Box>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Algorithm Name</Typography>
+              <TextField
+                fullWidth
+                variant="outlined"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px", bgcolor: theme.paper, color: theme.textMain } }}
+              />
+            </Box>
+            <Box>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Description</Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                variant="outlined"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px", bgcolor: theme.paper, color: theme.textMain } }}
+              />
+            </Box>
+          </Stack>
         </DialogContent>
-        <DialogActions sx={{ p: 3, gap: 1 }}>
-          <Button onClick={() => setEditOpen(false)} sx={{ color: themePalette.textMuted, fontWeight: 700, px: 3 }}>Cancel</Button>
-          <Button 
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={() => setEditOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700, px: 3, textTransform: 'none' }}>Cancel</Button>
+          <Button
             disabled={saving}
             onClick={async () => {
               if (!selectedAlgo) return;
@@ -273,7 +303,7 @@ export default function AlgorithmList() {
                 setEditOpen(false);
               } catch (err) { console.error(err); } finally { setSaving(false); }
             }}
-            variant="contained" sx={{ bgcolor: themePalette.primary, borderRadius: "12px", fontWeight: 700, px: 4, py: 1 }}
+            variant="contained" sx={{ bgcolor: theme.primary, borderRadius: "12px", fontWeight: 700, px: 4, py: 1.2, textTransform: 'none', boxShadow: `0 8px 16px -4px ${alpha(theme.primary, 0.3)}` }}
           >
             {saving ? <CircularProgress size={20} color="inherit" /> : "Save Changes"}
           </Button>
@@ -281,19 +311,19 @@ export default function AlgorithmList() {
       </Dialog>
 
       {/* Delete Dialog */}
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} PaperProps={{ sx: { borderRadius: "24px" } }}>
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.25rem' }}>Permanently Delete?</DialogTitle>
+      < Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} PaperProps={{ sx: { borderRadius: "24px", bgcolor: theme.paper } }}>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.25rem', color: theme.textMain }}>Permanently Delete?</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" sx={{ color: themePalette.textMuted, lineHeight: 1.6 }}>
+          <Typography variant="body1" sx={{ color: theme.textMuted, lineHeight: 1.6 }}>
             You are about to delete <strong>{selectedAlgo?.name}</strong>. This will orphan all associated models and experiments. This action cannot be reversed.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 4 }}>
-          <Button onClick={() => setDeleteOpen(false)} sx={{ fontWeight: 700, color: themePalette.textMain, px: 3 }}>Keep it</Button>
-          <Button 
-            variant="contained" 
-            color="error" 
-            sx={{ borderRadius: "12px", fontWeight: 700, px: 3, bgcolor: themePalette.danger }}
+          <Button onClick={() => setDeleteOpen(false)} sx={{ fontWeight: 700, color: theme.textMain, px: 3 }}>Keep it</Button>
+          <Button
+            variant="contained"
+            color="error"
+            sx={{ borderRadius: "12px", fontWeight: 700, px: 3, bgcolor: theme.danger }}
             onClick={async () => {
               if (!selectedAlgo) return;
               try {
@@ -306,7 +336,7 @@ export default function AlgorithmList() {
             Yes, Delete Algorithm
           </Button>
         </DialogActions>
-      </Dialog>
-    </Box>
+      </Dialog >
+    </Box >
   );
 }

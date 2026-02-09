@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import {
   Box, Typography, Card, CardContent, Button, Grid, Chip,
-  IconButton, Container, Stack, Paper, TextField, Divider,
-  Dialog, DialogTitle, DialogContent, DialogActions
+  IconButton, Container, Stack, Paper, TextField,
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  alpha, InputBase
 } from "@mui/material";
 import {
   Add as AddIcon,
@@ -17,22 +18,18 @@ import {
 import { useNavigate } from "react-router-dom";
 import axios from "../../api/axios";
 
-const themePalette = {
-  primary: "#4F46E5",
-  textMain: "#1E293B",
-  textMuted: "#64748B",
-  background: "#F8FAFC",
-  border: "#E2E8F0",
-};
+import { useTheme } from "../../theme/ThemeContext";
 
 export default function ArtifactBrowser() {
   const navigate = useNavigate();
+  const { theme } = useTheme();
 
   const [algorithms, setAlgorithms] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [openModal, setOpenModal] = useState(false);
   const [newAlgoName, setNewAlgoName] = useState("");
   const [newAlgoDesc, setNewAlgoDesc] = useState("");
+
   const [editAlgo, setEditAlgo] = useState<any | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -43,34 +40,37 @@ export default function ArtifactBrowser() {
   const [deleteAlgoName, setDeleteAlgoName] = useState("");
   const [deleting, setDeleting] = useState(false);
 
+  // Fetch logic
   const fetchAlgorithms = async () => {
-    const res = await axios.get("/kb/algorithms");
-    setAlgorithms(res.data);
+    try {
+      const res = await axios.get("/kb/algorithms");
+      setAlgorithms(res.data);
+    } catch (e) {
+      console.error("Failed to fetch algorithms", e);
+    }
   };
-
-  
-
-  const handleUpdateAlgo = async () => {
-        if (!editAlgo) return;
-
-        await axios.put(`/kb/algorithms/${editAlgo.id}`, {
-          name: editName,
-          description: editDescription,
-        });
-
-        setEditAlgo(null);
-        fetchAlgorithms();
-      };
-
 
   useEffect(() => {
     fetchAlgorithms();
   }, []);
 
+  // Update logic
+  const handleUpdateAlgo = async () => {
+    if (!editAlgo) return;
+    try {
+      await axios.put(`/kb/algorithms/${editAlgo.id}`, {
+        name: editName,
+        description: editDescription,
+      });
+      setEditAlgo(null);
+      fetchAlgorithms();
+    } catch (e) { console.error(e); }
+  };
 
+  // Create logic
   const handleCreateAlgo = async () => {
-      if (!newAlgoName.trim()) return;
-
+    if (!newAlgoName.trim()) return;
+    try {
       await axios.post("/kb/algorithms", {
         name: newAlgoName,
         description: newAlgoDesc,
@@ -80,179 +80,259 @@ export default function ArtifactBrowser() {
       setNewAlgoDesc("");
       setOpenModal(false);
       fetchAlgorithms();
-    };
+    } catch (e) { console.error(e); }
+  };
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: themePalette.background, pb: 10 }}>
-      <Container maxWidth="xl">
+    <Box sx={{ height: "100vh", bgcolor: theme.background, overflow: "hidden", display: "flex", flexDirection: "column" }}>
 
-        {/* HEADER */}
-        <Stack
-          direction="row"
-          justifyContent="space-between"
-          alignItems="center"
-          sx={{ pt: 6, pb: 4 }}
-        >
-          <Typography variant="h3" fontWeight={900}>
-            Algorithms{" "}
-            <Box component="span" sx={{ color: themePalette.primary }}>
-              Artifacts
-            </Box>
-          </Typography>
+      {/* HEADER: Glassmorphism effect consistent with VersionTimeline */}
+      <Box sx={{
+        flexShrink: 0,
+        bgcolor: alpha(theme.background, 0.8),
+        backdropFilter: "blur(12px)",
+        borderBottom: `1px solid ${alpha(theme.border, 0.6)}`,
+        zIndex: 10
+      }}>
+        <Container maxWidth={false} sx={{ py: 4 }}>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
 
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setOpenModal(true)}
-            sx={{
-              bgcolor: themePalette.primary,
-              borderRadius: "12px",
-              px: 4,
-              fontWeight: 700,
-            }}
-          >
-            Create Algorithm
-          </Button>
-        </Stack>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              {/* Page Title */}
+              <Typography variant="h5" fontWeight={900} sx={{ letterSpacing: "-0.02em", color: theme.textMain }}>
+                Artifact <Box component="span" sx={{ color: theme.primary }}>Browser</Box>
+              </Typography>
+            </Stack>
 
-        {/* SEARCH */}
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2,
-            mb: 4,
-            borderRadius: "16px",
-            border: `1px solid ${themePalette.border}`,
-          }}
-        >
-          <TextField
-            fullWidth
-            placeholder="Search algorithm repositories..."
-            variant="standard"
-            InputProps={{
-              disableUnderline: true,
-              startAdornment: (
-                <SearchIcon sx={{ mr: 1, color: themePalette.textMuted }} />
-              ),
-            }}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </Paper>
-
-        {/* ALGORITHM GRID */}
-       <Grid container spacing={3} justifyContent="flex-start">
-          {algorithms
-            .filter((a) =>
-              a.name.toLowerCase().includes(search.toLowerCase())
-            )
-            .map((algo) => (
-              <Grid size={{xs:12, sm:6, md:4}} key={algo.id}>
-                <Card elevation={0} sx={{
-                  borderRadius: "20px",
-                  border: `1px solid ${themePalette.border}`,
-                  transition: "0.2s",
-                  display: 'flex', // Ensures card height is consistent
-                  flexDirection: 'column',
-                  "&:hover": { transform: "translateY(-4px)", borderColor: themePalette.primary }
-                }}>
-                  <CardContent sx={{ p: 3 }}>
-                    
-                    {/* TOP ACTIONS */}
-                    <Stack direction="row" justifyContent="space-between">
-                      <FolderIcon sx={{ fontSize: 42, color: themePalette.primary }} />
-
-                      <Stack direction="row" spacing={0.5}>
-                        <IconButton size="small" onClick={() => setViewAlgo(algo)}>
-                          <InfoIcon fontSize="small" />
-                        </IconButton>
-
-                        <IconButton size="small" onClick={() => {
-                            setEditAlgo(algo);
-                            setEditName(algo.name);
-                            setEditDescription(algo.description || "");
-                          }}>
-
-                          <EditIcon fontSize="small" />
-                        </IconButton>
-
-                        <IconButton
-                          color="error"
-                          onClick={() => {
-                            setDeleteAlgoId(algo.id);
-                            setDeleteAlgoName(algo.name);
-                          }}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-
-                      </Stack>
-                    </Stack>
-
-                    <Typography variant="h6" fontWeight={800} noWrap>
-                      {algo.name}
-                    </Typography>
-
-                    <Typography
-              variant="body2"
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setOpenModal(true)}
               sx={{
-                color: themePalette.textMuted,
-                mt: 1,
-                mb: 2,
-                // These are the key properties:
-                whiteSpace: "pre-wrap",    // Respects line breaks (Enters)
-                wordBreak: "break-word",   // Prevents horizontal stretching
-                display: "-webkit-box",
-                WebkitLineClamp: 3,        // Limits card preview to 3 lines
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
-                lineHeight: '1.5em',
-                minHeight: '4.5em'         // Ensures cards are same height
+                bgcolor: theme.primary,
+                borderRadius: "10px",
+                px: 4,
+                py: 1,
+                fontWeight: 700,
+                textTransform: "none",
+                boxShadow: `0 4px 14px ${alpha(theme.primary, 0.3)}`,
+                "&:hover": { bgcolor: theme.primaryDark, transform: "translateY(-1px)", boxShadow: `0 6px 20px ${alpha(theme.primary, 0.4)}` },
+                transition: "all 0.2s"
               }}
             >
-              {algo.description || "No description provided"}
-            </Typography>
+              New Repository
+            </Button>
+          </Stack>
+        </Container>
+      </Box>
 
+      {/* SCROLLABLE CONTENT */}
+      <Box sx={{ flex: 1, overflowY: "auto" }}>
+        <Container maxWidth={false} sx={{ py: 6 }}>
 
-                    <Typography variant="caption" color="text.secondary">
-                      {algo.file_count || 0} Documents
-                    </Typography>
+          {/* SLEEK SEARCH BAR */}
+          <Paper
+            component="form"
+            elevation={0}
+            sx={{
+              p: "4px 8px",
+              display: "flex",
+              alignItems: "center",
+              width: "100%",
+              maxWidth: 600, // Reduced MAX WIDTH for sleekness
+              mb: 8,
+              borderRadius: "50px", // Pill shape
+              border: `1px solid ${theme.border}`,
+              bgcolor: theme.surface,
+              transition: "all 0.2s",
+              "&:hover": {
+                borderColor: theme.primary,
+                boxShadow: `0 4px 12px ${alpha(theme.textMain, 0.05)}`
+              },
+              "&:focus-within": {
+                borderColor: theme.primary,
+                boxShadow: `0 4px 12px ${alpha(theme.primary, 0.15)}`,
+                transform: "scale(1.01)"
+              }
+            }}
+          >
+            <IconButton sx={{ p: "10px", color: theme.textMuted }} aria-label="search">
+              <SearchIcon />
+            </IconButton>
+            <InputBase
+              sx={{ ml: 1, flex: 1, fontWeight: 500, color: theme.textMain }}
+              placeholder="Search repositories..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </Paper>
 
-                    <Button
-                      fullWidth
-                      sx={{ mt: 3 }}
-                      variant="outlined"
-                      onClick={() => navigate(`/artifacts/algorithms/${algo.id}`)}
+          {/* REPOSITORY GRID */}
+          <Grid container spacing={3}>
+            {algorithms.length === 0 ? (
+              <Box
+                sx={{
+                  width: "100%",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  py: 12,
+                  opacity: 0.7
+                }}
+              >
+                <FolderIcon sx={{ fontSize: 64, color: theme.textMuted, mb: 2, opacity: 0.5 }} />
+                <Typography variant="h6" fontWeight={700} sx={{ color: theme.textMain, mb: 1 }}>
+                  No Repositories Found
+                </Typography>
+                <Typography variant="body2" sx={{ color: theme.textMuted, maxWidth: 400, textAlign: "center" }}>
+                  Create your first knowledge repository to start organizing artifacts and documentation.
+                </Typography>
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => setOpenModal(true)}
+                  sx={{
+                    mt: 4,
+                    borderRadius: "12px",
+                    fontWeight: 700,
+                    color: theme.primary,
+                    borderColor: theme.border,
+                    textTransform: "none",
+                    "&:hover": { borderColor: theme.primary, bgcolor: alpha(theme.primary, 0.05) }
+                  }}
+                >
+                  Create Repository
+                </Button>
+              </Box>
+            ) : (
+              algorithms
+                .filter((a) => a.name.toLowerCase().includes(search.toLowerCase()))
+                .map((algo) => (
+                  <Grid size={{ xs: 12, sm: 6, md: 4 }} key={algo.id}>
+                    <Card
+                      elevation={0}
+                      sx={{
+                        height: "100%",
+                        borderRadius: "20px",
+                        border: `1px solid ${theme.border}`,
+                        bgcolor: theme.surface,
+                        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                        display: "flex",
+                        flexDirection: "column",
+                        "&:hover": {
+                          boxShadow: `0 12px 24px -8px ${alpha(theme.textMain, 0.08)}`,
+                          borderColor: theme.primary
+                        }
+                      }}
                     >
-                      Open Repository
-                    </Button>
-                  </CardContent>
-                </Card>
+                      <CardContent sx={{ p: 3, flex: 1, display: "flex", flexDirection: "column" }}>
 
-              </Grid>
-            ))}
-        </Grid>
-      </Container>
+                        {/* Card Header: Icon + Actions */}
+                        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                          <Box sx={{
+                            p: 1.5,
+                            borderRadius: "14px",
+                            bgcolor: alpha(theme.primary, 0.1),
+                            color: theme.primary,
+                            display: "inline-flex"
+                          }}>
+                            <FolderIcon sx={{ fontSize: 32 }} />
+                          </Box>
 
-      {/* CREATE ALGORITHM MODAL */}
+                          <Stack direction="row" spacing={0.5}>
+                            <IconButton size="small" onClick={() => setViewAlgo(algo)} sx={{ color: theme.textSecondary }}>
+                              <InfoIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" onClick={() => {
+                              setEditAlgo(algo);
+                              setEditName(algo.name);
+                              setEditDescription(algo.description || "");
+                            }} sx={{ color: theme.textSecondary }}>
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton size="small" color="error" onClick={() => {
+                              setDeleteAlgoId(algo.id);
+                              setDeleteAlgoName(algo.name);
+                            }} sx={{ color: alpha(theme.error || theme.danger, 0.7), "&:hover": { color: theme.error || theme.danger } }}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Stack>
+                        </Stack>
+
+                        {/* Card Body */}
+                        <Typography variant="h6" fontWeight={600} noWrap sx={{ color: theme.textMain, mb: 0.5 }}>
+                          {algo.name}
+                        </Typography>
+
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: theme.textMuted,
+                            flex: 1,
+                            whiteSpace: "pre-wrap",
+                            wordBreak: "break-word",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 3,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                            lineHeight: '1.6em',
+                            minHeight: '4.8em',
+                            mb: 2
+                          }}
+                        >
+                          {algo.description || "No description provided."}
+                        </Typography>
+
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: "auto", pt: 2, borderTop: `1px solid ${theme.border}` }}>
+                          <Chip
+                            label={`${algo.file_count || 0} Files`}
+                            size="small"
+                            sx={{ bgcolor: theme.background, fontWeight: 700, color: theme.textSecondary }}
+                          />
+                          <Button
+                            variant="text"
+                            onClick={() => navigate(`/artifacts/algorithms/${algo.id}`)}
+                            sx={{ fontWeight: 700, color: theme.primary, textTransform: "none" }}
+                          >
+                            Open Repository
+                          </Button>
+                        </Stack>
+
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))
+            )}
+          </Grid>
+
+        </Container>
+      </Box>
+
+      {/* --- DIALOGS --- */}
+
+      {/* CREATE DIALOG */}
       <Dialog
         open={openModal}
         onClose={() => setOpenModal(false)}
-        PaperProps={{ sx: { borderRadius: "24px", p: 1 } }}
+        PaperProps={{ sx: { borderRadius: "24px", p: 1, minWidth: 400, bgcolor: theme.paper } }}
       >
-        <DialogTitle fontWeight={900}>
-          Create Algorithm Repository
+        <DialogTitle fontWeight={900} sx={{ pb: 1, color: theme.textMain }}>
+          New Repository
         </DialogTitle>
-
         <DialogContent>
           <TextField
+            autoFocus
             fullWidth
-            label="Algorithm Name"
+            label="Repository Name"
             value={newAlgoName}
             onChange={(e) => setNewAlgoName(e.target.value)}
-            sx={{ mb: 2 }}
+            sx={{
+              mt: 1, mb: 3,
+              "& .MuiOutlinedInput-root": { color: theme.textMain, borderRadius: "12px", "& fieldset": { borderColor: theme.border } },
+              "& .MuiInputLabel-root": { color: theme.textMuted }
+            }}
           />
-
           <TextField
             fullWidth
             label="Description"
@@ -260,253 +340,197 @@ export default function ArtifactBrowser() {
             rows={3}
             value={newAlgoDesc}
             onChange={(e) => setNewAlgoDesc(e.target.value)}
-            placeholder="Explain what this algorithm does..."
+            placeholder="What is this algorithm for?"
+            sx={{
+              "& .MuiOutlinedInput-root": { color: theme.textMain, borderRadius: "12px", "& fieldset": { borderColor: theme.border } },
+              "& .MuiInputLabel-root": { color: theme.textMuted }
+            }}
           />
-
         </DialogContent>
-
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setOpenModal(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleCreateAlgo}>
+          <Button onClick={() => setOpenModal(false)} sx={{ fontWeight: 700, color: theme.textMuted }}>Cancel</Button>
+          <Button variant="contained" onClick={handleCreateAlgo} sx={{ borderRadius: "10px", fontWeight: 700, px: 3, bgcolor: theme.primary }}>
             Create
           </Button>
         </DialogActions>
       </Dialog>
 
-    <Dialog 
-              open={!!editAlgo} 
-              onClose={() => setEditAlgo(null)}
-              // Increased border radius for consistency with the main dashboard
-              PaperProps={{ sx: { borderRadius: "28px", p: 2, width: '100%', maxWidth: '450px' } }}
-            >
-              <DialogTitle sx={{ textAlign: 'center', pt: 3 }}>
-                <Typography variant="h4" fontWeight={900}>Edit Repository</Typography>
-              </DialogTitle>
-              
-              <DialogContent sx={{ mt: 1 }}> {/* Added margin top to prevent label overlap with title */}
-                <TextField
-                  fullWidth
-                  label="Algorithm Name"
-                  variant="outlined" // Outlined variants handle labels better in tight spaces
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  sx={{ 
-                    mt: 2, // Ensures the label has breathing room
-                    mb: 3, 
-                    "& .MuiOutlinedInput-root": { borderRadius: '12px' } 
-                  }}
-                />
-
-                <TextField
-                  fullWidth
-                  label="Description"
-                  variant="outlined"
-                  multiline
-                  rows={4}
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  placeholder="Briefly describe the algorithm's purpose..."
-                  sx={{ 
-                    "& .MuiOutlinedInput-root": { borderRadius: '12px' } 
-                  }}
-                />
-              </DialogContent>
-
-              <DialogActions sx={{ p: 3, justifyContent: 'center', gap: 2 }}>
-                <Button 
-                  onClick={() => setEditAlgo(null)}
-                  sx={{ fontWeight: 700, color: themePalette.textMuted, textTransform: 'none' }}
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  variant="contained" 
-                  onClick={handleUpdateAlgo}
-                  sx={{ 
-                    borderRadius: '12px', 
-                    px: 4, 
-                    fontWeight: 800, 
-                    textTransform: 'none',
-                    bgcolor: themePalette.primary,
-                    boxShadow: `0 8px 16px ${(themePalette.primary, 0.2)}`
-                  }}
-                >
-                  Save Changes
-                </Button>
-              </DialogActions>
-            </Dialog>
-
-
-           <Dialog 
-  open={!!viewAlgo} 
-  onClose={() => setViewAlgo(null)}
-  maxWidth="md" // Increases default width from 'sm' to 'md'
-  fullWidth // Ensures it takes up the full 'md' width
-  PaperProps={{ 
-    sx: { 
-      borderRadius: "28px", 
-      p: 1,
-      backgroundImage: 'none' // Ensures clean background on dark mode
-    } 
-  }}
->
-  <DialogTitle sx={{ pb: 1, pt: 3, px: 4 }}>
-    <Stack direction="row" justifyContent="space-between" alignItems="center">
-      <Typography variant="h4" fontWeight={900} sx={{ color: themePalette.textMain }}>
-        Repository <Box component="span" sx={{ color: themePalette.primary }}>Insights</Box>
-      </Typography>
-      <Chip 
-       
-        size="small" 
-        sx={{ fontWeight: 800, bgcolor: themePalette.background, color: themePalette.textMuted }} 
-      />
-    </Stack>
-  </DialogTitle>
-
-  <DialogContent sx={{ px: 4, py: 2 }}>
-    <Stack spacing={3}>
-      {/* ALGORITHM NAME SECTION */}
-      <Box>
-        <Typography variant="overline" fontWeight={800} color="primary" sx={{ letterSpacing: 1 }}>
-          Algorithm Title
-        </Typography>
-        <Typography variant="h5" fontWeight={800} sx={{ mt: 0.5 }}>
-          {viewAlgo?.name}
-        </Typography>
-      </Box>
-
-      <Divider />
-
-      {/* DESCRIPTION SECTION - Info Box Style */}
-      <Box>
-        <Typography variant="overline" fontWeight={800} color="text.secondary" sx={{ letterSpacing: 1 }}>
-          Full Description & Purpose
-        </Typography>
-        <Paper 
-          elevation={0} 
-          sx={{ 
-            mt: 1.5, 
-            p: 3, 
-            bgcolor: (themePalette.primary, 0.03), 
-            borderRadius: '16px',
-            border: `1px solid ${(themePalette.primary, 0.1)}`,
-          }}
-        >
-          <Typography
-            variant="body1"
-            sx={{ 
-              color: themePalette.textMain, 
-              lineHeight: 1.8, 
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word" 
-            }}
-          >
-            {viewAlgo?.description || "No detailed description has been provided for this algorithm repository yet."}
-          </Typography>
-        </Paper>
-      </Box>
-
-      {/* FOOTER STATS */}
-      <Stack direction="row" spacing={4} sx={{ pt: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box sx={{ p: 1, bgcolor: themePalette.primary, borderRadius: '10px', display: 'flex', color: themePalette.primary }}>
-            <FolderIcon fontSize="small" />
-          </Box>
-          <Box>
-            <Typography variant="caption" fontWeight={800} color="text.secondary" sx={{ display: 'block' }}>
-              RESOURCES
-            </Typography>
-            <Typography variant="body2" fontWeight={800}>
-              {viewAlgo?.file_count || 0} Documents Stored
-            </Typography>
-          </Box>
-        </Box>
-        
-        {/* Additional metadata can go here */}
-      </Stack>
-    </Stack>
-  </DialogContent>
-
-  <DialogActions sx={{ p: 4, pt: 2 }}>
-    <Button 
-      fullWidth
-      variant="contained" 
-      onClick={() => setViewAlgo(null)}
-      sx={{ 
-        py: 1.5,
-        borderRadius: '12px', 
-        fontWeight: 800,
-        textTransform: 'none',
-        bgcolor: themePalette.textMain,
-        "&:hover": { bgcolor: "#000" }
-      }}
-    >
-      Close Details
-    </Button>
-  </DialogActions>
-</Dialog>
-
+      {/* EDIT DIALOG */}
       <Dialog
-            open={deleteAlgoId !== null}
-            onClose={() => setDeleteAlgoId(null)}
-            PaperProps={{
-              sx: { borderRadius: "20px", p: 1 },
+        open={!!editAlgo}
+        onClose={() => setEditAlgo(null)}
+        PaperProps={{ sx: { borderRadius: "24px", p: 1, minWidth: 500, bgcolor: theme.background } }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, color: theme.textMain, letterSpacing: "-0.02em", pt: 3 }}>
+          Edit Repository
+        </DialogTitle>
+        <DialogContent sx={{ py: 1 }}>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <Box>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Repository Name</Typography>
+              <TextField
+                fullWidth
+                variant="outlined"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                sx={{
+                  "& .MuiOutlinedInput-root": { borderRadius: "12px", bgcolor: theme.paper, color: theme.textMain },
+                }}
+              />
+            </Box>
+            <Box>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Description</Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                variant="outlined"
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                sx={{
+                  "& .MuiOutlinedInput-root": { borderRadius: "12px", bgcolor: theme.paper, color: theme.textMain },
+                }}
+              />
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ p: 3 }}>
+          <Button onClick={() => setEditAlgo(null)} sx={{ fontWeight: 700, color: theme.textMuted, textTransform: 'none', px: 3 }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleUpdateAlgo}
+            sx={{
+              borderRadius: "12px",
+              fontWeight: 700,
+              px: 4,
+              py: 1.2,
+              bgcolor: theme.primary,
+              textTransform: 'none',
+              boxShadow: `0 8px 16px -4px ${alpha(theme.primary, 0.3)}`
             }}
           >
-            <DialogTitle fontWeight={900} color="error">
-              Delete Algorithm Repository
-            </DialogTitle>
+            Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-            <DialogContent>
-              <Typography sx={{ mt: 1 }}>
-                Are you sure you want to permanently delete
+      {/* VIEW DIALOG */}
+      <Dialog
+        open={!!viewAlgo}
+        onClose={() => setViewAlgo(null)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{ sx: { borderRadius: "28px", p: 1, bgcolor: theme.background } }}
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 3 }}>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Box sx={{ p: 1.5, bgcolor: alpha(theme.primary, 0.1), borderRadius: "14px", display: "flex", color: theme.primary }}>
+              <FolderIcon />
+            </Box>
+            <Box>
+              <Typography variant="h5" fontWeight={900} sx={{ lineHeight: 1, color: theme.textMain }}>Repository Details</Typography>
+              <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 700 }}>READ MODE</Typography>
+            </Box>
+          </Stack>
+          <IconButton onClick={() => setViewAlgo(null)} sx={{ bgcolor: theme.surface, border: `1px solid ${theme.border}` }}>
+            <InfoIcon sx={{ color: theme.textMuted }} />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ px: 4, pb: 4 }}>
+          <Stack spacing={4}>
+            <Box>
+              <Typography variant="overline" fontWeight={800} sx={{ color: theme.textMuted, letterSpacing: "0.05em", mb: 1, display: 'block' }}>
+                REPOSITORY NAME
               </Typography>
-
-              <Typography fontWeight={800} sx={{ mt: 1 }}>
-                “{deleteAlgoName}”
+              <Typography variant="h4" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>
+                {viewAlgo?.name}
               </Typography>
+            </Box>
 
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                This will remove:
-                <br />• All uploaded documents
-                <br />• Repository metadata
-                <br />• This action cannot be undone
+            <Box>
+              <Typography variant="overline" fontWeight={800} sx={{ color: theme.textMuted, letterSpacing: "0.05em", mb: 1.5, display: 'block' }}>
+                DESCRIPTION
               </Typography>
-            </DialogContent>
-
-            <DialogActions sx={{ p: 3 }}>
-              <Button
-                onClick={() => setDeleteAlgoId(null)}
-                sx={{ fontWeight: 700 }}
-              >
-                Cancel
-              </Button>
-
-              <Button
-                variant="contained"
-                color="error"
-                disabled={deleting}
-                onClick={async () => {
-                  if (!deleteAlgoId) return;
-
-                  try {
-                    setDeleting(true);
-                    await axios.delete(`/kb/algorithms/${deleteAlgoId}`);
-                    await fetchAlgorithms();
-                  } finally {
-                    setDeleting(false);
-                    setDeleteAlgoId(null);
-                  }
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 3,
+                  borderRadius: "20px",
+                  bgcolor: theme.paper,
+                  border: `1px solid ${theme.border}`,
+                  minHeight: 120
                 }}
               >
-                Delete Repository
-              </Button>
-            </DialogActions>
-          </Dialog>
+                <Typography variant="body1" sx={{ whiteSpace: "pre-wrap", lineHeight: 1.8, color: theme.textMain }}>
+                  {viewAlgo?.description || "No description available for this repository."}
+                </Typography>
+              </Paper>
+            </Box>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 4, pb: 4 }}>
+          <Button
+            fullWidth
+            variant="outlined"
+            onClick={() => setViewAlgo(null)}
+            sx={{
+              borderRadius: "14px",
+              py: 1.5,
+              fontWeight: 800,
+              border: `2px solid ${alpha(theme.border, 0.8)}`,
+              color: theme.textMain,
+              textTransform: 'none',
+              "&:hover": { bgcolor: theme.surface, borderColor: theme.textMuted }
+            }}
+          >
+            Close Viewer
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DELETE DIALOG */}
+      <Dialog
+        open={deleteAlgoId !== null}
+        onClose={() => setDeleteAlgoId(null)}
+        PaperProps={{ sx: { borderRadius: "24px", p: 2, bgcolor: theme.paper } }}
+      >
+        <DialogTitle fontWeight={900} sx={{ color: theme.error }}>
+          Delete Repository?
+        </DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: theme.textSecondary }}>
+            Are you sure you want to delete <strong>{deleteAlgoName}</strong>?
+          </Typography>
+          <Typography variant="caption" sx={{ display: "block", mt: 2, color: theme.textMuted }}>
+            This action is permanent and will remove all uploaded documents.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ pt: 2 }}>
+          <Button onClick={() => setDeleteAlgoId(null)} sx={{ fontWeight: 700, color: theme.textMuted }}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="error"
+            disabled={deleting}
+            onClick={async () => {
+              if (!deleteAlgoId) return;
+              try {
+                setDeleting(true);
+                await axios.delete(`/kb/algorithms/${deleteAlgoId}`);
+                await fetchAlgorithms();
+              } finally {
+                setDeleting(false);
+                setDeleteAlgoId(null);
+              }
+            }}
+            sx={{ borderRadius: "10px", fontWeight: 700, px: 3, bgcolor: theme.error }}
+          >
+            {deleting ? "Deleting..." : "Delete Permanently"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
     </Box>
-
-    
   );
 }
-

@@ -6,11 +6,13 @@ from fastapi import (
     UploadFile,
     File,
     status,
+    Query,
 )
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from pathlib import Path
 import os
+import shutil
 from pydantic import BaseModel
 from app.api.deps import get_db
 from app.models.algorithm_knowledge import AlgorithmKnowledge
@@ -92,43 +94,52 @@ def list_algorithms(db: Session = Depends(get_db)):
     ]
 
 @router.post("/algorithms/{algorithm_id}/files", status_code=201)
-def upload_algorithm_file(
+def upload_algorithm_files(
     algorithm_id: int,
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
 ):
     algo = db.query(AlgorithmKnowledge).get(algorithm_id)
     if not algo:
         raise HTTPException(404, "Algorithm not found")
 
-    ext = file.filename.split(".")[-1].lower()
     storage_dir = STORAGE_ROOT / algo.slug
     storage_dir.mkdir(parents=True, exist_ok=True)
 
-    file_path = storage_dir / file.filename
+    saved_paths = []
+    try:
+        for file in files:
+            ext = file.filename.split(".")[-1].lower()
+            file_path = storage_dir / file.filename
+            
+            # Create subdirectories if the filename contains paths (folder uploads)
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(file_path, "wb") as f:
+                f.write(file.file.read())
+            
+            saved_paths.append(file_path)
 
-    with open(file_path, "wb") as f:
-        f.write(file.file.read())
+            record = AlgorithmKnowledgeFile(
+                algorithm_id=algorithm_id,
+                name=file.filename,
+                type=ext,
+                path=str(file_path),
+                size=file_path.stat().st_size,
+            )
+            db.add(record)
+        
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        # Clean up files from disk if anything failed
+        for p in saved_paths:
+            if p.exists():
+                try: p.unlink()
+                except: pass
+        raise HTTPException(500, detail=f"Upload failed: {str(e)}")
 
-    record = AlgorithmKnowledgeFile(
-        algorithm_id=algorithm_id,
-        name=file.filename,
-        type=ext,
-        path=str(file_path),
-        size=file_path.stat().st_size,
-    )
-
-    db.add(record)
-    db.commit()
-    db.refresh(record)
-
-    return {
-        "id": record.id,
-        "name": record.name,
-        "size": record.size,
-        "type": record.type,
-        "url": f"/kb/files/{record.id}/download",
-    }
+    return {"status": "success", "count": len(files)}
 
 
 @router.get("/algorithms/{algorithm_id}/files")
@@ -232,9 +243,84 @@ def delete_algorithm(
     # delete files on disk
     storage_dir = STORAGE_ROOT / algo.slug
     if storage_dir.exists():
-        for f in storage_dir.iterdir():
-            f.unlink()
-        storage_dir.rmdir()
+        try:
+            shutil.rmtree(storage_dir)
+        except Exception as e:
+            print(f"Error deleting directory {storage_dir}: {e}")
+            # we continue even if file deletion fails, to remove the DB record
 
     db.delete(algo)
     db.commit()
+
+
+@router.get("/algorithms/{algorithm_id}/download_bundle")
+def download_algorithm_bundle(
+    algorithm_id: int,
+    categories: list[str] = Query(default=[]),
+    db: Session = Depends(get_db),
+):
+    from fastapi.responses import StreamingResponse
+    import zipstream
+
+    algo = db.query(AlgorithmKnowledge).get(algorithm_id)
+    if not algo:
+        raise HTTPException(404, "Algorithm not found")
+
+    files = (
+        db.query(AlgorithmKnowledgeFile)
+        .filter(AlgorithmKnowledgeFile.algorithm_id == algorithm_id)
+        .all()
+    )
+
+    if not files:
+        raise HTTPException(404, "No artifacts found to export")
+
+    # Helper to categorize
+    def get_category_key(filename):
+        ext = filename.split('.')[-1].lower() if '.' in filename else ''
+        if ext in ['jpg', 'jpeg', 'png', 'webp', 'gif']: return "images"
+        if ext in ['ppt', 'pptx']: return "presentations"
+        if ext in ['pdf']: return "documents"
+        if ext in ['py', 'js', 'ts', 'tsx', 'jsx', 'java', 'cpp', 'c', 'h', 'cs', 'go', 'rb', 'php', 'sh', 'bat', 'ps1', 'json', 'xml', 'yaml', 'yml', 'md', 'sql']: return "code"
+        return "other"
+
+    # Filter files
+    selected_files = []
+    # If no categories specified, default to all? Or none? 
+    # Usually "export bundle" implies user selected specific ones. 
+    # If list is empty (e.g. ?categories=), we might return empty.
+    # But usually API behavior: if param missing, maybe all? 
+    # Let's assume frontend ALWAYS sends categories.
+    
+    for f in files:
+        cat = get_category_key(f.name)
+        if cat in categories:
+            selected_files.append((f, cat))
+
+    if not selected_files:
+         raise HTTPException(400, "No files match the selected categories")
+
+    def stream_generator():
+        zs = zipstream.ZipStream(compress_type=zipstream.ZIP_DEFLATED)
+        
+        for f, cat in selected_files:
+            file_path = Path(f.path)
+            if not file_path.exists():
+                continue
+            
+            # Structure: category/filename
+            # We map "images" -> "Photos & Images" folder? Or just simple "images"?
+            # Simple "images" is better for file systems.
+            arcname = f"{cat}/{f.name}"
+            
+            zs.add_path(str(file_path), arcname=arcname)
+
+        for chunk in zs:
+            yield chunk
+
+    response = StreamingResponse(
+        stream_generator(),
+        media_type="application/zip",
+    )
+    response.headers["Content-Disposition"] = f'attachment; filename="{algo.slug}_bundle.zip"'
+    return response

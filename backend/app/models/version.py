@@ -16,6 +16,13 @@ class ModelVersion(Base):
     precision = Column(Float, nullable=True)
     recall = Column(Float, nullable=True)
     f1_score = Column(Float, nullable=True)
+    
+    # Confusion Matrix
+    tp = Column(Integer, nullable=True)
+    tn = Column(Integer, nullable=True)
+    fp = Column(Integer, nullable=True)
+    fn = Column(Integer, nullable=True)
+
     parameters = Column(JSONB, default=dict)
     
     artifacts = relationship(

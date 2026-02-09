@@ -4,8 +4,8 @@ import DashboardLayout from "./layouts/DashboardLayout";
 // import Signup from "./pages/auth/Signup";
 // import { ProtectedRoute } from "./app/ProtectedRoute";
 import { Routes, Route, Navigate } from "react-router-dom";
-// import { useEffect } from "react";
-// import { useAuthStore } from "./app/authStore";
+import { ThemeProvider } from "./theme/ThemeContext";
+import { BackgroundUploaderProvider } from "./contexts/BackgroundUploaderContext";
 
 export default function App() {
   // const { checkAuth } = useAuthStore();
@@ -17,24 +17,28 @@ export default function App() {
   // }, [checkAuth]);
 
   return (
-    <Routes>
-      {/* Auth routes (no layout) - COMMENTED FOR TESTING */}
-      {/* <Route path="/login" element={<Login />} />
-      <Route path="/signup" element={<Signup />} /> */}
+    <ThemeProvider>
+      <BackgroundUploaderProvider>
+        <Routes>
+          {/* Auth routes (no layout) - COMMENTED FOR TESTING */}
+          {/* <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} /> */}
 
-      {/* Dashboard routes with layout - protected */}
-      <Route
-        element={
-          // <ProtectedRoute>
-            <DashboardLayout />
-          // </ProtectedRoute>
-        }
-      >
-        <Route path="/*" element={<Router />} />
-      </Route>
+          {/* Dashboard routes with layout - protected */}
+          <Route
+            element={
+              // <ProtectedRoute>
+              <DashboardLayout />
+              // </ProtectedRoute>
+            }
+          >
+            <Route path="/*" element={<Router />} />
+          </Route>
 
-      {/* Root redirect */}
-      <Route path="/" element={<Navigate to="/factories" replace />} />
-    </Routes>
+          {/* Root redirect */}
+          <Route path="/" element={<Navigate to="/factories" replace />} />
+        </Routes>
+      </BackgroundUploaderProvider>
+    </ThemeProvider>
   );
 }

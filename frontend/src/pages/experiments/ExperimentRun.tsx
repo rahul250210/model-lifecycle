@@ -197,6 +197,10 @@ export default function ExperimentRun() {
                       <ListItemText
                         primary={k}
                         secondary={String(v)}
+                        slotProps={{
+                          primary: { sx: { wordBreak: 'break-all' } },
+                          secondary: { sx: { wordBreak: 'break-all' } }
+                        }}
                       />
                     </ListItem>
                   ))}
@@ -225,6 +229,10 @@ export default function ExperimentRun() {
                       <ListItemText
                         primary={k}
                         secondary={v}
+                        slotProps={{
+                          primary: { sx: { wordBreak: 'break-all' } },
+                          secondary: { sx: { wordBreak: 'break-all' } }
+                        }}
                       />
                     </ListItem>
                   ))}
@@ -272,6 +280,10 @@ export default function ExperimentRun() {
                     secondary={`${a.type} • ${(a.size / 1024).toFixed(
                       2
                     )} KB`}
+                    slotProps={{
+                      primary: { sx: { wordBreak: 'break-all' } },
+                      secondary: { sx: { wordBreak: 'break-all' } }
+                    }}
                   />
                 </ListItem>
               ))}

@@ -135,57 +135,59 @@ export default function ExperimentList() {
       ) : (
         <Card elevation={2} sx={{ borderRadius: 3 }}>
           <CardContent>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>Experiment</TableCell>
-                  <TableCell>Runs</TableCell>
-                  <TableCell>Best Metric</TableCell>
-                  <TableCell>Last Updated</TableCell>
-                </TableRow>
-              </TableHead>
-
-              <TableBody>
-                {experiments.map((exp) => (
-                  <TableRow
-                    key={exp.id}
-                    hover
-                    sx={{ cursor: "pointer" }}
-                    onClick={() =>
-                      navigate(
-                        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments/${exp.id}`
-                      )
-                    }
-                  >
-                    <TableCell>
-                      <Box sx={{ display: "flex", alignItems: "center" }}>
-                        <ScienceIcon sx={{ mr: 1 }} color="primary" />
-                        {exp.name}
-                      </Box>
-                    </TableCell>
-
-                    <TableCell>
-                      <Chip
-                        label={`${exp.runs_count} runs`}
-                        size="small"
-                      />
-                    </TableCell>
-
-                    <TableCell>
-                      {exp.best_metric !== undefined ? (
-                        `${exp.metric_name}: ${exp.best_metric}`
-                      ) : (
-                        "—"
-                      )}
-                    </TableCell>
-
-                    <TableCell>
-                      {new Date(exp.updated_at).toLocaleString()}
-                    </TableCell>
+            <Box sx={{ overflowX: "auto" }}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Experiment</TableCell>
+                    <TableCell>Runs</TableCell>
+                    <TableCell>Best Metric</TableCell>
+                    <TableCell>Last Updated</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHead>
+
+                <TableBody>
+                  {experiments.map((exp) => (
+                    <TableRow
+                      key={exp.id}
+                      hover
+                      sx={{ cursor: "pointer" }}
+                      onClick={() =>
+                        navigate(
+                          `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments/${exp.id}`
+                        )
+                      }
+                    >
+                      <TableCell>
+                        <Box sx={{ display: "flex", alignItems: "center" }}>
+                          <ScienceIcon sx={{ mr: 1 }} color="primary" />
+                          <Typography noWrap>{exp.name}</Typography>
+                        </Box>
+                      </TableCell>
+
+                      <TableCell>
+                        <Chip
+                          label={`${exp.runs_count} runs`}
+                          size="small"
+                        />
+                      </TableCell>
+
+                      <TableCell>
+                        {exp.best_metric !== undefined ? (
+                          `${exp.metric_name}: ${exp.best_metric}`
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+
+                      <TableCell>
+                        {new Date(exp.updated_at).toLocaleString()}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
           </CardContent>
         </Card>
       )}
