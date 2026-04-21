@@ -24,6 +24,7 @@ import AddIcon from "@mui/icons-material/Add";
 import SchemaIcon from "@mui/icons-material/Schema";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DownloadIcon from "@mui/icons-material/Download";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
@@ -54,6 +55,39 @@ export default function AlgorithmList() {
 
   // Delete Dialog States
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const handleGenerateReport = async (algo: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const response = await axios.get(
+        `/factories/${factoryId}/algorithms/${algo.id}/report`,
+        { responseType: 'blob' }
+      );
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `${algo.name.replace(/ /g, '_').toLowerCase()}_report.csv`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match.length === 2) {
+          filename = match[1];
+        }
+      }
+
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Error downloading report:", error);
+      alert("Failed to generate algorithm report");
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -93,7 +127,7 @@ export default function AlgorithmList() {
             <Box>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
                 <IconButton
-                  onClick={() => navigate(`/factories`)}
+                  onClick={() => navigate(`/factories/${factoryId}`)}
                   sx={{
                     bgcolor: theme.paper,
                     border: `1px solid ${theme.border}`,
@@ -107,7 +141,7 @@ export default function AlgorithmList() {
                   <Link
                     underline="hover"
                     color="inherit"
-                    onClick={() => navigate("/factories")}
+                    onClick={() => navigate(`/factories/${factoryId}`)}
                     sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textSecondary }}
                   >
                     Factories
@@ -170,6 +204,9 @@ export default function AlgorithmList() {
                         <SchemaIcon sx={{ color: theme.primary, fontSize: 20 }} />
                       </Box>
                       <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <IconButton size="small" onClick={(e) => handleGenerateReport(algo, e)} title="Download Algorithm Report">
+                          <DownloadIcon fontSize="small" sx={{ color: theme.success }} />
+                        </IconButton>
                         <IconButton size="small" onClick={(e) => {
                           e.stopPropagation();
                           setSelectedAlgo(algo);

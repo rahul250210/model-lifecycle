@@ -283,7 +283,7 @@ export default function FactoryList() {
 
                       </Typography>
                       <Box
-                        onClick={() => navigate(`/factories/${factory.id}/algorithms`)}
+                        onClick={() => navigate(`/factories/${factory.id}`)}
                         className="arrow-icon"
                         sx={{
                           display: 'flex',

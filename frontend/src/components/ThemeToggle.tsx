@@ -114,28 +114,62 @@ export default function ThemeToggle({ variant = 'icon', collapsed = false }: The
         );
     }
 
-    // Header styling (Icon only)
+    // Header styling: Premium Sliding Pill Toggle
     return (
-        <IconButton
+        <Box
             onClick={toggleTheme}
             sx={{
-                color: theme.textMain,
-                bgcolor: mode === 'light' ? theme.white : theme.surface,
-                border: `1px solid ${theme.border}`,
-                borderRadius: "12px",
-                width: 40,
-                height: 40,
-                transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+                width: 72,
+                height: 38,
+                bgcolor: alpha(theme.textMain, 0.05),
+                borderRadius: "20px",
+                border: `1px solid ${alpha(theme.border, 0.6)}`,
+                position: "relative",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                backdropFilter: "blur(8px)",
                 "&:hover": {
-                    bgcolor: mode === 'light' ? theme.background : theme.border,
-                    transform: "rotate(180deg) scale(1.1)"
+                    bgcolor: alpha(theme.textMain, 0.08),
+                    borderColor: alpha(theme.primary, 0.4),
                 }
             }}
         >
-            {mode === 'light' ?
-                <DarkMode fontSize="small" /> :
-                <LightMode fontSize="small" sx={{ color: "#F59E0B" }} />
-            }
-        </IconButton>
+            {/* Track Icons */}
+            <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{ width: '100%', px: 1.25, zIndex: 0 }}
+            >
+                <DarkMode sx={{ fontSize: 16, color: mode === 'light' ? theme.textMuted : alpha(theme.textMuted, 0.2) }} />
+                <LightMode sx={{ fontSize: 16, color: mode === 'dark' ? theme.textMuted : alpha(theme.textMuted, 0.2) }} />
+            </Stack>
+
+            {/* Sliding Thumb */}
+            <Box
+                sx={{
+                    position: "absolute",
+                    left: mode === 'light' ? 4 : 36, // Slide position
+                    width: 30,
+                    height: 30,
+                    bgcolor: theme.paper,
+                    borderRadius: "50%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    boxShadow: `0 2px 8px ${alpha(theme.textMain, 0.1)}`,
+                    transition: "all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+                    zIndex: 1,
+                    border: `1px solid ${alpha(theme.border, 0.3)}`
+                }}
+            >
+                {mode === 'light' ?
+                    <LightMode sx={{ fontSize: 18, color: "#F59E0B" }} /> :
+                    <DarkMode sx={{ fontSize: 18, color: "#6366F1" }} />
+                }
+            </Box>
+        </Box>
     );
 }

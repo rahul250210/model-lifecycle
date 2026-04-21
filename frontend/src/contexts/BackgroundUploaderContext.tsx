@@ -183,65 +183,87 @@ export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }>
 
             try {
                 // Process in chunks
+                // Process in chunks with concurrency
+                // ADAPTIVE CHUNKING: Split by count (250) OR Size (50MB) to prevent browser freeze
                 const totalFiles = task.files.length;
-                let uploaded = 0;
+                let uploadedCount = 0;
 
-                for (let i = 0; i < totalFiles; i += CHUNK_SIZE) {
+                const MAX_CHUNK_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+                const chunks: File[][] = [];
+                let currentChunk: File[] = [];
+                let currentChunkSize = 0;
+
+                for (const file of task.files) {
+                    // If adding this file exceeds max size (and we already have files), push current chunk
+                    if (currentChunk.length > 0 && (currentChunk.length >= CHUNK_SIZE || currentChunkSize + file.size > MAX_CHUNK_SIZE_BYTES)) {
+                        chunks.push(currentChunk);
+                        currentChunk = [];
+                        currentChunkSize = 0;
+                    }
+                    currentChunk.push(file);
+                    currentChunkSize += file.size;
+                }
+                if (currentChunk.length > 0) {
+                    chunks.push(currentChunk);
+                }
+
+                // Concurrency control: process up to 4 chunks in parallel
+                const CONCURRENCY_LIMIT = 4;
+                let currentChunkIdx = 0;
+                const activeRequests = new Set<Promise<void>>();
+
+                while (currentChunkIdx < chunks.length || activeRequests.size > 0) {
                     // STOP if version was cancelled mid-upload
                     if (task.context === 'version' && task.versionId && cancelledVersionsRef.current.has(task.versionId)) {
                         throw new Error("Upload cancelled: Version deleted");
                     }
 
-                    const chunk = task.files.slice(i, i + CHUNK_SIZE);
+                    // Fill up the active requests until limit or no more chunks
+                    while (activeRequests.size < CONCURRENCY_LIMIT && currentChunkIdx < chunks.length) {
+                        const chunkIdx = currentChunkIdx++;
+                        const chunk = chunks[chunkIdx];
 
-                    let url = '';
-                    const formData = new FormData(); // Declared here
+                        const uploadPromise = (async () => {
+                            let url = '';
+                            const formData = new FormData();
 
-                    if (task.context === 'version') {
-                        url = `/factories/${task.factoryId}/algorithms/${task.algorithmId}/models/${task.modelId}/versions/${task.versionId}/upload_chunk`;
-                        formData.append("artifact_type", task.type);
-                    } else {
-                        // Algorithm Knowledge Base upload (bulk supported directly, but let's chunk it for consistency if needed)
-                        // The endpoint /kb/algorithms/{id}/files supports standard file upload
-                        url = `/kb/algorithms/${task.algorithmId}/files`;
+                            if (task.context === 'version') {
+                                url = `/factories/${task.factoryId}/algorithms/${task.algorithmId}/models/${task.modelId}/versions/${task.versionId}/upload_chunk`;
+                                formData.append("artifact_type", task.type);
+                            } else {
+                                url = `/kb/algorithms/${task.algorithmId}/files`;
+                            }
+
+                            chunk.forEach(f => {
+                                const filename = (f as any).webkitRelativePath || f.name;
+                                formData.append("files", f, filename);
+                            });
+
+                            await axios.post(url, formData, { timeout: 300000 });
+
+                            // Update shared state safely
+                            uploadedCount += chunk.length;
+                            setTasks(prev => {
+                                const idx = prev.findIndex(t => t.id === task.id);
+                                if (idx === -1) return prev;
+                                const updated = [...prev];
+                                updated[idx] = {
+                                    ...updated[idx],
+                                    uploadedCount,
+                                    progress: Math.min(100, Math.round((uploadedCount / totalFiles) * 100))
+                                };
+                                return updated;
+                            });
+                        })();
+
+                        activeRequests.add(uploadPromise);
+                        uploadPromise.finally(() => activeRequests.delete(uploadPromise));
                     }
 
-                    chunk.forEach(f => {
-                        // PRESERVE STRUCTURE: Use webkitRelativePath if available to keep folder structure
-                        const filename = (f as any).webkitRelativePath || f.name;
-                        formData.append("files", f, filename);
-                    });
-
-                    await axios.post(
-                        url,
-                        formData,
-                        {
-                            // 5 minutes timeout per chunk for massive files
-                            timeout: 300000
-                        }
-                    );
-
-                    uploaded += chunk.length;
-
-                    // Update progress
-                    setTasks(prev => {
-                        const idx = prev.findIndex(t => t.id === task.id);
-                        if (idx === -1) return prev; // Task removed?
-
-                        // Also check cancellation here to update UI state if needed, 
-                        // though the catch block will handle the 'error' status eventually.
-
-                        const updated = [...prev];
-                        updated[idx] = {
-                            ...updated[idx],
-                            uploadedCount: uploaded,
-                            progress: Math.min(100, Math.round((uploaded / totalFiles) * 100))
-                        };
-                        return updated;
-                    });
-
-                    // Small delay to prevent UI freezing and yield to event loop
-                    await new Promise(resolve => setTimeout(resolve, 50));
+                    // Wait for the next request to finish before spawning more
+                    if (activeRequests.size > 0) {
+                        await Promise.race(Array.from(activeRequests));
+                    }
                 }
 
                 // Complete
@@ -317,7 +339,7 @@ export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }>
                     sx={{
                         position: 'fixed',
                         bottom: 24,
-                        left: 24,
+                        right: 24,
                         zIndex: 2000,
                         width: 'auto',
                         maxWidth: 420

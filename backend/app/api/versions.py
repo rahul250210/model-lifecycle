@@ -8,7 +8,7 @@ from fastapi import (
     Form,
     BackgroundTasks,
 )
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from pathlib import Path
 from fastapi import Query
@@ -18,6 +18,7 @@ from app.models.version import ModelVersion, VersionDelta
 from app.models.artifact import Artifact
 from app.schemas.version import VersionOut
 from app.utils.hashing import sha256_bytes
+from app.utils.logger import logger
 from fastapi.responses import FileResponse
 import zipfile
 import tempfile
@@ -62,6 +63,15 @@ def create_version(
     fp: int | None = Form(None),
     fn: int | None = Form(None),
 
+    # Performance
+    cpu_utilization: float | None = Form(None),
+    gpu_utilization: float | None = Form(None),
+    inference_time: float | None = Form(None),
+    cpu_memory_usage: float | None = Form(None),
+    gpu_memory_usage: float | None = Form(None),
+    cameras_supported: int | None = Form(None),
+    custom_resource_metrics: str | None = Form(None), # JSON string for dynamic resource metrics
+
     # Training parameters
     batch_size: int | None = Form(None),
     epochs: int | None = Form(None),
@@ -88,6 +98,15 @@ def create_version(
     )
     if not model_obj:
         raise HTTPException(404, "Model not found")
+
+    # Parse custom resource metrics
+    resource_metrics_data = {}
+    if custom_resource_metrics:
+        try:
+            resource_metrics_data = json.loads(custom_resource_metrics)
+        except Exception as e:
+            print(f"Error parsing custom_resource_metrics: {e}")
+
 
     # -------------------------------
     # Validate metrics
@@ -166,7 +185,14 @@ def create_version(
         tn=tn,
         fp=fp,
         fn=fn,
+        cpu_utilization=cpu_utilization,
+        gpu_utilization=gpu_utilization,
+        inference_time=inference_time,
+        cpu_memory_usage=cpu_memory_usage,
+        gpu_memory_usage=gpu_memory_usage,
+        cameras_supported=cameras_supported,
         parameters=parameters,
+        resource_metrics=resource_metrics_data,
     )
     db.add(version)
     db.flush()  # Populate version.id for artifacts
@@ -386,6 +412,7 @@ def create_version(
 
         db.commit()
         db.refresh(version)
+        logger.info(f"Version created: {version.version_number} (Model ID: {model_id}, Version ID: {version.id})")
         return version
 
     except Exception as e:
@@ -570,6 +597,41 @@ def get_version_delta(
         "unchanged": unchanged,
     }
 
+@router.get(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/compare-datasets/{v1_id}/{v2_id}"
+)
+def compare_datasets(
+    model_id: int,
+    v1_id: int,
+    v2_id: int,
+    db: Session = Depends(get_db),
+):
+    v1 = db.query(ModelVersion).filter(ModelVersion.id == v1_id, ModelVersion.model_id == model_id).first()
+    v2 = db.query(ModelVersion).filter(ModelVersion.id == v2_id, ModelVersion.model_id == model_id).first()
+    
+    if not v1 or not v2:
+        raise HTTPException(404, "One or both versions not found")
+
+    v1_artifacts = v1.artifacts
+    v2_artifacts = v2.artifacts
+
+    v1_dataset = [a for a in v1_artifacts if a.type == "dataset"]
+    v2_dataset = [a for a in v2_artifacts if a.type == "dataset"]
+
+    v1_checksums = {a.checksum: a for a in v1_dataset}
+    v2_checksums = {a.checksum: a for a in v2_dataset}
+
+    added_checksums = set(v2_checksums.keys()) - set(v1_checksums.keys())
+    removed_checksums = set(v1_checksums.keys()) - set(v2_checksums.keys())
+
+    added = [v2_checksums[c] for c in added_checksums]
+    removed = [v1_checksums[c] for c in removed_checksums]
+
+    return {
+        "added": [ArtifactOut.model_validate(a) for a in added],
+        "removed": [ArtifactOut.model_validate(a) for a in removed]
+    }
+
 
 @router.get(
     "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/download"
@@ -585,6 +647,7 @@ def download_version(
 ):
     version = (
         db.query(ModelVersion)
+        .options(joinedload(ModelVersion.model))
         .filter(
             ModelVersion.id == version_id,
             ModelVersion.model_id == model_id,
@@ -689,10 +752,14 @@ def download_version(
             traceback.print_exc()
             raise e
 
+    # Sanitize model name for filename
+    model_name_safe = version.model.name.lower().replace(" ", "_").replace("/", "_")
+    filename = f"{model_name_safe}_version_{version.version_number}.zip"
+
     return StreamingResponse(
         stream_generator(),
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=version_v{version.version_number}.zip"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 @router.delete(
@@ -744,6 +811,8 @@ def delete_version(
 
     db.commit()
 
+    logger.info(f"Version deleted: Version ID {version_id} (Model ID: {model_id})")
+
     # Post-commit: Schedule heavy GC in background
     background_tasks.add_task(background_garbage_collection, artifacts_to_check)
     return
@@ -794,12 +863,21 @@ def edit_version(
     fp: int | None = Form(None),
     fn: int | None = Form(None),
 
+    # Performance
+    cpu_utilization: float | None = Form(None),
+    gpu_utilization: float | None = Form(None),
+    inference_time: float | None = Form(None),
+    cpu_memory_usage: float | None = Form(None),
+    gpu_memory_usage: float | None = Form(None),
+    cameras_supported: int | None = Form(None),
+
     batch_size: int | None = Form(None),
     epochs: int | None = Form(None),
     learning_rate: float | None = Form(None),
     optimizer: str | None = Form(None),
     image_size: int | None = Form(None),
     custom_params: str | None = Form(None), # JSON string
+    custom_resource_metrics: str | None = Form(None), # JSON string
 
     note: str = Form(""),
     dataset_mode: str = Form("replace"),  # "replace" or "append"
@@ -824,7 +902,23 @@ def edit_version(
         "fn": fn,
     }.items():
         if v is not None:
+            # Range validation for percentage metrics
+            if k in ["accuracy", "precision", "recall", "f1_score"] and not (0.0 <= v <= 100.0):
+                raise HTTPException(400, f"{k} must be between 0 and 100")
             setattr(version, k, v)
+    
+    if cpu_utilization is not None:
+        version.cpu_utilization = cpu_utilization
+    if gpu_utilization is not None:
+        version.gpu_utilization = gpu_utilization
+    if inference_time is not None:
+        version.inference_time = inference_time
+    if cpu_memory_usage is not None:
+        version.cpu_memory_usage = cpu_memory_usage
+    if gpu_memory_usage is not None:
+        version.gpu_memory_usage = gpu_memory_usage
+    if cameras_supported is not None:
+        version.cameras_supported = cameras_supported
 
     if note:
         version.note = note
@@ -855,7 +949,21 @@ def edit_version(
         except Exception as e:
             print(f"Error parsing custom_params: {e}")
 
-    version.parameters = new_params  # 🔥 THIS LINE IS REQUIRED
+    version.parameters = new_params
+    
+    # -------------------------------
+    # Update timestamp
+    # -------------------------------
+    version.updated_at = func.now()
+
+    # Update Custom Resource Metrics (Overwrite logic for full control)
+    if custom_resource_metrics is not None:
+        try:
+            rm_data = json.loads(custom_resource_metrics)
+            if isinstance(rm_data, dict):
+                version.resource_metrics = rm_data
+        except Exception as e:
+            print(f"Error parsing custom_resource_metrics: {e}")
 
 
     # -------------------------------
@@ -970,6 +1078,7 @@ def edit_version(
                 save_single(f, "code")
 
         db.commit()
+        logger.info(f"Version updated: Version ID {version_id} (Model ID: {model_id})")
     except Exception as e:
         db.rollback()
         # Clean up newly written files from disk

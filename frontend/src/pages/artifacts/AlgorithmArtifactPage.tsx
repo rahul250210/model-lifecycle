@@ -20,6 +20,9 @@ import {
   Code as CodeIcon,
   Add as AddIcon,
   Remove as RemoveIcon,
+  AccountTree,
+  ViewInAr,
+  Visibility,
 } from "@mui/icons-material";
 import { useNavigate, useParams } from "react-router-dom";
 import axios, { API_BASE_URL } from "../../api/axios";
@@ -27,6 +30,7 @@ import axios, { API_BASE_URL } from "../../api/axios";
 import { useTheme } from "../../theme/ThemeContext";
 import FileUploadDialog from "../../components/FileUploadDialog";
 import { useBackgroundUploader } from "../../contexts/BackgroundUploaderContext";
+import ImageModal from "../../components/ImageModal";
 
 const getFileCategory = (name: string) => {
   const ext = name.toLowerCase().split('.').pop();
@@ -45,6 +49,8 @@ export default function AlgorithmArtifactPage() {
   const [files, setFiles] = useState<any[]>([]);
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<number | null>(null);
+  const [zoomProps, setZoomProps] = useState<{ images: string[], initialIndex: number } | null>(null);
 
   const fetchFiles = async () => {
     try {
@@ -133,22 +139,46 @@ export default function AlgorithmArtifactPage() {
     return acc;
   }, {});
 
-  const renderPreview = (file: any) => {
+  const renderPreview = (file: any, onZoom?: () => void) => {
     const name = file.name.toLowerCase();
     const isImage = name.match(/\.(jpg|jpeg|png|webp|gif)$/i);
     const isPdf = name.endsWith(".pdf");
     const isPpt = name.endsWith(".ppt") || name.endsWith(".pptx");
-    const isCode = ['py', 'js', 'ts', 'tsx', 'jsx', 'java', 'cpp', 'c', 'h', 'cs', 'go', 'rb', 'php', 'sh', 'bat', 'ps1', 'json', 'xml', 'yaml', 'yml', 'md', 'sql'].some(ext => name.endsWith('.' + ext));
+    const isModel = ['onnx', 'pb', 'h5', 'tflite', 'keras', 'pkl', 'pt', 'pth'].some(ext => name.endsWith('.' + ext));
+    const isCode = !isModel && ['py', 'js', 'ts', 'tsx', 'jsx', 'java', 'cpp', 'c', 'h', 'cs', 'go', 'rb', 'php', 'sh', 'bat', 'ps1', 'json', 'xml', 'yaml', 'yml', 'md', 'sql'].some(ext => name.endsWith('.' + ext));
 
     if (isImage) {
       return (
-        <CardMedia
-          component="img"
-          height="140"
-          image={`${API_BASE_URL}${file.url}`}
-          alt={file.name}
-          sx={{ objectFit: "cover" }}
-        />
+        <Box sx={{ position: 'relative', cursor: 'pointer', "&:hover .zoom-overlay": { opacity: 1 } }} onClick={onZoom}>
+          <CardMedia
+            component="img"
+            height="140"
+            image={`${API_BASE_URL}${file.url}`}
+            alt={file.name}
+            sx={{ objectFit: "cover", display: 'block' }}
+          />
+          <Box className="zoom-overlay" sx={{
+            position: 'absolute',
+            inset: 0,
+            bgcolor: alpha(theme.primary, 0.2),
+            backdropFilter: 'blur(2px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: 0,
+            transition: 'all 0.2s',
+          }}>
+            <Box sx={{
+              p: 1,
+              borderRadius: '50%',
+              bgcolor: 'rgba(0,0,0,0.6)',
+              color: '#fff',
+              display: 'flex'
+            }}>
+              <Visibility fontSize="small" />
+            </Box>
+          </Box>
+        </Box>
       );
     }
 
@@ -156,13 +186,14 @@ export default function AlgorithmArtifactPage() {
       <Box sx={{
         height: 140, display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        bgcolor: isPdf ? alpha(theme.error, 0.08) : isPpt ? alpha(theme.warning, 0.08) : isCode ? alpha(theme.info, 0.08) : alpha(theme.primary, 0.08),
+        bgcolor: isPdf ? alpha(theme.error, 0.08) : isPpt ? alpha(theme.warning, 0.08) : isCode ? alpha(theme.info, 0.08) : isModel ? alpha(theme.success, 0.08) : alpha(theme.primary, 0.08),
         borderBottom: `1px solid ${alpha(theme.border, 0.4)}`
       }}>
         {isPdf && <PictureAsPdf sx={{ fontSize: 44, color: theme.error }} />}
         {isPpt && <Slideshow sx={{ fontSize: 44, color: theme.warning }} />}
         {isCode && <CodeIcon sx={{ fontSize: 44, color: theme.info }} />}
-        {!isPdf && !isPpt && !isCode && <Description sx={{ fontSize: 44, color: theme.primary }} />}
+        {isModel && <AccountTree sx={{ fontSize: 44, color: theme.success }} />}
+        {!isPdf && !isPpt && !isCode && !isModel && <Description sx={{ fontSize: 44, color: theme.primary }} />}
         <Typography variant="overline" mt={1} fontWeight={900} sx={{ color: theme.textSecondary, letterSpacing: 1 }}>
           {name.split('.').pop()?.toUpperCase()}
         </Typography>
@@ -362,7 +393,12 @@ export default function AlgorithmArtifactPage() {
                       }}
                     >
                       <Box sx={{ position: 'relative' }}>
-                        {renderPreview(file)}
+                        {renderPreview(file, () => {
+                          const categoryFiles = groupedFiles[category];
+                          const images = categoryFiles.map((f: any) => `${API_BASE_URL}${f.url}`);
+                          const index = categoryFiles.findIndex((f: any) => f.id === file.id);
+                          setZoomProps({ images, initialIndex: index });
+                        })}
                         <IconButton
                           size="small"
                           onClick={() => handleDelete(file.id)}
@@ -397,13 +433,44 @@ export default function AlgorithmArtifactPage() {
                           {file.name.split('/').pop()}
                         </Typography>
 
-                        <Box sx={{ mt: 'auto' }}>
+                        <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {['onnx', 'pb', 'h5', 'tflite', 'keras', 'pkl', 'pt', 'pth'].some(ext => file.name.toLowerCase().endsWith('.' + ext)) && !file.name.toLowerCase().endsWith('.engine') && !file.name.toLowerCase().endsWith('.plan') && (
+                            <Button
+                              fullWidth
+                              variant="outlined"
+                              disableElevation
+                              startIcon={<ViewInAr />}
+                              onClick={() => window.open(`${API_BASE_URL}/netron/index.html?url=${encodeURIComponent(`${API_BASE_URL}${file.url}`)}`, '_blank')}
+                              sx={{
+                                borderRadius: "12px",
+                                textTransform: "none",
+                                fontWeight: 800,
+                                borderColor: alpha(theme.success, 0.5),
+                                color: theme.success,
+                                "&:hover": {
+                                  bgcolor: alpha(theme.success, 0.08),
+                                  borderColor: theme.success
+                                },
+                              }}
+                            >
+                              View in Netron
+                            </Button>
+                          )}
                           <Button
                             fullWidth
                             variant="contained"
                             disableElevation
-                            startIcon={<Download />}
-                            href={`${API_BASE_URL}${file.url}`}
+                            disabled={downloadingId === file.id}
+                            startIcon={downloadingId === file.id ? <CircularProgress size={20} color="inherit" /> : <Download />}
+                            onClick={() => {
+                              setDownloadingId(file.id);
+                              // Artificial delay to show "Starting..." feedback before browser takes over
+                              setTimeout(() => {
+                                window.location.href = `${API_BASE_URL}${file.url}`;
+                                // Reset after a few seconds assuming download started
+                                setTimeout(() => setDownloadingId(null), 2500);
+                              }, 500);
+                            }}
                             sx={{
                               borderRadius: "12px",
                               textTransform: "none",
@@ -411,10 +478,14 @@ export default function AlgorithmArtifactPage() {
                               bgcolor: alpha(theme.primary, 0.06),
                               color: theme.primary,
                               "&:hover": { bgcolor: theme.primary, color: 'white' },
-                              transition: 'all 0.2s ease'
+                              transition: 'all 0.2s ease',
+                              "&.Mui-disabled": {
+                                bgcolor: alpha(theme.primary, 0.1),
+                                color: alpha(theme.primary, 0.6)
+                              }
                             }}
                           >
-                            Download Resource
+                            {downloadingId === file.id ? "Starting..." : "Download Resource"}
                           </Button>
                         </Box>
                       </CardContent>
@@ -567,7 +638,7 @@ export default function AlgorithmArtifactPage() {
           <Button
             variant="contained"
             onClick={handleDownload}
-            disabled={downloadLoading}
+            disabled={downloadLoading || !Object.values(downloadSelection).some(Boolean)}
             sx={{
               bgcolor: theme.primary,
               borderRadius: '12px',
@@ -592,6 +663,13 @@ export default function AlgorithmArtifactPage() {
         onUpload={handleUpload}
         title="Stage Algorithm Assets"
         allowDirectory={true}
+      />
+
+      <ImageModal
+        open={!!zoomProps}
+        onClose={() => setZoomProps(null)}
+        images={zoomProps?.images}
+        initialIndex={zoomProps?.initialIndex}
       />
     </Box>
   );

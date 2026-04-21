@@ -1,12 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+import io
+import csv
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_db
 from app.models.model import Model
 from app.models.algorithm import Algorithm
 from app.models.version import ModelVersion
 from app.schemas.model import ModelCreate, ModelOut
+from app.utils.logger import logger
 
 router = APIRouter()
 
@@ -58,6 +62,8 @@ def create_model(
     db.add(db_model)
     db.commit()
     db.refresh(db_model)
+
+    logger.info(f"Model created: {db_model.name} (ID: {db_model.id})")
 
     return db_model
 
@@ -153,6 +159,8 @@ def update_model(
     db.commit()
     db.refresh(db_model)
 
+    logger.info(f"Model updated: {db_model.name} (ID: {db_model.id})")
+
     return db_model
 
 
@@ -198,6 +206,7 @@ def delete_model(
 
     db.delete(model)
     db.commit()
+    logger.info(f"Model deleted: {model.name} (ID: {model.id})")
 
 
 # ======================================================
@@ -233,3 +242,86 @@ def get_model(
     )
 
     return model
+
+# ======================================================
+# GENERATE REPORT (CSV)
+# ======================================================
+@router.get(
+    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/report",
+)
+def generate_model_report(
+    factory_id: int,
+    algorithm_id: int,
+    model_id: int,
+    db: Session = Depends(get_db),
+):
+    model = (
+        db.query(Model)
+        .filter(
+            Model.id == model_id,
+            Model.algorithm_id == algorithm_id,
+        )
+        .first()
+    )
+
+    if not model:
+        raise HTTPException(404, "Model not found")
+
+    versions = (
+        db.query(ModelVersion)
+        .filter(ModelVersion.model_id == model_id)
+        .order_by(ModelVersion.version_number.asc())
+        .all()
+    )
+
+    stream = io.StringIO()
+    csv_writer = csv.writer(stream)
+    
+    # Header Row
+    csv_writer.writerow([
+        "Version Number",
+        "Created At",
+        "Description",
+        "Dataset Total Count",
+        "Accuracy",
+        "Precision",
+        "Recall",
+        "F1 Score",
+        "CPU Utilization (%)",
+        "GPU Utilization (%)",
+        "Inference Time (ms)",
+        "Hyperparameters"
+    ])
+
+    for v in versions:
+        # Get total dataset count from delta if available
+        dataset_count = v.delta.dataset_count if v.delta and v.delta.dataset_count is not None else 0
+        
+        # Format hyperparameters
+        hyperparameters = str(v.parameters) if v.parameters else "None"
+        
+        # Format created_at to clean string (day-month-year time)
+        created_at_str = v.created_at.strftime("%d-%m-%Y %H:%M:%S") if v.created_at else "N/A"
+
+        csv_writer.writerow([
+            v.version_number,
+            created_at_str,
+            v.note or "",
+            dataset_count,
+            v.accuracy if v.accuracy is not None else "N/A",
+            v.precision if v.precision is not None else "N/A",
+            v.recall if v.recall is not None else "N/A",
+            v.f1_score if v.f1_score is not None else "N/A",
+            v.cpu_utilization if v.cpu_utilization is not None else "N/A",
+            v.gpu_utilization if v.gpu_utilization is not None else "N/A",
+            v.inference_time if v.inference_time is not None else "N/A",
+            hyperparameters
+        ])
+
+    response = StreamingResponse(
+        iter([stream.getvalue()]),
+        media_type="text/csv"
+    )
+    safe_name = model.name.replace(" ", "_").lower()
+    response.headers["Content-Disposition"] = f"attachment; filename=model_{safe_name}_report.csv"
+    return response

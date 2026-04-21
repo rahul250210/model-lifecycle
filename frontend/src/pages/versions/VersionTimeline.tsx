@@ -41,10 +41,11 @@ import {
   Delete as DeleteIcon,
   CompareRounded as CompareIcon,
   CheckCircle as CheckIcon,
+  Download as DownloadIcon,
 } from "@mui/icons-material";
 
 import { useNavigate, useParams } from "react-router-dom";
-import axios from "../../api/axios";
+import axios, { API_BASE_URL } from "../../api/axios";
 
 import { useTheme } from "../../theme/ThemeContext";
 
@@ -79,6 +80,7 @@ export default function VersionTimeline() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [rollbackOpen, setRollbackOpen] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<Version | null>(null);
+  const [downloadLoading, setDownloadLoading] = useState<number | null>(null);
 
   // Selection for Comparison
   const [isCompareMode, setIsCompareMode] = useState(false);
@@ -162,6 +164,20 @@ export default function VersionTimeline() {
       setVersions(previousVersions);
       alert("Failed to delete version.");
     }
+  };
+
+  const handleDownload = (vId: number) => {
+    setDownloadLoading(vId);
+
+    // Default to all artifact types for quick download
+    const downloadUrl = `${API_BASE_URL}/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${vId}/download?dataset=true&labels=true&model=true&code=true`;
+
+    setTimeout(() => {
+      window.location.href = downloadUrl;
+      setTimeout(() => {
+        setDownloadLoading(null);
+      }, 3000);
+    }, 500);
   };
 
   const toggleCompareSelection = (id: number) => {
@@ -370,6 +386,20 @@ export default function VersionTimeline() {
                                   <ViewIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>
+                              <Tooltip title="Quick Download ZIP">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleDownload(version.id)}
+                                  disabled={downloadLoading !== null}
+                                  sx={{ color: theme.success, bgcolor: alpha(theme.success, 0.05) }}
+                                >
+                                  {downloadLoading === version.id ? (
+                                    <CircularProgress size={18} color="inherit" />
+                                  ) : (
+                                    <DownloadIcon fontSize="small" />
+                                  )}
+                                </IconButton>
+                              </Tooltip>
                               <Tooltip title="Delete">
                                 <IconButton
                                   size="small"
@@ -413,28 +443,28 @@ export default function VersionTimeline() {
                 position: "fixed",
                 bottom: 40,
                 left: "50%",
-                transform: "translateX(-15%)", // Offset from sidebar
+                transform: "translateX(-40%)", // Balanced centering
                 zIndex: 100,
-                bgcolor: alpha(theme.paper, 0.9),
-                backdropFilter: "blur(20px)",
+                bgcolor: alpha(theme.paper, 0.95), // More opaque for better contrast
+                backdropFilter: "blur(24px)",
                 px: 4,
-                py: 2,
-                borderRadius: "24px",
-                border: `1px solid ${theme.primary}`,
-                boxShadow: `0 20px 40px ${alpha(theme.primary, 0.15)}`,
+                py: 2.5,
+                borderRadius: "28px",
+                border: `1.5px solid ${theme.primary}`,
+                boxShadow: `0 24px 64px -12px ${alpha(theme.primary, 0.25)}`,
                 display: "flex",
                 alignItems: "center",
-                gap: 4,
-                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                gap: 5,
+                transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
                 opacity: selectedForCompare.length > 0 ? 1 : 0,
                 pointerEvents: selectedForCompare.length > 0 ? "auto" : "none",
               }}
             >
               <Box>
-                <Typography variant="caption" fontWeight={800} sx={{ color: theme.primary, letterSpacing: 1.5, display: "block" }}>
+                <Typography variant="caption" fontWeight={900} sx={{ color: theme.primary, letterSpacing: 2, display: "block", mb: 0.5 }}>
                   COMPARISON STAGED
                 </Typography>
-                <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
+                <Typography variant="body2" fontWeight={800} sx={{ color: theme.textMain }}>
                   {selectedForCompare.length} of 2 versions selected
                 </Typography>
               </Box>
@@ -447,14 +477,23 @@ export default function VersionTimeline() {
                   navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/compare?left=${v1}&right=${v2}`);
                 }}
                 sx={{
-                  borderRadius: "14px",
-                  px: 4,
-                  py: 1.25,
+                  borderRadius: "16px",
+                  px: 5,
+                  py: 1.5,
                   textTransform: "none",
-                  fontWeight: 800,
+                  fontWeight: 900,
                   bgcolor: theme.primary,
-                  boxShadow: `0 8px 20px ${alpha(theme.primary, 0.3)}`,
-                  "&:hover": { bgcolor: theme.primaryDark }
+                  color: "white", // Explicit white text
+                  boxShadow: `0 8px 24px ${alpha(theme.primary, 0.4)}`,
+                  "&:hover": {
+                    bgcolor: theme.primaryDark,
+                    boxShadow: `0 12px 32px ${alpha(theme.primary, 0.5)}`
+                  },
+                  "&.Mui-disabled": {
+                    bgcolor: alpha(theme.primary, 0.15),
+                    color: alpha(theme.textMuted, 0.5),
+                    border: `1px dashed ${alpha(theme.primary, 0.3)}`
+                  }
                 }}
               >
                 Compare Now

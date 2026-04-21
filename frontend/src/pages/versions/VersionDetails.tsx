@@ -44,11 +44,13 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 import CategoryIcon from "@mui/icons-material/Category";
+import InfoIcon from "@mui/icons-material/InfoOutlined";
 
 import { useNavigate, useParams } from "react-router-dom";
 import axios, { API_BASE_URL } from "../../api/axios";
 
 import { useTheme } from "../../theme/ThemeContext";
+import ImageModal from "../../components/ImageModal";
 
 interface Version {
   id: number;
@@ -64,9 +66,16 @@ interface Version {
   tn?: number;
   fp?: number;
   fn?: number;
+  cpu_utilization?: number;
+  gpu_utilization?: number;
+  inference_time?: number;
   metrics?: Record<string, number>;
   created_at: string;
   is_active: boolean;
+  cpu_memory_usage?: number;
+  gpu_memory_usage?: number;
+  cameras_supported?: number;
+  resource_metrics?: Record<string, any>;
 }
 
 interface Artifact {
@@ -81,6 +90,91 @@ interface VersionDelta {
   created_at: string;
   [key: string]: any;
 }
+
+
+interface CircularProgressProps {
+  value: number;
+  label: string;
+  desc: string;
+  formula: string;
+  color: string;
+  theme: any;
+  isTime?: boolean;
+  unit?: string;
+  maxValue?: number;
+}
+
+const AnimatedCircularProgress = ({ value, label, desc, formula, color, theme, isTime, unit, maxValue = 100 }: CircularProgressProps) => {
+  const radius = 36;
+  const circumference = 2 * Math.PI * radius;
+  const normalizedValue = Math.min(100, Math.max(0, ((value || 0) / maxValue) * 100));
+  const offset = circumference - (normalizedValue / 100) * circumference;
+
+  return (
+    <Paper
+      elevation={0}
+      sx={{
+        p: 3,
+        borderRadius: "20px",
+        border: `1px solid ${alpha(theme.border, 0.6)}`,
+        bgcolor: alpha(theme.background, 0.4),
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        transition: 'box-shadow 0.2s',
+        backdropFilter: 'blur(10px)',
+        '&:hover': {
+          borderColor: color,
+          boxShadow: `0 12px 24px -8px ${alpha(color, 0.15)}`
+        }
+      }}
+    >
+      <Box>
+        <Stack direction="row" spacing={0.5} alignItems="center">
+          <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</Typography>
+          <Tooltip title={<Box sx={{ textAlign: 'center' }}><Typography variant="body2" fontWeight={700}>{desc}</Typography><Typography variant="caption" sx={{ fontFamily: 'monospace', color: alpha('#fff', 0.8), display: 'block', mt: 0.5, p: 0.5, bgcolor: 'rgba(0,0,0,0.3)', borderRadius: 1 }}>{formula}</Typography></Box>} arrow placement="top">
+            <InfoIcon sx={{ fontSize: 14, color: theme.textMuted, opacity: 0.6, cursor: 'default', '&:hover': { opacity: 1, color: theme.primary } }} />
+          </Tooltip>
+        </Stack>
+        <Typography variant="h4" fontWeight={800} sx={{ mt: 0.5, color: color }}>
+          {value !== undefined && value !== null ? (unit ? value : (isTime ? value : `${value}%`)) : "--"}
+        </Typography>
+      </Box>
+
+      {/* Animated SVG Ring */}
+      <Box sx={{ position: 'relative', width: 84, height: 84 }}>
+        <svg width="84" height="84" viewBox="0 0 84 84" style={{ transform: 'rotate(-90deg)' }}>
+          {/* Track */}
+          <circle cx="42" cy="42" r={radius} fill="none" stroke={alpha(theme.textMuted, 0.1)} strokeWidth="6" />
+          {/* Indicator */}
+          <circle
+            cx="42" cy="42" r={radius} fill="none" stroke={color} strokeWidth="6"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            strokeLinecap="round"
+            style={{ transition: 'stroke-dashoffset 1.5s ease-out' }}
+          />
+        </svg>
+        {(isTime || unit) && (
+          <Box sx={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography variant="caption" sx={{ mt: 3, fontWeight: 700, color: color, fontSize: '0.6rem' }}>{unit || 'ms'}</Typography>
+          </Box>
+        )}
+        {/* Glow effect behind */}
+        <Box sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          borderRadius: '50%',
+          boxShadow: `0 0 20px ${alpha(color, 0.2)}`,
+          zIndex: -1
+        }} />
+      </Box>
+    </Paper>
+  );
+};
 
 export default function VersionDetails() {
   const { factoryId, algorithmId, modelId, versionId } = useParams();
@@ -102,10 +196,26 @@ export default function VersionDetails() {
 
   const [datasetVisibleCount, setDatasetVisibleCount] = useState(10);
   const [labelsVisibleCount, setLabelsVisibleCount] = useState(10);
-  const [netronOpen, setNetronOpen] = useState(false);
-  const [activeModel, setActiveModel] = useState<Artifact | null>(null);
 
-  const labelFiles = artifacts.filter((a) => a.type === "label");
+
+  const [deleteArtifactId, setDeleteArtifactId] = useState<number | null>(null);
+
+  const handleDeleteArtifact = async () => {
+    if (!deleteArtifactId) return;
+    try {
+      await axios.delete(`/artifacts/${deleteArtifactId}`);
+      setArtifacts((prev) => prev.filter((x) => x.id !== deleteArtifactId));
+      setDeleteArtifactId(null);
+    } catch (error) {
+      console.error("Failed to delete artifact", error);
+      alert("Failed to delete artifact");
+    }
+  };
+
+  /* ==========================================================================
+     IMAGE ZOOM HANDLER
+  ========================================================================== */
+  const [zoomProps, setZoomProps] = useState<{ images: string[], initialIndex: number } | null>(null);
 
   const [downloadLoading, setDownloadLoading] = useState(false);
 
@@ -166,9 +276,17 @@ export default function VersionDetails() {
 
   if (!version || !delta) return <Typography color="error">Version not found</Typography>;
 
+  // Helper to deduplicate artifacts (keep latest by ID/order)
+  const uniqueArtifacts = (items: Artifact[]) => {
+    const map = new Map<string, Artifact>();
+    items.forEach((item) => map.set(item.name, item));
+    return Array.from(map.values());
+  };
+
   const datasetFiles = artifacts.filter((a) => a.type === "dataset");
-  const modelFiles = artifacts.filter((a) => a.type === "model");
-  const codeFiles = artifacts.filter((a) => a.type === "code");
+  const modelFiles = uniqueArtifacts(artifacts.filter((a) => a.type === "model"));
+  const codeFiles = uniqueArtifacts(artifacts.filter((a) => a.type === "code"));
+  const labelFiles = uniqueArtifacts(artifacts.filter((a) => a.type === "label"));
   const isFirstVersion = version.version_number === 1;
 
 
@@ -214,16 +332,12 @@ export default function VersionDetails() {
               </Box>
             </Stack>
             <Stack direction="row" spacing={0.5}>
-              {items.length > 0 && items[0].type === "model" && (
+              {items.length > 0 && items[0].type === "model" && !items[0].name.toLowerCase().endsWith(".engine") && !items[0].name.toLowerCase().endsWith(".plan") && (
                 <Tooltip title="View in Netron">
                   <IconButton
                     size="small"
                     onClick={() => {
-                      // Always open Netron in a new tab and show the helper dialog
-                      // This ensures a consistent experience and avoids "redirect" feelings
-                      setActiveModel(a);
-                      setNetronOpen(true);
-                      window.open("https://netron.app", "_blank");
+                      window.open(`${API_BASE_URL}/netron/index.html?url=${encodeURIComponent(`${API_BASE_URL}/artifacts/${a.id}/download`)}`, "_blank");
                     }}
                     sx={{ color: theme.primary }}
                   >
@@ -246,7 +360,7 @@ export default function VersionDetails() {
                 </Tooltip>
               )}
               <Tooltip title="Download"><IconButton size="small" component="a" href={`${API_BASE_URL}/artifacts/${a.id}/download`}><DownloadIcon fontSize="small" sx={{ color: theme.textMuted }} /></IconButton></Tooltip>
-              <Tooltip title="Remove"><IconButton size="small" color="error" onClick={async () => { if (confirm("Delete this artifact?")) { await axios.delete(`/artifacts/${a.id}`); setArtifacts(prev => prev.filter(x => x.id !== a.id)); } }}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
+              <Tooltip title="Remove"><IconButton size="small" color="error" onClick={() => setDeleteArtifactId(a.id)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
             </Stack>
           </Paper>
         ))
@@ -386,43 +500,25 @@ export default function VersionDetails() {
                 <Grid container spacing={4}>
                   {/* METRICS SECTION */}
                   <Grid size={{ xs: 12, md: (version as any).tp !== undefined && (version as any).tp !== null ? 7 : 12 }}>
-                    <Typography variant="subtitle2" fontWeight={700} sx={{ color: theme.textSecondary, mb: 2, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                      Key Metrics
+                    <Typography variant="subtitle2" fontWeight={800} sx={{ color: theme.textSecondary, mb: 3, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.75rem' }}>
+                      Performance Analysis
                     </Typography>
-                    <Grid container spacing={2}>
+                    <Grid container spacing={3}>
                       {[
                         { label: "Accuracy", value: version.accuracy, desc: "Overall correctness", formula: "(TP + TN) / Total" },
                         { label: "Precision", value: version.precision, desc: "False positive control", formula: "TP / (TP + FP)" },
                         { label: "Recall", value: version.recall, desc: "False negative control", formula: "TP / (TP + FN)" },
                         { label: "F1 Score", value: version.f1_score, desc: "Harmonic mean", formula: "2TP / (2TP + FP + FN)" },
                       ].map((m) => (
-                        <Grid size={{ xs: 12, sm: 6 }} key={m.label}>
-                          <Paper elevation={0} sx={{ p: 2.5, borderRadius: "16px", border: `1px solid ${theme.border}`, bgcolor: alpha(theme.background, 0.5) }}>
-                            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                              <Typography variant="caption" fontWeight={600} sx={{ color: theme.textMuted, textTransform: 'uppercase' }}>{m.label}</Typography>
-                              <Tooltip title={m.desc} arrow placement="top">
-                                <Chip
-                                  label={m.formula}
-                                  size="small"
-                                  sx={{
-                                    height: 20,
-                                    fontSize: '0.65rem',
-                                    fontFamily: 'monospace',
-                                    bgcolor: alpha(theme.textMain, 0.05),
-                                    color: theme.textSecondary,
-                                    fontWeight: 600,
-                                    border: `1px solid ${alpha(theme.border, 0.5)}`
-                                  }}
-                                />
-                              </Tooltip>
-                            </Stack>
-
-                            <Typography variant="h5" fontWeight={700} sx={{ mt: 0.5, mb: 1.5, color: metricColor(m.value) }}>{m.value ? `${m.value}%` : "--"}</Typography>
-
-                            <Box sx={{ height: 4, bgcolor: alpha(theme.border, 0.5), borderRadius: 2, overflow: 'hidden' }}>
-                              <Box sx={{ height: '100%', width: `${m.value || 0}%`, bgcolor: metricColor(m.value) }} />
-                            </Box>
-                          </Paper>
+                        <Grid size={{ xs: 12, sm: 6, md: 4 }} key={m.label}>
+                          <AnimatedCircularProgress
+                            value={m.value || 0}
+                            label={m.label}
+                            desc={m.desc}
+                            formula={m.formula}
+                            color={metricColor(m.value) || theme.primary}
+                            theme={theme}
+                          />
                         </Grid>
                       ))}
                     </Grid>
@@ -476,6 +572,82 @@ export default function VersionDetails() {
               </CardContent>
             </Card>
 
+            {/* RESOURCE CONSUMPTION */}
+            <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${theme.border}`, bgcolor: theme.paper }}>
+              <CardContent sx={{ p: 4 }}>
+                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 4 }}>
+                  <HubIcon sx={{ color: theme.primary }} />
+                  <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Resource Consumption</Typography>
+                </Stack>
+
+                <Grid container spacing={4}>
+                  <Grid size={{ xs: 12 }}>
+                    <Typography variant="subtitle2" fontWeight={800} sx={{ color: theme.textSecondary, mb: 3, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.75rem' }}>
+                      System Utilization
+                    </Typography>
+                    <Grid container spacing={3}>
+                      {(() => {
+                        // Standard Metrics
+                        const items: {
+                          label: string;
+                          value: any;
+                          desc: string;
+                          formula: string;
+                          unit?: string;
+                          isTime?: boolean;
+                          maxValue?: number;
+                        }[] = [
+                            { label: "CPU Usage", value: version.cpu_utilization, desc: "Average CPU Load", formula: "% Utilization" },
+                            { label: "GPU Usage", value: version.gpu_utilization, desc: "Average GPU Load", formula: "% Utilization" },
+                            { label: "Inference", value: version.inference_time, desc: "Latency per sample", formula: "Milliseconds (ms)", isTime: true },
+                            { label: "CPU Memory", value: version.cpu_memory_usage, desc: "RAM Usage", formula: "Megabytes (MB)", unit: "MB", maxValue: 32000 },
+                            { label: "GPU Memory", value: version.gpu_memory_usage, desc: "VRAM Usage", formula: "Megabytes (MB)", unit: "MB", maxValue: 24000 },
+                            { label: "Cameras", value: version.cameras_supported, desc: "Max Streams", formula: "Video Streams", unit: "CAMS", maxValue: 64 },
+                          ];
+
+                        // Custom Metrics
+                        if (version.resource_metrics) {
+                          Object.entries(version.resource_metrics).forEach(([k, v]) => {
+                            let val: any = v;
+                            let unit = "";
+                            if (typeof v === 'object' && v !== null && 'value' in v) {
+                              val = v.value;
+                              unit = v.unit || "";
+                            }
+                            items.push({
+                              label: k.replace(/_/g, ' '),
+                              value: val,
+                              desc: "Custom Metric",
+                              formula: "Custom",
+                              unit: unit,
+                              isTime: false,
+                              maxValue: 100 // Default max or handle dynamically?
+                            });
+                          });
+                        }
+
+                        return items.map((m) => (
+                          <Grid size={{ xs: 12, sm: 6, md: 4 }} key={m.label}>
+                            <AnimatedCircularProgress
+                              value={parseFloat(String(m.value || 0))}
+                              label={m.label}
+                              desc={m.desc}
+                              formula={m.formula}
+                              color={metricColor(typeof m.value === 'number' ? m.value : parseFloat(String(m.value || 0))) || theme.primary}
+                              theme={theme}
+                              isTime={m.isTime}
+                              unit={m.unit}
+                              maxValue={m.maxValue}
+                            />
+                          </Grid>
+                        ));
+                      })()}
+                    </Grid>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
+
             {/* DATASET EXPLORER */}
             <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${theme.border}`, bgcolor: theme.paper, overflow: "hidden" }}>
               <CardContent sx={{ p: 4 }}>
@@ -520,8 +692,50 @@ export default function VersionDetails() {
                     <>
                       {displayedDataset.slice(0, datasetVisibleCount).map(img => (
                         <Box key={img.id} sx={{ minWidth: 240, maxWidth: 240, flexShrink: 0 }}>
-                          <Card elevation={0} sx={{ border: `1px solid ${theme.border}`, borderRadius: '16px', overflow: 'hidden', transition: '0.3s', "&:hover": { transform: 'scale(1.03)', borderColor: theme.primary } }}>
-                            <img src={`${API_BASE_URL}/artifacts/${img.id}/image`} alt={img.name} style={{ width: "100%", height: 180, objectFit: "cover" }} />
+                          <Card elevation={0} sx={{
+                            border: `1px solid ${theme.border}`,
+                            borderRadius: '16px',
+                            overflow: 'hidden',
+                            transition: '0.3s',
+                            "&:hover": {
+                              borderColor: theme.primary,
+                              "& .zoom-overlay": { opacity: 1 }
+                            }
+                          }}>
+                            <Box sx={{ position: 'relative', cursor: 'pointer' }}
+                              onClick={() => {
+                                const images = displayedDataset.map(d => `${API_BASE_URL}/artifacts/${d.id}/image`);
+                                const index = displayedDataset.findIndex(d => d.id === img.id);
+                                setZoomProps({ images, initialIndex: index });
+                              }}
+                            >
+                              <img
+                                src={`${API_BASE_URL}/artifacts/${img.id}/image`}
+                                alt={img.name}
+                                style={{ width: "100%", height: 180, objectFit: "cover", display: 'block' }}
+                              />
+                              <Box className="zoom-overlay" sx={{
+                                position: 'absolute',
+                                inset: 0,
+                                bgcolor: alpha(theme.primary, 0.2),
+                                backdropFilter: 'blur(2px)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                opacity: 0,
+                                transition: 'all 0.2s',
+                              }}>
+                                <Box sx={{
+                                  p: 1,
+                                  borderRadius: '50%',
+                                  bgcolor: 'rgba(0,0,0,0.6)',
+                                  color: '#fff',
+                                  display: 'flex'
+                                }}>
+                                  <VisibilityIcon fontSize="small" />
+                                </Box>
+                              </Box>
+                            </Box>
                             <Typography variant="caption" sx={{ p: 1.5, display: 'block', textAlign: 'center', fontWeight: 700, bgcolor: theme.paper, color: theme.textMain, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{img.name.split('/').pop()}</Typography>
                           </Card>
                         </Box>
@@ -858,7 +1072,7 @@ export default function VersionDetails() {
           <Button
             variant="contained"
             onClick={handleDownload}
-            disabled={downloadLoading}
+            disabled={downloadLoading || !Object.values(downloadSelect).some(Boolean)}
             sx={{
               bgcolor: theme.primary,
               borderRadius: '12px',
@@ -877,91 +1091,40 @@ export default function VersionDetails() {
         </DialogActions>
       </Dialog >
 
-      {/* ================= NETRON FALLBACK DIALOG ================= */}
       <Dialog
-        open={netronOpen}
-        onClose={() => setNetronOpen(false)}
-        PaperProps={{
-          sx: {
-            borderRadius: '24px',
-            p: 1,
-            bgcolor: theme.background,
-            maxWidth: '500px'
-          }
-        }}
+        open={!!deleteArtifactId}
+        onClose={() => setDeleteArtifactId(null)}
+        PaperProps={{ sx: { borderRadius: "16px", p: 1, bgcolor: theme.paper, border: `1px solid ${theme.border}` } }}
       >
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.25rem', color: theme.textMain, pb: 1 }}>
-          Model Viewer Assistant
-        </DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, pb: 1, color: theme.textMain }}>Delete Artifact?</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3, lineHeight: 1.6 }}>
-            Netron.app is now open in a new tab. Since your server is using HTTP, you'll need to manually load the weights:
+          <Typography variant="body1" sx={{ color: theme.textSecondary }}>
+            Are you sure you want to delete this file? This action cannot be undone.
           </Typography>
-
-          <Box sx={{
-            bgcolor: alpha(theme.primary, 0.05),
-            p: 2.5,
-            borderRadius: '16px',
-            border: `1px dashed ${alpha(theme.primary, 0.3)}`,
-            mb: 3
-          }}>
-            <Stack spacing={2}>
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <Box sx={{
-                  width: 24, height: 24, borderRadius: '50%',
-                  bgcolor: theme.primary, color: 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.75rem', fontWeight: 800
-                }}>1</Box>
-                <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
-                  Download the model weights below.
-                </Typography>
-              </Stack>
-              <Stack direction="row" spacing={1.5} alignItems="center">
-                <Box sx={{
-                  width: 24, height: 24, borderRadius: '50%',
-                  bgcolor: theme.primary, color: 'white',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '0.75rem', fontWeight: 800
-                }}>2</Box>
-                <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
-                  Drag the file into the Netron window.
-                </Typography>
-              </Stack>
-            </Stack>
-          </Box>
-
-          <Button
-            fullWidth
-            variant="contained"
-            startIcon={<DownloadIcon />}
-            href={`${API_BASE_URL}/artifacts/${activeModel?.id}/download`}
-            onClick={() => {
-              // Optional: small delay or auto-close? 
-              // Keep open so they can see the drag-drop hint.
-            }}
-            sx={{
-              bgcolor: theme.primary,
-              borderRadius: '14px',
-              py: 1.5,
-              fontWeight: 800,
-              boxShadow: `0 8px 16px ${alpha(theme.primary, 0.2)}`,
-              textTransform: 'none',
-              '&:hover': { bgcolor: theme.primaryDark }
-            }}
-          >
-            Download {activeModel?.name || 'Weights'}
-          </Button>
         </DialogContent>
-        <DialogActions sx={{ p: 3, pt: 1 }}>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setDeleteArtifactId(null)} sx={{ color: theme.textSecondary, fontWeight: 700, textTransform: 'none' }}>
+            Cancel
+          </Button>
           <Button
-            onClick={() => setNetronOpen(false)}
-            sx={{ fontWeight: 700, color: theme.textMuted, textTransform: 'none' }}
+            onClick={handleDeleteArtifact}
+            variant="contained"
+            color="error"
+            sx={{ borderRadius: "8px", fontWeight: 700, boxShadow: 'none', textTransform: 'none' }}
+            startIcon={<DeleteIcon />}
           >
-            Got it, close
+            Delete
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ImageModal
+        open={!!zoomProps}
+        onClose={() => setZoomProps(null)}
+        images={zoomProps?.images}
+        initialIndex={zoomProps?.initialIndex}
+      />
+
     </Box >
   );
 }

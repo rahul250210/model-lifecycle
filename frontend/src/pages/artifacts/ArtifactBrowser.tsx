@@ -116,7 +116,7 @@ export default function ArtifactBrowser() {
                 fontWeight: 700,
                 textTransform: "none",
                 boxShadow: `0 4px 14px ${alpha(theme.primary, 0.3)}`,
-                "&:hover": { bgcolor: theme.primaryDark, transform: "translateY(-1px)", boxShadow: `0 6px 20px ${alpha(theme.primary, 0.4)}` },
+                "&:hover": { bgcolor: theme.primaryDark, boxShadow: `0 4px 14px ${alpha(theme.primary, 0.3)}`, transform: "none" },
                 transition: "all 0.2s"
               }}
             >
@@ -349,7 +349,22 @@ export default function ArtifactBrowser() {
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
           <Button onClick={() => setOpenModal(false)} sx={{ fontWeight: 700, color: theme.textMuted }}>Cancel</Button>
-          <Button variant="contained" onClick={handleCreateAlgo} sx={{ borderRadius: "10px", fontWeight: 700, px: 3, bgcolor: theme.primary }}>
+          <Button
+            variant="contained"
+            onClick={handleCreateAlgo}
+            disabled={!newAlgoName.trim()}
+            sx={{
+              borderRadius: "10px",
+              fontWeight: 700,
+              px: 3,
+              bgcolor: theme.primary,
+              "&.Mui-disabled": {
+                bgcolor: alpha(theme.primary, 0.4),
+                color: alpha(theme.paper, 0.5),
+                boxShadow: "none"
+              }
+            }}
+          >
             Create
           </Button>
         </DialogActions>
@@ -408,8 +423,14 @@ export default function ArtifactBrowser() {
               py: 1.2,
               bgcolor: theme.primary,
               textTransform: 'none',
-              boxShadow: `0 8px 16px -4px ${alpha(theme.primary, 0.3)}`
+              boxShadow: `0 8px 16px -4px ${alpha(theme.primary, 0.3)}`,
+              "&.Mui-disabled": {
+                bgcolor: alpha(theme.primary, 0.4),
+                color: alpha(theme.paper, 0.5),
+                boxShadow: "none"
+              }
             }}
+            disabled={!editName.trim()}
           >
             Save Changes
           </Button>

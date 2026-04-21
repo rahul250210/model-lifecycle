@@ -61,7 +61,7 @@ export default function AlgorithmCreate() {
       {/* Navigation Header */}
       <Box sx={{ display: "flex", alignItems: "center", mb: 4 }}>
         <IconButton
-          onClick={() => navigate(`/factories/${factoryId}/algorithms`)}
+          onClick={() => navigate(`/factories/${factoryId}`)}
           sx={{
             mr: 2,
             bgcolor: theme.paper,
@@ -204,7 +204,7 @@ export default function AlgorithmCreate() {
                 <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, pt: 2 }}>
                   <Button
                     variant="text"
-                    onClick={() => navigate(`/factories/${factoryId}/algorithms`)}
+                    onClick={() => navigate(`/factories/${factoryId}`)}
                     disabled={loading}
                     sx={{
                       px: 3,
@@ -221,7 +221,7 @@ export default function AlgorithmCreate() {
                   <Button
                     variant="contained"
                     onClick={handleSubmit}
-                    disabled={loading}
+                    disabled={loading || !name.trim()}
                     sx={{
                       px: 4,
                       py: 1.2,
@@ -232,7 +232,13 @@ export default function AlgorithmCreate() {
                       boxShadow: `0 10px 15px -3px ${alpha(theme.primary, 0.3)}`,
                       "&:hover": {
                         bgcolor: theme.primaryDark,
-                        boxShadow: `0 12px 20px -3px ${alpha(theme.primary, 0.4)}`
+                        boxShadow: `0 10px 15px -3px ${alpha(theme.primary, 0.3)}`,
+                        transform: "none"
+                      },
+                      "&.Mui-disabled": {
+                        bgcolor: alpha(theme.primary, 0.4),
+                        color: alpha(theme.paper, 0.5),
+                        boxShadow: "none"
                       }
                     }}
                   >

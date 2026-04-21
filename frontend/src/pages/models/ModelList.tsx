@@ -24,6 +24,7 @@ import AddIcon from "@mui/icons-material/Add";
 import HubIcon from "@mui/icons-material/Hub";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import DownloadIcon from "@mui/icons-material/Download";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HistoryIcon from "@mui/icons-material/History";
@@ -57,6 +58,71 @@ export default function ModelList() {
 
   // Delete Dialog States
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const handleGenerateAlgorithmReport = async () => {
+    try {
+      const response = await axios.get(
+        `/factories/${factoryId}/algorithms/${algorithmId}/report`,
+        { responseType: 'blob' }
+      );
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `${algorithmName.replace(/ /g, '_').toLowerCase()}_report.csv`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match.length === 2) {
+          filename = match[1];
+        }
+      }
+
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Error downloading algorithm report:", error);
+      alert("Failed to generate algorithm report");
+    }
+  };
+
+  const handleGenerateReport = async (model: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const response = await axios.get(
+        `/factories/${factoryId}/algorithms/${algorithmId}/models/${model.id}/report`,
+        { responseType: 'blob' }
+      );
+
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `model_${model.name.replace(/ /g, '_').toLowerCase()}_report.csv`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match.length === 2) {
+          filename = match[1];
+        }
+      }
+
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error("Error downloading report:", error);
+      alert("Failed to generate model report");
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -119,10 +185,10 @@ export default function ModelList() {
                 <Breadcrumbs separator={<NavigateNextIcon fontSize="small" sx={{ color: theme.textSecondary }} />} aria-label="breadcrumb">
                   <Link
                     underline="hover"
-                    onClick={() => navigate("/factories")}
+                    onClick={() => navigate(`/factories/${factoryId}`)}
                     sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textSecondary }}
                   >
-                    Factories
+                    {factoryName}
                   </Link>
                   <Link
                     underline="hover"
@@ -142,25 +208,47 @@ export default function ModelList() {
                 Manage specific model implementations and track their version history.
               </Typography>
             </Box >
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/create`)}
-              sx={{
-                bgcolor: theme.primary,
-                px: 4,
-                py: 1.5,
-                borderRadius: "14px",
-                fontWeight: 700,
-                fontSize: "1rem",
-                textTransform: "none",
-                boxShadow: `0 10px 15px -3px ${alpha(theme.primary, 0.3)}`,
-                "&:hover": { bgcolor: "#4338CA", transform: "translateY(-2px)" },
-                transition: "all 0.2s",
-              }}
-            >
-              Add Model
-            </Button>
+            <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 1 }}>
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={handleGenerateAlgorithmReport}
+                sx={{
+                  borderRadius: "14px",
+                  fontWeight: 700,
+                  fontSize: "1rem",
+                  px: 3,
+                  py: 1.5,
+                  textTransform: 'none',
+                  border: `1px solid ${theme.border}`,
+                  color: theme.success,
+                  borderColor: alpha(theme.success, 0.5),
+                  bgcolor: alpha(theme.success, 0.05),
+                  "&:hover": { bgcolor: alpha(theme.success, 0.1), borderColor: theme.success },
+                }}
+              >
+                Algorithm Report
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/create`)}
+                sx={{
+                  bgcolor: theme.primary,
+                  px: 4,
+                  py: 1.5,
+                  borderRadius: "14px",
+                  fontWeight: 700,
+                  fontSize: "1rem",
+                  textTransform: "none",
+                  boxShadow: `0 10px 15px -3px ${alpha(theme.primary, 0.3)}`,
+                  "&:hover": { bgcolor: "#4338CA", transform: "translateY(-2px)" },
+                  transition: "all 0.2s",
+                }}
+              >
+                Add Model
+              </Button>
+            </Stack>
           </Stack >
         </Box >
 
@@ -190,6 +278,9 @@ export default function ModelList() {
                         <HubIcon sx={{ color: theme.primary, fontSize: 20 }} />
                       </Box>
                       <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <IconButton size="small" onClick={(e) => handleGenerateReport(model, e)} title="Download Model Report">
+                          <DownloadIcon fontSize="small" sx={{ color: theme.success }} />
+                        </IconButton>
                         <IconButton size="small" onClick={(e) => {
                           e.stopPropagation();
                           setSelectedModel(model);

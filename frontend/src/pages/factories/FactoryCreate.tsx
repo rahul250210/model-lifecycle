@@ -222,7 +222,7 @@ export default function FactoryCreate() {
                   <Button
                     variant="contained"
                     onClick={handleSubmit}
-                    disabled={loading}
+                    disabled={loading || !name.trim()}
                     sx={{
                       px: 4,
                       py: 1.2,
@@ -232,8 +232,14 @@ export default function FactoryCreate() {
                       textTransform: 'none',
                       boxShadow: `0 10px 15px -3px ${alpha(theme.primary, 0.3)}`,
                       "&:hover": {
-                        bgcolor: "#4338CA",
-                        boxShadow: `0 12px 20px -3px ${alpha(theme.primary, 0.4)}`
+                        bgcolor: theme.primaryDark,
+                        boxShadow: `0 10px 15px -3px ${alpha(theme.primary, 0.3)}`,
+                        transform: "none"
+                      },
+                      "&.Mui-disabled": {
+                        bgcolor: alpha(theme.primary, 0.4),
+                        color: alpha(theme.paper, 0.5),
+                        boxShadow: "none"
                       }
                     }}
                   >

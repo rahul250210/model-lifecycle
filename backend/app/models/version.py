@@ -12,10 +12,19 @@ class ModelVersion(Base):
     note = Column(String, nullable=True)
     is_active = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
     accuracy = Column(Float, nullable=True)
     precision = Column(Float, nullable=True)
     recall = Column(Float, nullable=True)
     f1_score = Column(Float, nullable=True)
+
+    # Performance Metrics
+    cpu_utilization = Column(Float, nullable=True) # Percentage (0-100)
+    gpu_utilization = Column(Float, nullable=True) # Percentage (0-100)
+    inference_time = Column(Float, nullable=True)  # ms per inference
+    cpu_memory_usage = Column(Float, nullable=True) # MB
+    gpu_memory_usage = Column(Float, nullable=True) # MB
+    cameras_supported = Column(Integer, nullable=True) # Count
     
     # Confusion Matrix
     tp = Column(Integer, nullable=True)
@@ -24,6 +33,7 @@ class ModelVersion(Base):
     fn = Column(Integer, nullable=True)
 
     parameters = Column(JSONB, default=dict)
+    resource_metrics = Column(JSONB, default=dict)
     
     artifacts = relationship(
         "Artifact",

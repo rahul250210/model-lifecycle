@@ -10,6 +10,11 @@ const FactoryCreate = lazy(() => import("../pages/factories/FactoryCreate"));
 const FactoryOverview = lazy(() => import("../pages/factories/FactoryOverview"));
 
 /* =======================
+   Dashboard Page (Lazy)
+======================= */
+const Dashboard = lazy(() => import("../pages/dashboard/Dashboard"));
+
+/* =======================
    Algorithm Pages (Lazy)
 ======================= */
 const AlgorithmList = lazy(() => import("../pages/algorithms/AlgorithmList"));
@@ -68,7 +73,12 @@ export default function Router() {
         {/* =======================
             Root
         ======================= */}
-        <Route path="/" element={<Navigate to="/factories" replace />} />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+        {/* =======================
+            Dashboard
+        ======================= */}
+        <Route path="/dashboard" element={<Dashboard />} />
 
         {/* =======================
             Factories
@@ -77,7 +87,8 @@ export default function Router() {
         <Route path="/factories/create" element={<FactoryCreate />} />
 
         {/* OPTIONAL overview (not primary entry) */}
-        <Route path="/factories/:factoryId/overview" element={<FactoryOverview />} />
+        {/* Factory Dashboard / Overview */}
+        <Route path="/factories/:factoryId" element={<FactoryOverview />} />
 
         {/* =======================
             Algorithms (PRIMARY ENTRY AFTER FACTORY CLICK)

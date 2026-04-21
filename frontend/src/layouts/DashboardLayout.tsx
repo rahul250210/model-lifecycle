@@ -19,7 +19,8 @@ import {
   Stack,
 } from "@mui/material";
 
-import StorageIcon from "@mui/icons-material/Storage";
+import StorageIconMui from "@mui/icons-material/Storage";
+import DashboardIcon from "@mui/icons-material/Dashboard";
 import LogoutIcon from "@mui/icons-material/Logout";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
@@ -29,6 +30,7 @@ import { useAuthStore } from "../app/authStore";
 import { FactoriesDropdown } from "../components/NestedDropdownComponent";
 import { useTheme } from "../theme/ThemeContext";
 import ThemeToggle from "../components/ThemeToggle";
+import Chatbot from "../components/chat/Chatbot";
 
 const DRAWER_WIDTH_EXPANDED = 320;
 const DRAWER_WIDTH_COLLAPSED = 88;
@@ -60,7 +62,8 @@ export default function DashboardLayout() {
   };
 
   const menuItems = [
-    { label: "Artifacts", icon: <StorageIcon />, path: "/artifacts" },
+    { label: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
+    { label: "Artifacts", icon: <StorageIconMui />, path: "/artifacts" },
   ];
 
   return (
@@ -102,43 +105,50 @@ export default function DashboardLayout() {
             onClick={() => navigate("/")}
             sx={{
               display: 'flex',
-              alignItems: 'center',
-              gap: 1.5,
+              flexDirection: 'column',
+              alignItems: 'flex-start',
               cursor: "pointer",
-              "&:hover .brand-icon": { transform: "rotate(180deg) scale(1.1)" },
-              "&:hover .brand-text": { transform: "scale(1.02)" }
+              transition: "transform 0.4s ease-out",
+              gap: 0,
+
+              "&:hover .mars-text": {
+                filter: `drop-shadow(0 0 12px ${alpha(theme.primary, 0.4)})`,
+                letterSpacing: "0.01rem"
+              }
             }}
           >
-            <Box
-              className="brand-icon"
-              sx={{
-                width: 40,
-                height: 40,
-                borderRadius: "12px",
-                background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary})`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: `0 8px 16px ${alpha(theme.primary, 0.25)}`,
-                transition: "all 0.5s cubic-bezier(0.4, 0, 0.2, 1)"
-              }}
-            >
-              <Typography variant="h5" sx={{ color: "white", fontWeight: "bold" }}>N</Typography>
-            </Box>
             <Typography
-              className="brand-text"
-              variant="h5"
-              fontWeight={800}
+              className="mars-text"
               sx={{
-                letterSpacing: "-0.02em",
-                background: `linear-gradient(to right, ${theme.textMain} 30%, ${theme.primary} 100%)`,
+                fontSize: "1.7rem",
+                fontWeight: 800,
+                letterSpacing: "0.01rem",
+                background: `linear-gradient(135deg, ${theme.textMain} 0%, ${alpha(theme.textMain, 0.6)} 100%)`,
                 WebkitBackgroundClip: "text",
                 WebkitTextFillColor: "transparent",
-                transition: "transform 0.3s",
-                fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif", // Fallback to safe fonts
+                fontFamily: "'Outfit', 'Inter', sans-serif",
+                lineHeight: 0.9,
+                textTransform: "uppercase",
+                transition: "all 0.5s ease"
               }}
             >
-              NexusForge
+              MARS
+            </Typography>
+            <Typography
+              variant="caption"
+              fontWeight={700}
+              sx={{
+                fontSize: "0.6rem",
+                letterSpacing: "0.05rem",
+                color: theme.mode === 'light' ? alpha(theme.textMain, 0.6) : theme.textMuted,
+                textTransform: "uppercase",
+                opacity: 0.7,
+                whiteSpace: 'nowrap',
+                mt: 0.4,
+                pl: 0.2 // Align visually with the M
+              }}
+            >
+              Model Artifact & Repository System
             </Typography>
           </Box>
 
@@ -311,6 +321,7 @@ export default function DashboardLayout() {
           <Outlet />
         </Box>
       </Box>
+      <Chatbot />
     </Box>
   );
 }

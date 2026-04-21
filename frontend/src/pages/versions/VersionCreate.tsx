@@ -36,10 +36,18 @@ import axiosBase from "axios";
 import { useTheme } from "../../theme/ThemeContext";
 import FileUploadDialog from "../../components/FileUploadDialog";
 import { useBackgroundUploader } from "../../contexts/BackgroundUploaderContext";
+import { PerformanceMetricsInput } from "../../components/versions/PerformanceMetricsInput";
+import { ResourceMetricsInput } from "../../components/versions/ResourceMetricsInput";
+import type { MetricItem } from "../../components/versions/ResourceMetricsInput";
 
 const ALLOWED_MODEL_EXTENSIONS = [".pt", ".engine", ".pth", ".onnx", ".h5", ".ckpt"];
 const ALLOWED_LABEL_EXTENSIONS = [".txt", ".json", ".xml"];
 const ALLOWED_CODE_EXTENSIONS = [".py", ".cpp", ".c", ".h", ".hpp", ".cc", ".cxx", ".sh"];
+
+const STANDARD_METRIC_KEYS = [
+  "cpu_utilization", "gpu_utilization", "inference_time",
+  "cpu_memory_usage", "gpu_memory_usage", "cameras_supported"
+];
 
 export default function VersionCreate() {
   const { factoryId, algorithmId, modelId } = useParams();
@@ -55,7 +63,8 @@ export default function VersionCreate() {
   const [modelFiles, setModelFiles] = useState<File[]>([]);
   const [codeFiles, setCodeFiles] = useState<File[]>([]);
 
-  const [metrics, setMetrics] = useState({
+  // Evaluation Metrics (Standard, Fixed)
+  const [evalMetrics, setEvalMetrics] = useState({
     accuracy: "",
     precision: "",
     recall: "",
@@ -65,6 +74,16 @@ export default function VersionCreate() {
     fp: "",
     fn: "",
   });
+
+  // Resource Metrics (Dynamic, Addable/Deletable)
+  const [resourceMetrics, setResourceMetrics] = useState<MetricItem[]>([
+    { key: "cpu_utilization", value: "", unit: "%" },
+    { key: "gpu_utilization", value: "", unit: "%" },
+    { key: "inference_time", value: "", unit: "ms" },
+    { key: "cpu_memory_usage", value: "", unit: "MB" },
+    { key: "gpu_memory_usage", value: "", unit: "MB" },
+    { key: "cameras_supported", value: "", unit: "Count" },
+  ]);
 
   const [parameters, setParameters] = useState({
     batch_size: "",
@@ -203,6 +222,30 @@ export default function VersionCreate() {
   };
 
   const handleSubmit = async () => {
+    // Basic validation
+    for (const m of resourceMetrics) {
+      if (["cpu_utilization", "gpu_utilization"].includes(m.key)) {
+        const val = parseFloat(m.value);
+        if (!isNaN(val) && val > 100) {
+          setError(`${m.key} cannot exceed 100%`);
+          return;
+        }
+      }
+    }
+
+    // Validation for Evaluation Metrics
+    const metricsToValidate = ['accuracy', 'precision', 'recall', 'f1_score'];
+    for (const key of metricsToValidate) {
+      const val = (evalMetrics as any)[key];
+      if (val !== "") {
+        const num = parseFloat(val);
+        if (isNaN(num) || num < 0 || num > 100) {
+          setError(`${key} must be between 0 and 100`);
+          return;
+        }
+      }
+    }
+
     if (datasetFiles.length === 0) {
       setError("Dataset images are required");
       return;
@@ -215,10 +258,6 @@ export default function VersionCreate() {
       setLoading(true);
       setError("");
       const formData = new FormData();
-      // Submit metadata + simple files (Model/Code)
-      // Dataset/Labels will be streamed in background
-      // datasetFiles.forEach((f) => formData.append("dataset_files", f, f.name));
-      // labelFiles.forEach((f) => formData.append("label_files", f, f.name));
 
       if (modelFiles.length > 0) {
         modelFiles.forEach((f) => formData.append("model_files", f, f.name));
@@ -228,9 +267,32 @@ export default function VersionCreate() {
         codeFiles.forEach((f) => formData.append("code_files", f, f.name));
       }
       formData.append("note", note);
-      Object.entries(metrics).forEach(([key, value]) => {
+
+      // Add Evaluation Metrics
+      Object.entries(evalMetrics).forEach(([key, value]) => {
         if (value !== "") formData.append(key, value);
       });
+
+      // Separate Standard vs Custom Resource Metrics
+      const customResourceMetrics: Record<string, any> = {};
+
+      resourceMetrics.forEach((m) => {
+        if (!m.key) return; // Skip empty keys
+
+        if (STANDARD_METRIC_KEYS.includes(m.key)) {
+          // It's a standard column
+          if (m.value !== "") formData.append(m.key, m.value);
+        } else {
+          // It's custom
+          if (m.value !== "") customResourceMetrics[m.key] = { value: m.value, unit: m.unit };
+        }
+      });
+
+      if (Object.keys(customResourceMetrics).length > 0) {
+        formData.append("custom_resource_metrics", JSON.stringify(customResourceMetrics));
+      }
+
+
       Object.entries(parameters).forEach(([key, value]) => {
         if (value !== "") {
           formData.append(key, value);
@@ -315,7 +377,7 @@ export default function VersionCreate() {
           <Box sx={{ py: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <Stack direction="row" spacing={3} alignItems="center">
               <IconButton
-                onClick={() => navigate(-1)}
+                onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`)}
                 sx={{
                   bgcolor: theme.paper,
                   border: `1px solid ${theme.border}`,
@@ -590,31 +652,14 @@ export default function VersionCreate() {
                     <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Evaluation Metrics</Typography>
                   </Stack>
 
-                  <Grid container spacing={3}>
-                    {Object.keys(metrics).map((k) => (
-                      <Grid size={{ xs: 12, sm: 6 }} key={k}>
-                        <Typography variant="caption" fontWeight={600} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{k.replace('_', ' ')} {['tp', 'tn', 'fp', 'fn'].includes(k) ? '' : '(%)'}</Typography>
-                        <TextField
-                          fullWidth
-                          placeholder={['tp', 'tn', 'fp', 'fn'].includes(k) ? "Integer value" : "0.00"}
-                          value={(metrics as any)[k]}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (['tp', 'tn', 'fp', 'fn'].includes(k)) {
-                              if (/^\d*$/.test(val)) {
-                                setMetrics({ ...metrics, [k]: val });
-                              }
-                            } else {
-                              if (/^[0-9.]*$/.test(val)) {
-                                setMetrics({ ...metrics, [k]: val });
-                              }
-                            }
-                          }}
-                          sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px", bgcolor: theme.background, color: theme.textMain } }}
-                        />
-                      </Grid>
-                    ))}
-                  </Grid>
+                  <PerformanceMetricsInput metrics={evalMetrics} onChange={setEvalMetrics} />
+                </CardContent>
+              </Card>
+
+              {/* RESOURCE CONSUMPTION */}
+              <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${theme.border}`, boxShadow: "0px 4px 20px rgba(0,0,0,0.02)", bgcolor: theme.paper }}>
+                <CardContent sx={{ p: 4 }}>
+                  <ResourceMetricsInput metrics={resourceMetrics} onChange={setResourceMetrics} />
                 </CardContent>
               </Card>
 
@@ -818,7 +863,7 @@ export default function VersionCreate() {
               <Button
                 variant="contained"
                 onClick={handleSubmit}
-                disabled={loading}
+                disabled={loading || datasetFiles.length === 0}
                 sx={{
                   borderRadius: "14px",
                   px: 4,
@@ -827,7 +872,12 @@ export default function VersionCreate() {
                   fontWeight: 800,
                   bgcolor: theme.primary,
                   boxShadow: `0 8px 24px ${alpha(theme.primary, 0.3)}`,
-                  "&:hover": { bgcolor: theme.primaryDark, boxShadow: `0 12px 32px ${alpha(theme.primary, 0.4)}` }
+                  "&:hover": { bgcolor: theme.primaryDark, boxShadow: `0 8px 24px ${alpha(theme.primary, 0.3)}`, transform: "none" },
+                  "&.Mui-disabled": {
+                    bgcolor: alpha(theme.primary, 0.4),
+                    color: alpha(theme.paper, 0.5),
+                    boxShadow: "none"
+                  }
                 }}
               >
                 {loading ? <CircularProgress size={24} sx={{ color: '#FFFFFF' }} /> : "Commit Version"}

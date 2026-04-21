@@ -34,6 +34,9 @@ import axiosBase from "axios";
 import { useTheme } from "../../theme/ThemeContext";
 import FileUploadDialog from "../../components/FileUploadDialog";
 import { useBackgroundUploader } from "../../contexts/BackgroundUploaderContext";
+import { ResourceMetricsInput } from "../../components/versions/ResourceMetricsInput";
+import { PerformanceMetricsInput } from "../../components/versions/PerformanceMetricsInput";
+import type { MetricItem } from "../../components/versions/ResourceMetricsInput";
 
 const ALLOWED_MODEL_EXTENSIONS = [
   ".pt",
@@ -57,7 +60,9 @@ export default function VersionEdit() {
   const [note, setNote] = useState("");
   const [isActive, setIsActive] = useState(false);
   const [versionNumber, setVersionNumber] = useState<number>(0);
-  const [metrics, setMetrics] = useState({
+
+  // Split Metrics State
+  const [evalMetrics, setEvalMetrics] = useState({
     accuracy: "",
     precision: "",
     recall: "",
@@ -67,6 +72,8 @@ export default function VersionEdit() {
     fp: "",
     fn: "",
   });
+
+  const [resourceMetrics, setResourceMetrics] = useState<MetricItem[]>([]);
 
   const [parameters, setParameters] = useState({
     batch_size: "",
@@ -81,7 +88,6 @@ export default function VersionEdit() {
   // Artifact States
   const [datasetFiles, setDatasetFiles] = useState<File[]>([]);
   const [labelFiles, setLabelFiles] = useState<File[]>([]);
-
   const [modelFiles, setModelFiles] = useState<File[]>([]);
   const [codeFiles, setCodeFiles] = useState<File[]>([]);
 
@@ -161,6 +167,9 @@ export default function VersionEdit() {
     );
 
 
+  // State for change detection
+  const [initialState, setInitialState] = useState<any>(null);
+
   useEffect(() => {
     const fetchVersion = async () => {
       try {
@@ -171,7 +180,8 @@ export default function VersionEdit() {
         setNote(data.note || "");
         setIsActive(data.is_active || false);
         setVersionNumber(data.version_number);
-        setMetrics({
+
+        const fetchedEvalMetrics = {
           accuracy: data.accuracy?.toString() || "",
           precision: data.precision?.toString() || "",
           recall: data.recall?.toString() || "",
@@ -180,14 +190,51 @@ export default function VersionEdit() {
           tn: data.tn?.toString() || "",
           fp: data.fp?.toString() || "",
           fn: data.fn?.toString() || "",
+        };
+        setEvalMetrics(fetchedEvalMetrics);
+
+        // Build Resource Metrics (Standard + Custom)
+        const rm: MetricItem[] = [];
+
+        // standard keys mapping to units
+        const standards: Record<string, string> = {
+          cpu_utilization: "%",
+          gpu_utilization: "%",
+          inference_time: "ms",
+          cpu_memory_usage: "MB",
+          gpu_memory_usage: "MB",
+          cameras_supported: "Count"
+        };
+
+        Object.entries(standards).forEach(([key, unit]) => {
+          if (data[key] !== null && data[key] !== undefined) {
+            rm.push({ key, value: String(data[key]), unit });
+          }
         });
-        setParameters({
+
+        // Add custom metrics
+        if (data.resource_metrics) {
+          Object.entries(data.resource_metrics).forEach(([k, v]: [string, any]) => {
+            // If it's a simple value, treat as custom metric without unit (or maybe string unit)
+            // If it's object {value, unit}, use it
+            if (typeof v === 'object' && v !== null && 'value' in v) {
+              rm.push({ key: k, value: String(v.value), unit: v.unit || "" });
+            } else {
+              rm.push({ key: k, value: String(v), unit: "" });
+            }
+          });
+        }
+        setResourceMetrics(rm);
+
+
+        const fetchedParams = {
           batch_size: data.parameters?.batch_size?.toString() || "",
           epochs: data.parameters?.epochs?.toString() || "",
           learning_rate: data.parameters?.learning_rate?.toString() || "",
           optimizer: data.parameters?.optimizer || "",
           image_size: data.parameters?.image_size?.toString() || "",
-        });
+        };
+        setParameters(fetchedParams);
 
         // Initialize custom params - exclude standard ones
         const standardKeys = ["batch_size", "epochs", "learning_rate", "optimizer", "image_size"];
@@ -199,6 +246,15 @@ export default function VersionEdit() {
         });
         setCustomParams(custom);
 
+        // Store initial state for comparison
+        setInitialState({
+          note: data.note || "",
+          isActive: data.is_active || false,
+          evalMetrics: fetchedEvalMetrics,
+          resourceMetrics: rm,
+          parameters: fetchedParams,
+          customParams: custom
+        });
 
       } catch (err) {
         console.error("Failed to load version", err);
@@ -209,6 +265,28 @@ export default function VersionEdit() {
     };
     fetchVersion();
   }, [factoryId, algorithmId, modelId, versionId]);
+
+  // Check if form is modified
+  const isModified = () => {
+    if (!initialState) return false;
+
+    // Check artifacts (presence means modification)
+    if (datasetFiles.length > 0 || labelFiles.length > 0 || modelFiles.length > 0 || codeFiles.length > 0) {
+      return true;
+    }
+
+    // Check simple fields
+    if (note !== initialState.note) return true;
+    if (isActive !== initialState.isActive) return true;
+
+    // Check objects using JSON stringify for simple deep comparison
+    if (JSON.stringify(evalMetrics) !== JSON.stringify(initialState.evalMetrics)) return true;
+    if (JSON.stringify(resourceMetrics) !== JSON.stringify(initialState.resourceMetrics)) return true;
+    if (JSON.stringify(parameters) !== JSON.stringify(initialState.parameters)) return true;
+    if (JSON.stringify(customParams) !== JSON.stringify(initialState.customParams)) return true;
+
+    return false;
+  };
 
 
 
@@ -235,7 +313,7 @@ export default function VersionEdit() {
         ? theme.primary
         : active
           ? theme.success
-          : theme.textMuted,
+          : theme.textSecondary,
       fontWeight: 800,
       fontSize: "0.95rem",
       transition: "all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
@@ -293,6 +371,33 @@ export default function VersionEdit() {
       setSaving(true);
       setError("");
 
+      // Stage 1: Validate metrics range
+      // Resource Metrics Validation
+      for (const m of resourceMetrics) {
+        if (["cpu_utilization", "gpu_utilization"].includes(m.key)) {
+          const val = parseFloat(m.value);
+          if (!isNaN(val) && val > 100) {
+            setError(`${m.key} cannot exceed 100%`);
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
+      // Eval Metrics Validation
+      const metricsToValidate = ['accuracy', 'precision', 'recall', 'f1_score'];
+      for (const key of metricsToValidate) {
+        const val = (evalMetrics as any)[key];
+        if (val !== "") {
+          const num = parseFloat(val);
+          if (isNaN(num) || num < 0 || num > 100) {
+            setError(`${key} must be between 0 and 100`);
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
       if (codeFiles.some(f => !hasValidExtension(f, ALLOWED_CODE_EXTENSIONS))) {
         setError("One or more code files have invalid formats.");
         return;
@@ -301,11 +406,33 @@ export default function VersionEdit() {
       const formData = new FormData();
       formData.append("note", note);
 
-      Object.entries(metrics).forEach(([key, value]) => {
-        if (value !== "") {
-          formData.append(key, value);
+      // Add Evaluation Metrics
+      Object.entries(evalMetrics).forEach(([key, value]) => {
+        if (value !== "") formData.append(key, value);
+      });
+
+      // Separate Standard vs Custom Resource Metrics
+      const standardKeys = [
+        "cpu_utilization", "gpu_utilization", "inference_time",
+        "cpu_memory_usage", "gpu_memory_usage", "cameras_supported"
+      ];
+      const customResourceMetrics: Record<string, any> = {};
+
+      resourceMetrics.forEach((m) => {
+        if (!m.key) return; // Skip empty keys
+
+        if (standardKeys.includes(m.key)) {
+          // It's a standard column
+          if (m.value !== "") formData.append(m.key, m.value);
+        } else {
+          // It's custom
+          if (m.value !== "") customResourceMetrics[m.key] = { value: m.value, unit: m.unit };
         }
       });
+
+      if (Object.keys(customResourceMetrics).length > 0) {
+        formData.append("custom_resource_metrics", JSON.stringify(customResourceMetrics));
+      }
 
       Object.entries(parameters).forEach(([key, value]) => {
         if (value !== "") {
@@ -854,6 +981,9 @@ export default function VersionEdit() {
                               justifyContent: "space-between",
                               alignItems: "center",
                               fontSize: 13,
+                              bgcolor: alpha(theme.background, 0.5),
+                              borderColor: theme.border,
+                              color: theme.textMain
                             }}
                           >
                             <Typography
@@ -973,32 +1103,19 @@ export default function VersionEdit() {
                       <Typography variant="caption" sx={{ color: theme.textMuted }}>Update evaluation results from the latest benchmark.</Typography>
                     </Box>
                   </Stack>
-                  <Grid container spacing={4}>
-                    {Object.entries(metrics).map(([key, value]) => (
-                      <Grid size={{ xs: 12, sm: 3 }} key={key}>
-                        <Typography variant="caption" fontWeight={800} sx={{ mb: 1, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: "0.5px" }}>{key.replace('_', ' ')}</Typography>
-                        <TextField
-                          fullWidth
-                          type="number"
-                          placeholder={['tp', 'tn', 'fp', 'fn'].includes(key) ? "Integer" : "0.00"}
-                          inputProps={{ step: ['tp', 'tn', 'fp', 'fn'].includes(key) ? "1" : "0.01", min: 0 }}
-                          value={value}
-                          onChange={(e) => setMetrics({ ...metrics, [key]: e.target.value })}
-                          sx={{
-                            "& .MuiOutlinedInput-root": {
-                              borderRadius: "16px",
-                              bgcolor: alpha(theme.background, 0.5),
-                              color: theme.textMain,
-                              border: `1px solid ${theme.border}`,
-                              "&:hover": { borderColor: theme.primary },
-                              "&.Mui-focused": { borderColor: theme.primary, boxShadow: `0 0 0 4px ${alpha(theme.primary, 0.1)}` }
-                            },
-                            "& .MuiOutlinedInput-notchedOutline": { border: 'none' }
-                          }}
-                        />
-                      </Grid>
-                    ))}
-                  </Grid>
+                  <PerformanceMetricsInput metrics={evalMetrics} onChange={setEvalMetrics} />
+                </CardContent>
+              </Card>
+
+              {/* Resource Consumption */}
+              <Card elevation={0} sx={{
+                borderRadius: "32px",
+                border: `1px solid ${alpha(theme.border, 0.6)}`,
+                bgcolor: theme.paper,
+                boxShadow: "0 4px 32px rgba(0,0,0,0.02)"
+              }}>
+                <CardContent sx={{ p: 5 }}>
+                  <ResourceMetricsInput metrics={resourceMetrics} onChange={setResourceMetrics} />
                 </CardContent>
               </Card>
 
@@ -1035,6 +1152,7 @@ export default function VersionEdit() {
                             <TextField
                               fullWidth
                               value={value}
+                              inputProps={{ style: { color: theme.textMain } }}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 if (/^[0-9.]*$/.test(val)) {
@@ -1108,6 +1226,7 @@ export default function VersionEdit() {
                               size="small"
                               placeholder="Key (e.g. dropout)"
                               value={param.key}
+                              inputProps={{ style: { color: theme.textMain } }}
                               onChange={(e) => {
                                 const newParams = [...customParams];
                                 newParams[index].key = e.target.value;
@@ -1130,6 +1249,7 @@ export default function VersionEdit() {
                               size="small"
                               placeholder="Value"
                               value={param.value}
+                              inputProps={{ style: { color: theme.textMain } }}
                               onChange={(e) => {
                                 const newParams = [...customParams];
                                 newParams[index].value = e.target.value;
@@ -1231,6 +1351,7 @@ export default function VersionEdit() {
                     rows={4}
                     placeholder="Document the changes, architectural shifts, or fixed issues in this revision..."
                     value={note}
+                    inputProps={{ style: { color: theme.textMain } }}
                     onChange={(e) => setNote(e.target.value)}
                     sx={{
                       "& .MuiOutlinedInput-root": {
@@ -1286,7 +1407,7 @@ export default function VersionEdit() {
             <Button
               variant="contained"
               onClick={handleSave}
-              disabled={saving}
+              disabled={saving || !isModified()}
               sx={{
                 borderRadius: "14px",
                 px: 4,
@@ -1295,7 +1416,12 @@ export default function VersionEdit() {
                 fontWeight: 800,
                 bgcolor: theme.primary,
                 boxShadow: `0 8px 24px ${alpha(theme.primary, 0.3)}`,
-                '&:hover': { bgcolor: theme.primaryDark, boxShadow: `0 12px 32px ${alpha(theme.primary, 0.4)}` }
+                '&:hover': { bgcolor: theme.primaryDark, boxShadow: `0 8px 24px ${alpha(theme.primary, 0.3)}`, transform: "none" },
+                "&.Mui-disabled": {
+                  bgcolor: alpha(theme.primary, 0.4),
+                  color: alpha(theme.paper, 0.5),
+                  boxShadow: "none"
+                }
               }}
             >
               {saving ? <CircularProgress size={24} sx={{ color: "white" }} /> : "Commit Version"}
