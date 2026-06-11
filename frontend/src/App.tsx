@@ -6,6 +6,7 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "./theme/ThemeContext";
 import { BackgroundUploaderProvider } from "./contexts/BackgroundUploaderContext";
+import { Toaster } from 'react-hot-toast';
 
 export default function App() {
   // const { checkAuth } = useAuthStore();
@@ -19,6 +20,28 @@ export default function App() {
   return (
     <ThemeProvider>
       <BackgroundUploaderProvider>
+        <Toaster 
+          position="bottom-left"
+          toastOptions={{
+            style: {
+              background: '#333',
+              color: '#fff',
+              borderRadius: '12px',
+            },
+            success: {
+              iconTheme: {
+                primary: '#10B981',
+                secondary: '#fff',
+              },
+            },
+            error: {
+              iconTheme: {
+                primary: '#EF4444',
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
         <Routes>
           {/* Auth routes (no layout) - COMMENTED FOR TESTING */}
           {/* <Route path="/login" element={<Login />} />
@@ -36,7 +59,7 @@ export default function App() {
           </Route>
 
           {/* Root redirect */}
-          <Route path="/" element={<Navigate to="/factories" replace />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BackgroundUploaderProvider>
     </ThemeProvider>

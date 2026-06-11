@@ -19,15 +19,18 @@ import {
   Stack,
 } from "@mui/material";
 
+import { useTranslation } from "react-i18next";
+
 import StorageIconMui from "@mui/icons-material/Storage";
-import DashboardIcon from "@mui/icons-material/Dashboard";
+import FactoryIcon from "@mui/icons-material/Factory";
+// import DashboardIcon from "@mui/icons-material/Dashboard";
 import LogoutIcon from "@mui/icons-material/Logout";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import { useNavigate, useLocation, Outlet } from "react-router-dom";
 import { useState } from "react";
 import { useAuthStore } from "../app/authStore";
-import { FactoriesDropdown } from "../components/NestedDropdownComponent";
+import { AlgorithmsDropdown } from "../components/NestedDropdownComponent";
 import { useTheme } from "../theme/ThemeContext";
 import ThemeToggle from "../components/ThemeToggle";
 import Chatbot from "../components/chat/Chatbot";
@@ -43,6 +46,11 @@ export default function DashboardLayout() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const open = Boolean(anchorEl);
+  const { t, i18n } = useTranslation();
+
+  const handleLanguageToggle = () => {
+    i18n.changeLanguage(i18n.language === "en" ? "ko" : "en");
+  };
 
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -62,8 +70,9 @@ export default function DashboardLayout() {
   };
 
   const menuItems = [
-    { label: "Dashboard", icon: <DashboardIcon />, path: "/dashboard" },
-    { label: "Artifacts", icon: <StorageIconMui />, path: "/artifacts" },
+    // { label: t("sidebar.dashboard", "Dashboard"), icon: <DashboardIcon />, path: "/dashboard" },
+    { label: t("sidebar.factories", "Factories"), icon: <FactoryIcon />, path: "/factories" },
+    { label: t("sidebar.artifacts", "Artifacts"), icon: <StorageIconMui />, path: "/artifacts" },
   ];
 
   return (
@@ -156,6 +165,67 @@ export default function DashboardLayout() {
 
           {/* User Profile */}
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            {/* Animated Language Toggle */}
+            <Box
+              onClick={handleLanguageToggle}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                position: 'relative',
+                width: 72,
+                height: 34,
+                bgcolor: alpha(theme.textMain, 0.05),
+                borderRadius: '20px',
+                cursor: 'pointer',
+                p: 0.5,
+                border: `1px solid ${alpha(theme.border, 0.5)}`,
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                '&:hover': {
+                  bgcolor: alpha(theme.textMain, 0.08),
+                  borderColor: alpha(theme.primary, 0.3)
+                }
+              }}
+            >
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: i18n.language === 'en' ? '2px' : '36px',
+                  width: 32,
+                  height: 28,
+                  bgcolor: theme.primary,
+                  borderRadius: '16px',
+                  transition: 'all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+                  boxShadow: `0 2px 8px ${alpha(theme.primary, 0.4)}`
+                }}
+              />
+              <Typography
+                sx={{
+                  flex: 1,
+                  textAlign: 'center',
+                  zIndex: 1,
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  color: i18n.language === 'en' ? theme.background : theme.textSecondary,
+                  transition: 'color 0.3s'
+                }}
+              >
+                EN
+              </Typography>
+              <Typography
+                sx={{
+                  flex: 1,
+                  textAlign: 'center',
+                  zIndex: 1,
+                  fontSize: '0.75rem',
+                  fontWeight: 800,
+                  color: i18n.language === 'ko' ? theme.background : theme.textSecondary,
+                  transition: 'color 0.3s'
+                }}
+              >
+                KO
+              </Typography>
+            </Box>
             <ThemeToggle />
 
             <Box sx={{ textAlign: "right", display: { xs: "none", sm: "block" } }}>
@@ -242,7 +312,7 @@ export default function DashboardLayout() {
         <Box sx={{ px: 2, py: 4, flexGrow: 1, overflowY: "auto", overflowX: "hidden" }}>
           <List>
 
-            <FactoriesDropdown collapsed={!isSidebarOpen} />
+            <AlgorithmsDropdown collapsed={!isSidebarOpen} />
 
             {menuItems.map((item) => {
               const isActive = location.pathname.startsWith(item.path);

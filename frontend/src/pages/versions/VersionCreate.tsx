@@ -16,9 +16,14 @@ import {
   Paper,
   Stack,
   Tooltip,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
 
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import LayersIcon from "@mui/icons-material/Layers";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AssessmentIcon from "@mui/icons-material/Assessment";
 import InventoryIcon from "@mui/icons-material/Inventory";
@@ -33,6 +38,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 
 import axios from "../../api/axios";
 import axiosBase from "axios";
+import { useTranslation } from "react-i18next";
 import { useTheme } from "../../theme/ThemeContext";
 import FileUploadDialog from "../../components/FileUploadDialog";
 import { useBackgroundUploader } from "../../contexts/BackgroundUploaderContext";
@@ -53,7 +59,34 @@ export default function VersionCreate() {
   const { factoryId, algorithmId, modelId } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const { queueUpload } = useBackgroundUploader();
+
+  interface BaseVersionOption {
+    id: number;
+    version_number: number;
+    accuracy?: number;
+    model_name: string;
+    factory_name: string;
+    created_at: string;
+  }
+
+  const [baseVersions, setBaseVersions] = useState<BaseVersionOption[]>([]);
+  const [baseVersionId, setBaseVersionId] = useState<number | "">("");
+
+  useEffect(() => {
+    const fetchBaseVersions = async () => {
+      try {
+        const res = await axios.get(`/algorithms/${algorithmId}/versions`);
+        setBaseVersions(res.data);
+      } catch (err) {
+        console.error("Failed to load base versions", err);
+      }
+    };
+    if (algorithmId) {
+      fetchBaseVersions();
+    }
+  }, [algorithmId]);
 
   const datasetInputRef = useRef<HTMLInputElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
@@ -69,10 +102,14 @@ export default function VersionCreate() {
     precision: "",
     recall: "",
     f1_score: "",
-    tp: "",
-    tn: "",
-    fp: "",
-    fn: "",
+    frame_tp: "",
+    frame_tn: "",
+    frame_fp: "",
+    frame_fn: "",
+    alert_tp: "",
+    alert_tn: "",
+    alert_fp: "",
+    alert_fn: "",
   });
 
   // Resource Metrics (Dynamic, Addable/Deletable)
@@ -246,8 +283,8 @@ export default function VersionCreate() {
       }
     }
 
-    if (datasetFiles.length === 0) {
-      setError("Dataset images are required");
+    if (!baseVersionId && datasetFiles.length === 0) {
+      setError(t("versionCreate.datasetRequired"));
       return;
     }
 
@@ -307,7 +344,11 @@ export default function VersionCreate() {
         formData.append("custom_params", JSON.stringify(customObj));
       }
 
-      const response = await axios.post(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`, formData, {
+      if (baseVersionId !== "") {
+        formData.append("base_version_id", String(baseVersionId));
+      }
+
+      const response = await axios.post(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions`, formData, {
         signal: controller.signal
       });
 
@@ -338,7 +379,7 @@ export default function VersionCreate() {
         );
       }
 
-      navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`);
+      navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions`);
     } catch (err: any) {
       if (err.name === 'AbortError' || axiosBase.isCancel(err)) {
         console.log("Version creation aborted - backend rollbacked.");
@@ -377,7 +418,7 @@ export default function VersionCreate() {
           <Box sx={{ py: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <Stack direction="row" spacing={3} alignItems="center">
               <IconButton
-                onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`)}
+                onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions`)}
                 sx={{
                   bgcolor: theme.paper,
                   border: `1px solid ${theme.border}`,
@@ -400,10 +441,10 @@ export default function VersionCreate() {
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent"
                 }}>
-                  Commit <Box component="span" sx={{ color: theme.primary, WebkitTextFillColor: "initial" }}>New Version</Box>
+                  Commit <Box component="span" sx={{ color: theme.primary, WebkitTextFillColor: "initial" }}>{t("versionCreate.titleHighlight")}</Box>
                 </Typography>
                 <Typography variant="body2" sx={{ color: theme.textMuted, fontWeight: 600, mt: 0.5 }}>
-                  Register a new iteration with optimized weights and updated datasets.
+                  {t("versionCreate.subtitle")}
                 </Typography>
               </Box>
             </Stack>
@@ -438,11 +479,50 @@ export default function VersionCreate() {
           <Container maxWidth={false} sx={{ py: 4, px: 0 }}>
 
             <Stack spacing={4}>
+              {/* BASE DATASET INHERITANCE */}
+              <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${theme.border}`, boxShadow: "0px 4px 20px rgba(0,0,0,0.02)", bgcolor: theme.paper }}>
+                <CardContent sx={{ p: 3 }}>
+                  <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+                    <LayersIcon sx={{ color: theme.primary }} />
+                    <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>{t("versionCreate.baseInheritance")}</Typography>
+                  </Stack>
+                  <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3 }}>
+                    {t("versionCreate.baseInheritanceDesc")}
+                  </Typography>
+
+                  <FormControl fullWidth size="small">
+                    <InputLabel id="base-version-select-label" sx={{ color: theme.textSecondary }}>
+                      {t("versionCreate.selectBaseVersion")}
+                    </InputLabel>
+                    <Select
+                      labelId="base-version-select-label"
+                      value={baseVersionId}
+                      label={t("versionCreate.selectBaseVersion")}
+                      onChange={(e) => setBaseVersionId(e.target.value as number | "")}
+                      sx={{
+                        borderRadius: "12px",
+                        color: theme.textMain,
+                        bgcolor: theme.mode === 'dark' ? alpha(theme.background, 0.5) : theme.background,
+                        '.MuiOutlinedInput-notchedOutline': { borderColor: theme.border },
+                      }}
+                    >
+                      <MenuItem value="">
+                        <em>{t("versionCreate.noneOption")}</em>
+                      </MenuItem>
+                      {baseVersions.map((bv) => (
+                        <MenuItem key={bv.id} value={bv.id}>
+                          v{bv.version_number} from Model "{bv.model_name}" at Factory "{bv.factory_name}" ({bv.accuracy ? `Acc: ${bv.accuracy}%` : 'No Acc'})
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </CardContent>
+              </Card>
               <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${theme.border}`, boxShadow: "0px 4px 20px rgba(0,0,0,0.02)", bgcolor: theme.paper }}>
                 <CardContent sx={{ p: 3 }}>
                   <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                     <InventoryIcon sx={{ color: theme.primary }} />
-                    <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Dataset Artifacts</Typography>
+                    <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>{t("versionCreate.datasetArtifacts")}</Typography>
                   </Stack>
 
                   <Grid container spacing={2}>
@@ -457,14 +537,14 @@ export default function VersionCreate() {
                         {datasetFiles.length > 0 ? (
                           <>
                             <CheckCircleIcon sx={{ fontSize: 32, mb: 1 }} />
-                            <Typography variant="body1" fontWeight={600}>{datasetFiles.length} Images Staged</Typography>
-                            <Typography variant="caption">Click to update selection</Typography>
+                            <Typography variant="body1" fontWeight={600}>{t("versionCreate.imagesStagedCount", { count: datasetFiles.length })}</Typography>
+                            <Typography variant="caption">{t("versionCreate.clickToUpdate")}</Typography>
                           </>
                         ) : (
                           <>
                             <FolderOpenIcon sx={{ fontSize: 32, mb: 1, color: isDraggingDataset ? theme.primary : 'inherit' }} />
-                            <Typography variant="body1" fontWeight={600}>Dataset Images</Typography>
-                            <Typography variant="caption">Stage folder or files for upload</Typography>
+                            <Typography variant="body1" fontWeight={600}>{t("versionCreate.datasetImages")}</Typography>
+                            <Typography variant="caption">{t("versionCreate.stageFiles")}</Typography>
                           </>
                         )}
                       </Button>
@@ -492,14 +572,14 @@ export default function VersionCreate() {
                         {labelFiles.length > 0 ? (
                           <>
                             <CheckCircleIcon sx={{ fontSize: 32, mb: 1 }} />
-                            <Typography variant="body1" fontWeight={600}>{labelFiles.length} Labels Staged</Typography>
-                            <Typography variant="caption">Click to update selection</Typography>
+                            <Typography variant="body1" fontWeight={600}>{t("versionCreate.labelsStagedCount", { count: labelFiles.length })}</Typography>
+                            <Typography variant="caption">{t("versionCreate.clickToUpdate")}</Typography>
                           </>
                         ) : (
                           <>
                             <UploadFileIcon sx={{ fontSize: 32, mb: 1, color: isDraggingLabels ? theme.primary : 'inherit' }} />
-                            <Typography variant="body1" fontWeight={600}>Localization Labels</Typography>
-                            <Typography variant="caption">Stage folder or files for upload</Typography>
+                            <Typography variant="body1" fontWeight={600}>{t("versionCreate.localizationLabels")}</Typography>
+                            <Typography variant="caption">{t("versionCreate.stageFiles")}</Typography>
                           </>
                         )}
                       </Button>
@@ -525,7 +605,7 @@ export default function VersionCreate() {
                   <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                     <HistoryEduIcon sx={{ color: theme.primary }} />
                     <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>
-                      Model Weights
+                      {t("versionCreate.modelWeights")}
                     </Typography>
                   </Stack>
 
@@ -563,7 +643,7 @@ export default function VersionCreate() {
                       sx={getButtonStyles(modelFiles.length > 0)}
                       startIcon={<UploadFileIcon />}
                     >
-                      Add Model Files (.pt, .onnx, .engine)
+                      {t("versionCreate.addModelFiles")}
                       <input
                         hidden
                         type="file"
@@ -575,7 +655,7 @@ export default function VersionCreate() {
                     </Button>
 
                     <Typography variant="caption" sx={{ color: theme.textMuted }}>
-                      You can upload multiple model variants (fp32, fp16, ONNX, etc.)
+                      {t("versionCreate.modelVariantsHint")}
                     </Typography>
                   </Stack>
                 </CardContent>
@@ -586,7 +666,7 @@ export default function VersionCreate() {
                   <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                     <FolderOpenIcon sx={{ color: theme.primary }} />
                     <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>
-                      Training Code
+                      {t("versionCreate.trainingCode")}
                     </Typography>
                   </Stack>
 
@@ -625,7 +705,7 @@ export default function VersionCreate() {
                       sx={getButtonStyles(codeFiles.length > 0)}
                       startIcon={<UploadFileIcon />}
                     >
-                      {isDraggingCode ? "Drop to Add Code Files" : "Add Code Files (.py, .cpp, .h)"}
+                      {isDraggingCode ? t("versionCreate.dropCodeFiles") : t("versionCreate.addCodeFiles")}
                       <input
                         hidden
                         type="file"
@@ -637,7 +717,7 @@ export default function VersionCreate() {
                     </Button>
 
                     <Typography variant="caption" sx={{ color: theme.textMuted }}>
-                      Include all scripts, header files, and configuration files required for training.
+                      {t("versionCreate.codeFilesHint")}
                     </Typography>
                   </Stack>
                 </CardContent>
@@ -649,7 +729,7 @@ export default function VersionCreate() {
                 <CardContent sx={{ p: 4 }}>
                   <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                     <AssessmentIcon sx={{ color: theme.primary }} />
-                    <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Evaluation Metrics</Typography>
+                    <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>{t("versionCreate.evaluationMetrics")}</Typography>
                   </Stack>
 
                   <PerformanceMetricsInput metrics={evalMetrics} onChange={setEvalMetrics} />
@@ -669,7 +749,7 @@ export default function VersionCreate() {
                   <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                     <SettingsIcon sx={{ color: theme.primary }} />
                     <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>
-                      Training Parameters
+                      {t("versionCreate.trainingParameters")}
                     </Typography>
                   </Stack>
 
@@ -725,14 +805,14 @@ export default function VersionCreate() {
 
                   <Box sx={{ mt: 4, pt: 3, borderTop: `1px dashed ${theme.border}` }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2" fontWeight={700} sx={{ color: theme.textMain }}>Custom Parameters</Typography>
+                      <Typography variant="subtitle2" fontWeight={700} sx={{ color: theme.textMain }}>{t("versionCreate.customParameters")}</Typography>
                       <Button
                         startIcon={<AddIcon />}
                         size="small"
                         onClick={() => setCustomParams([...customParams, { key: "", value: "" }])}
                         sx={{ borderRadius: "8px", textTransform: 'none', fontWeight: 700 }}
                       >
-                        Add Parameter
+                        {t("versionCreate.addParameter")}
                       </Button>
                     </Stack>
 
@@ -743,7 +823,7 @@ export default function VersionCreate() {
                             <TextField
                               fullWidth
                               size="small"
-                              placeholder="Key (e.g. dropout)"
+                              placeholder={t("versionCreate.keyPlaceholder")}
                               value={param.key}
                               onChange={(e) => {
                                 const newParams = [...customParams];
@@ -757,7 +837,7 @@ export default function VersionCreate() {
                             <TextField
                               fullWidth
                               size="small"
-                              placeholder="Value"
+                              placeholder={t("versionCreate.valuePlaceholder")}
                               value={param.value}
                               onChange={(e) => {
                                 const newParams = [...customParams];
@@ -779,7 +859,7 @@ export default function VersionCreate() {
                       ))}
                       {customParams.length === 0 && (
                         <Typography variant="caption" sx={{ color: theme.textMuted, fontStyle: 'italic' }}>
-                          No custom parameters added. Click "Add Parameter" to include more.
+                          {t("versionCreate.noCustomParams")}
                         </Typography>
                       )}
                     </Stack>
@@ -792,13 +872,13 @@ export default function VersionCreate() {
                 <CardContent sx={{ p: 4 }}>
                   <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
                     <DescriptionIcon sx={{ color: theme.primary }} />
-                    <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Version Summary</Typography>
+                    <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>{t("versionCreate.versionSummary")}</Typography>
                   </Stack>
                   <TextField
                     fullWidth
                     multiline
                     rows={3}
-                    placeholder="What changes were made in this iteration? (e.g., Improved lighting augmentations)"
+                    placeholder={t("versionCreate.summaryPlaceholder")}
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     sx={{ "& .MuiOutlinedInput-root": { borderRadius: "16px", bgcolor: theme.background, color: theme.textMain } }}
@@ -828,10 +908,10 @@ export default function VersionCreate() {
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Box>
               <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, textTransform: 'uppercase', letterSpacing: 1 }}>
-                Ready to Deploy?
+                {t("versionCreate.readyToDeploy")}
               </Typography>
               <Typography variant="body2" sx={{ color: theme.textMain }}>
-                Review your artifacts before committing.
+                {t("versionCreate.reviewArtifacts")}
               </Typography>
             </Box>
 
@@ -858,12 +938,12 @@ export default function VersionCreate() {
                   "&:hover": { borderColor: theme.error ? alpha(theme.error, 0.5) : theme.textMuted, bgcolor: alpha(theme.error || theme.textMain, 0.05) }
                 }}
               >
-                {loading ? "Abort Upload" : "Cancel"}
+                {loading ? t("versionCreate.abortUpload") : t("versionCreate.cancel")}
               </Button>
               <Button
                 variant="contained"
                 onClick={handleSubmit}
-                disabled={loading || datasetFiles.length === 0}
+                disabled={loading || (!baseVersionId && datasetFiles.length === 0)}
                 sx={{
                   borderRadius: "14px",
                   px: 4,
@@ -880,7 +960,7 @@ export default function VersionCreate() {
                   }
                 }}
               >
-                {loading ? <CircularProgress size={24} sx={{ color: '#FFFFFF' }} /> : "Commit Version"}
+                {loading ? <CircularProgress size={24} sx={{ color: '#FFFFFF' }} /> : t("versionCreate.commitVersion")}
               </Button>
             </Box>
           </Box>
@@ -890,14 +970,14 @@ export default function VersionCreate() {
         open={datasetDialogOpen}
         onClose={() => setDatasetDialogOpen(false)}
         onUpload={(files) => setDatasetFiles(files)}
-        title="Stage Dataset Artifacts"
+        title={t("versionCreate.stageDatasetTitle")}
       />
 
       <FileUploadDialog
         open={labelDialogOpen}
         onClose={() => setLabelDialogOpen(false)}
         onUpload={(files) => setLabelFiles(files)}
-        title="Stage Label Artifacts"
+        title={t("versionCreate.stageLabelTitle")}
         allowedExtensions={ALLOWED_LABEL_EXTENSIONS}
       />
     </Box >

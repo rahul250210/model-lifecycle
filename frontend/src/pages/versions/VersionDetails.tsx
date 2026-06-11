@@ -51,6 +51,7 @@ import axios, { API_BASE_URL } from "../../api/axios";
 
 import { useTheme } from "../../theme/ThemeContext";
 import ImageModal from "../../components/ImageModal";
+import { useTranslation } from "react-i18next";
 
 interface Version {
   id: number;
@@ -62,10 +63,14 @@ interface Version {
   precision?: number;
   recall?: number;
   f1_score?: number;
-  tp?: number;
-  tn?: number;
-  fp?: number;
-  fn?: number;
+  frame_tp?: number;
+  frame_tn?: number;
+  frame_fp?: number;
+  frame_fn?: number;
+  alert_tp?: number;
+  alert_tn?: number;
+  alert_fp?: number;
+  alert_fn?: number;
   cpu_utilization?: number;
   gpu_utilization?: number;
   inference_time?: number;
@@ -180,6 +185,7 @@ export default function VersionDetails() {
   const { factoryId, algorithmId, modelId, versionId } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const [version, setVersion] = useState<Version | null>(null);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
@@ -229,7 +235,7 @@ export default function VersionDetails() {
         .map(([k]) => [k, "true"])
     );
 
-    const downloadUrl = `${API_BASE_URL}/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}/download?${params.toString()}`;
+    const downloadUrl = `${API_BASE_URL}/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}/download?${params.toString()}`;
 
     // Delay slightly to allow UI to update, then trigger download
     setTimeout(() => {
@@ -249,9 +255,9 @@ export default function VersionDetails() {
     const fetchData = async () => {
       try {
         const [versionRes, artifactsRes, deltaRes] = await Promise.all([
-          axios.get(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}`),
-          axios.get(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}/artifacts`),
-          axios.get(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}/delta`),
+          axios.get(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}`),
+          axios.get(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}/artifacts`),
+          axios.get(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}/delta`),
         ]);
         setVersion(versionRes.data);
         setArtifacts(artifactsRes.data);
@@ -308,7 +314,7 @@ export default function VersionDetails() {
   };
 
   const renderFileList = (items: Artifact[], icon: React.ReactNode, showMetadata: boolean = true) => {
-    if (!items.length) return <Typography variant="caption" sx={{ color: theme.textMuted }}>No associated files</Typography>;
+    if (!items.length) return <Typography variant="caption" sx={{ color: theme.textMuted }}>{t('versionDetails.noAssociatedFiles', 'No associated files')}</Typography>;
 
     return (
       <Stack spacing={1.5}>
@@ -333,7 +339,7 @@ export default function VersionDetails() {
             </Stack>
             <Stack direction="row" spacing={0.5}>
               {items.length > 0 && items[0].type === "model" && !items[0].name.toLowerCase().endsWith(".engine") && !items[0].name.toLowerCase().endsWith(".plan") && (
-                <Tooltip title="View in Netron">
+                <Tooltip title={t('versionDetails.viewInNetron', "View in Netron")}>
                   <IconButton
                     size="small"
                     onClick={() => {
@@ -346,12 +352,12 @@ export default function VersionDetails() {
                 </Tooltip>
               )}
               {showMetadata && (
-                <Tooltip title="View Metadata">
+                <Tooltip title={t('versionDetails.viewMetadata', "View Metadata")}>
                   <IconButton
                     size="small"
                     onClick={() =>
                       navigate(
-                        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}/artifacts/${a.id}`
+                        `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}/artifacts/${a.id}`
                       )
                     }
                   >
@@ -359,8 +365,8 @@ export default function VersionDetails() {
                   </IconButton>
                 </Tooltip>
               )}
-              <Tooltip title="Download"><IconButton size="small" component="a" href={`${API_BASE_URL}/artifacts/${a.id}/download`}><DownloadIcon fontSize="small" sx={{ color: theme.textMuted }} /></IconButton></Tooltip>
-              <Tooltip title="Remove"><IconButton size="small" color="error" onClick={() => setDeleteArtifactId(a.id)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
+              <Tooltip title={t('versionDetails.download', "Download")}><IconButton size="small" component="a" href={`${API_BASE_URL}/artifacts/${a.id}/download`}><DownloadIcon fontSize="small" sx={{ color: theme.textMuted }} /></IconButton></Tooltip>
+              <Tooltip title={t('versionDetails.remove', "Remove")}><IconButton size="small" color="error" onClick={() => setDeleteArtifactId(a.id)}><DeleteIcon fontSize="small" /></IconButton></Tooltip>
             </Stack>
           </Paper>
         ))
@@ -379,7 +385,15 @@ export default function VersionDetails() {
               <Link
                 underline="hover"
                 color="inherit"
-                onClick={() => navigate("/factories")}
+                onClick={() => navigate("/algorithms")}
+                sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
+              >
+                Algorithms
+              </Link>
+              <Link
+                underline="hover"
+                color="inherit"
+                onClick={() => navigate(`/algorithms/${algorithmId}/factories`)}
                 sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
               >
                 Factories
@@ -387,18 +401,18 @@ export default function VersionDetails() {
               <Link
                 underline="hover"
                 color="inherit"
-                onClick={() => navigate(`/factories/${factoryId}/algorithms`)}
+                onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}`)}
                 sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
               >
-                Algorithm
+                Model
               </Link>
               <Link
                 underline="hover"
                 color="inherit"
-                onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}`)}
+                onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions`)}
                 sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
               >
-                Model
+                History
               </Link>
               <Typography color={theme.textMain} fontWeight={700} sx={{ fontSize: '1.2rem' }}>
                 v{version.version_number}
@@ -408,7 +422,7 @@ export default function VersionDetails() {
           <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={3}>
             <Box>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-                <IconButton onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`)} sx={{ bgcolor: theme.paper, border: `1px solid ${theme.border}`, boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
+                <IconButton onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions`)} sx={{ bgcolor: theme.paper, border: `1px solid ${theme.border}`, boxShadow: "0 2px 4px rgba(0,0,0,0.02)" }}>
                   <ArrowBackIcon fontSize="small" sx={{ color: theme.textMain }} />
                 </IconButton>
                 <Stack direction="row" spacing={1}>
@@ -416,17 +430,17 @@ export default function VersionDetails() {
                   {version.is_active && <Chip label="PRODUCTION ACTIVE" sx={{ fontWeight: 500, bgcolor: alpha(theme.success, 0.1), color: theme.success }} />}
                 </Stack>
               </Stack>
-              <Typography variant="h5" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.04em" }}>Version Intelligence</Typography>
+              <Typography variant="h5" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.04em" }}>{t('versionDetails.versionIntelligence', 'Version Intelligence')}</Typography>
             </Box>
 
             <Stack direction="row" spacing={2}>
-              <Button variant="outlined" startIcon={<EditIcon />} onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}/edit`)}
+              <Button variant="outlined" startIcon={<EditIcon />} onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}/edit`)}
                 sx={{ borderRadius: "12px", textTransform: 'none', fontWeight: 700, borderColor: theme.border, color: theme.textMain }}>
-                Edit Details
+                {t('versionDetails.editDetails', 'Edit Details')}
               </Button>
               <Button variant="contained" startIcon={<DownloadIcon />} onClick={() => setDownloadOpen(true)}
                 sx={{ bgcolor: theme.primary, borderRadius: "12px", textTransform: 'none', fontWeight: 700, px: 3, boxShadow: `0 10px 15px -3px ${alpha(theme.primary, 0.4)}` }}>
-                Export Bundle
+                {t('versionDetails.exportBundle', 'Export Bundle')}
               </Button>
             </Stack>
           </Stack>
@@ -439,12 +453,12 @@ export default function VersionDetails() {
               <CardContent sx={{ p: 4 }}>
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
                   <DescriptionIcon sx={{ color: theme.primary }} />
-                  <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Notes & Context</Typography>
+                  <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>{t('versionDetails.notesContext', 'Notes & Context')}</Typography>
                 </Stack>
                 <Typography variant="body1" sx={{ color: theme.textMain, mb: 3, lineHeight: 1.8, bgcolor: alpha(theme.background, 0.5), p: 2, borderRadius: '16px' }}>
-                  {version.note || "No specific notes provided for this model iteration."}
+                  {version.note || t('versionDetails.noNotes', "No specific notes provided for this model iteration.")}
                 </Typography>
-                <Typography variant="caption" fontWeight={600} sx={{ color: theme.textMuted }}>REGISTRATION DATE: {new Date(version.created_at).toLocaleString().toUpperCase()}</Typography>
+                <Typography variant="caption" fontWeight={600} sx={{ color: theme.textMuted }}>{t('versionDetails.registrationDate', 'REGISTRATION DATE')}: {new Date(version.created_at).toLocaleString().toUpperCase()}</Typography>
               </CardContent>
             </Card>
 
@@ -453,13 +467,13 @@ export default function VersionDetails() {
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                   <SettingsIcon sx={{ color: theme.primary }} />
                   <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>
-                    Training Parameters
+                    {t('versionDetails.trainingParameters', 'Training Parameters')}
                   </Typography>
                 </Stack>
 
                 {Object.entries(version.parameters || {}).length === 0 ? (
                   <Typography variant="body2" color={theme.textMuted}>
-                    No parameters recorded.
+                    {t('versionDetails.noParameters', 'No parameters recorded.')}
                   </Typography>
                 ) : (
                   <Grid container spacing={2}>
@@ -494,23 +508,23 @@ export default function VersionDetails() {
               <CardContent sx={{ p: 4 }}>
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 4 }}>
                   <AssessmentIcon sx={{ color: theme.primary }} />
-                  <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Model Performance</Typography>
+                  <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>{t("versionDetails.modelPerformance", "Model Performance")}</Typography>
                 </Stack>
 
                 <Grid container spacing={4}>
                   {/* METRICS SECTION */}
-                  <Grid size={{ xs: 12, md: (version as any).tp !== undefined && (version as any).tp !== null ? 7 : 12 }}>
+                  <Grid size={{ xs: 12 }}>
                     <Typography variant="subtitle2" fontWeight={800} sx={{ color: theme.textSecondary, mb: 3, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.75rem' }}>
-                      Performance Analysis
+                      {t("versionDetails.performanceAnalysis", "Performance Analysis")}
                     </Typography>
                     <Grid container spacing={3}>
                       {[
-                        { label: "Accuracy", value: version.accuracy, desc: "Overall correctness", formula: "(TP + TN) / Total" },
-                        { label: "Precision", value: version.precision, desc: "False positive control", formula: "TP / (TP + FP)" },
-                        { label: "Recall", value: version.recall, desc: "False negative control", formula: "TP / (TP + FN)" },
-                        { label: "F1 Score", value: version.f1_score, desc: "Harmonic mean", formula: "2TP / (2TP + FP + FN)" },
+                        { label: t("versionDetails.accuracy", "Accuracy"), value: version.accuracy, desc: t("versionDetails.overallCorrectness", "Overall correctness"), formula: "(TP + TN) / Total" },
+                        { label: t("versionDetails.precision", "Precision"), value: version.precision, desc: t("versionDetails.falsePositiveControl", "False positive control"), formula: "TP / (TP + FP)" },
+                        { label: t("versionDetails.recall", "Recall"), value: version.recall, desc: t("versionDetails.falseNegativeControl", "False negative control"), formula: "TP / (TP + FN)" },
+                        { label: t("versionDetails.f1Score", "F1 Score"), value: version.f1_score, desc: t("versionDetails.harmonicMean", "Harmonic mean"), formula: "2TP / (2TP + FP + FN)" },
                       ].map((m) => (
-                        <Grid size={{ xs: 12, sm: 6, md: 4 }} key={m.label}>
+                        <Grid size={{ xs: 12, sm: 6, md: 3 }} key={m.label}>
                           <AnimatedCircularProgress
                             value={m.value || 0}
                             label={m.label}
@@ -525,45 +539,87 @@ export default function VersionDetails() {
                   </Grid>
 
                   {/* CONFUSION MATRIX SECTION */}
-                  {(version as any).tp !== undefined && (version as any).tp !== null && (
-                    <Grid size={{ xs: 12, md: 5 }}>
+                  {(version as any).frame_tp !== undefined && (version as any).frame_tp !== null && (
+                    <Grid size={{ xs: 12, md: 6 }}>
                       <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: alpha(theme.background, 0.3), borderRadius: "20px", p: 3, border: `1px dashed ${theme.border}` }}>
                         <Typography variant="subtitle2" fontWeight={700} sx={{ color: theme.textSecondary, mb: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                          Confusion Matrix
+                          {t("versionDetails.confusionMatrixFrame", "Confusion Matrix (Frame-Wise)")}
                         </Typography>
 
                         <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 100px 100px', gap: 1.5, alignItems: 'center' }}>
                           {/* Header Row */}
                           <Box></Box>
-                          <Typography variant="caption" fontWeight={700} align="center" sx={{ color: theme.textMuted }}>PREDICTED<br />YES</Typography>
-                          <Typography variant="caption" fontWeight={700} align="center" sx={{ color: theme.textMuted }}>PREDICTED<br />NO</Typography>
+                          <Typography variant="caption" fontWeight={700} align="center" sx={{ color: theme.textMuted }}>{t("versionDetails.predictedYes", "PREDICTED YES")}</Typography>
+                          <Typography variant="caption" fontWeight={700} align="center" sx={{ color: theme.textMuted }}>{t("versionDetails.predictedNo", "PREDICTED NO")}</Typography>
 
                           {/* Row 1: Actual YES */}
-                          <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, writingMode: 'vertical-rl', transform: 'rotate(180deg)', height: 80, textAlign: 'center' }}>ACTUAL YES</Typography>
+                          <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, writingMode: 'vertical-rl', transform: 'rotate(180deg)', height: 80, textAlign: 'center' }}>{t("versionDetails.actualYes", "ACTUAL YES")}</Typography>
 
                           <Paper elevation={0} sx={{ p: 1, bgcolor: alpha(theme.success, 0.1), border: `1px solid ${theme.success}`, borderRadius: '12px', textAlign: 'center', height: 80, width: 100, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.success }}>{(version as any).tp}</Typography>
+                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.success }}>{(version as any).frame_tp}</Typography>
                             <Typography variant="caption" fontWeight={700} sx={{ color: theme.success, opacity: 0.8 }}>TP</Typography>
                           </Paper>
 
                           <Paper elevation={0} sx={{ p: 1, bgcolor: alpha(theme.error, 0.05), border: `1px solid ${theme.error}`, borderRadius: '12px', textAlign: 'center', height: 80, width: 100, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.error }}>{(version as any).fn}</Typography>
+                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.error }}>{(version as any).frame_fn}</Typography>
                             <Typography variant="caption" fontWeight={700} sx={{ color: theme.error, opacity: 0.8 }}>FN</Typography>
                           </Paper>
 
                           {/* Row 2: Actual NO */}
-                          <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, writingMode: 'vertical-rl', transform: 'rotate(180deg)', height: 80, textAlign: 'center' }}>ACTUAL NO</Typography>
+                          <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, writingMode: 'vertical-rl', transform: 'rotate(180deg)', height: 80, textAlign: 'center' }}>{t("versionDetails.actualNo", "ACTUAL NO")}</Typography>
 
                           <Paper elevation={0} sx={{ p: 1, bgcolor: alpha(theme.warning, 0.1), border: `1px solid ${theme.warning}`, borderRadius: '12px', textAlign: 'center', height: 80, width: 100, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.warning }}>{(version as any).fp}</Typography>
+                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.warning }}>{(version as any).frame_fp}</Typography>
                             <Typography variant="caption" fontWeight={700} sx={{ color: theme.warning, opacity: 0.8 }}>FP</Typography>
                           </Paper>
 
                           <Paper elevation={0} sx={{ p: 1, bgcolor: alpha(theme.info, 0.1), border: `1px solid ${theme.info}`, borderRadius: '12px', textAlign: 'center', height: 80, width: 100, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.info }}>{(version as any).tn}</Typography>
+                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.info }}>{(version as any).frame_tn}</Typography>
                             <Typography variant="caption" fontWeight={700} sx={{ color: theme.info, opacity: 0.8 }}>TN</Typography>
                           </Paper>
+                        </Box>
+                      </Box>
+                    </Grid>
+                  )}
+                  
+                  {(version as any).alert_tp !== undefined && (version as any).alert_tp !== null && (
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: alpha(theme.background, 0.3), borderRadius: "20px", p: 3, border: `1px dashed ${theme.border}` }}>
+                        <Typography variant="subtitle2" fontWeight={700} sx={{ color: theme.textSecondary, mb: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          {t("versionDetails.confusionMatrixAlert", "Confusion Matrix (Alert-Wise)")}
+                        </Typography>
 
+                        <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 100px 100px', gap: 1.5, alignItems: 'center' }}>
+                          {/* Header Row */}
+                          <Box></Box>
+                          <Typography variant="caption" fontWeight={700} align="center" sx={{ color: theme.textMuted }}>{t("versionDetails.predictedYes", "PREDICTED YES")}</Typography>
+                          <Typography variant="caption" fontWeight={700} align="center" sx={{ color: theme.textMuted }}>{t("versionDetails.predictedNo", "PREDICTED NO")}</Typography>
+
+                          {/* Row 1: Actual YES */}
+                          <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, writingMode: 'vertical-rl', transform: 'rotate(180deg)', height: 80, textAlign: 'center' }}>{t("versionDetails.actualYes", "ACTUAL YES")}</Typography>
+
+                          <Paper elevation={0} sx={{ p: 1, bgcolor: alpha(theme.success, 0.1), border: `1px solid ${theme.success}`, borderRadius: '12px', textAlign: 'center', height: 80, width: 100, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.success }}>{(version as any).alert_tp}</Typography>
+                            <Typography variant="caption" fontWeight={700} sx={{ color: theme.success, opacity: 0.8 }}>TP</Typography>
+                          </Paper>
+
+                          <Paper elevation={0} sx={{ p: 1, bgcolor: alpha(theme.error, 0.05), border: `1px solid ${theme.error}`, borderRadius: '12px', textAlign: 'center', height: 80, width: 100, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.error }}>{(version as any).alert_fn}</Typography>
+                            <Typography variant="caption" fontWeight={700} sx={{ color: theme.error, opacity: 0.8 }}>FN</Typography>
+                          </Paper>
+
+                          {/* Row 2: Actual NO */}
+                          <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, writingMode: 'vertical-rl', transform: 'rotate(180deg)', height: 80, textAlign: 'center' }}>{t("versionDetails.actualNo", "ACTUAL NO")}</Typography>
+
+                          <Paper elevation={0} sx={{ p: 1, bgcolor: alpha(theme.warning, 0.1), border: `1px solid ${theme.warning}`, borderRadius: '12px', textAlign: 'center', height: 80, width: 100, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.warning }}>{(version as any).alert_fp}</Typography>
+                            <Typography variant="caption" fontWeight={700} sx={{ color: theme.warning, opacity: 0.8 }}>FP</Typography>
+                          </Paper>
+
+                          <Paper elevation={0} sx={{ p: 1, bgcolor: alpha(theme.info, 0.1), border: `1px solid ${theme.info}`, borderRadius: '12px', textAlign: 'center', height: 80, width: 100, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            <Typography variant="h5" fontWeight={700} sx={{ color: theme.info }}>{(version as any).alert_tn}</Typography>
+                            <Typography variant="caption" fontWeight={700} sx={{ color: theme.info, opacity: 0.8 }}>TN</Typography>
+                          </Paper>
                         </Box>
                       </Box>
                     </Grid>
@@ -577,13 +633,13 @@ export default function VersionDetails() {
               <CardContent sx={{ p: 4 }}>
                 <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 4 }}>
                   <HubIcon sx={{ color: theme.primary }} />
-                  <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Resource Consumption</Typography>
+                  <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>{t('versionDetails.resourceConsumption', 'Resource Consumption')}</Typography>
                 </Stack>
 
                 <Grid container spacing={4}>
                   <Grid size={{ xs: 12 }}>
                     <Typography variant="subtitle2" fontWeight={800} sx={{ color: theme.textSecondary, mb: 3, textTransform: 'uppercase', letterSpacing: '0.1em', fontSize: '0.75rem' }}>
-                      System Utilization
+                      {t('versionDetails.systemUtilization', 'System Utilization')}
                     </Typography>
                     <Grid container spacing={3}>
                       {(() => {
@@ -597,12 +653,12 @@ export default function VersionDetails() {
                           isTime?: boolean;
                           maxValue?: number;
                         }[] = [
-                            { label: "CPU Usage", value: version.cpu_utilization, desc: "Average CPU Load", formula: "% Utilization" },
-                            { label: "GPU Usage", value: version.gpu_utilization, desc: "Average GPU Load", formula: "% Utilization" },
-                            { label: "Inference", value: version.inference_time, desc: "Latency per sample", formula: "Milliseconds (ms)", isTime: true },
-                            { label: "CPU Memory", value: version.cpu_memory_usage, desc: "RAM Usage", formula: "Megabytes (MB)", unit: "MB", maxValue: 32000 },
-                            { label: "GPU Memory", value: version.gpu_memory_usage, desc: "VRAM Usage", formula: "Megabytes (MB)", unit: "MB", maxValue: 24000 },
-                            { label: "Cameras", value: version.cameras_supported, desc: "Max Streams", formula: "Video Streams", unit: "CAMS", maxValue: 64 },
+                            { label: t('versionDetails.cpuUsage', "CPU Usage"), value: version.cpu_utilization, desc: t('versionDetails.averageCpuLoad', "Average CPU Load"), formula: "% Utilization" },
+                            { label: t('versionDetails.gpuUsage', "GPU Usage"), value: version.gpu_utilization, desc: t('versionDetails.averageGpuLoad', "Average GPU Load"), formula: "% Utilization" },
+                            { label: t('versionDetails.inference', "Inference"), value: version.inference_time, desc: t('versionDetails.latencyPerSample', "Latency per sample"), formula: "Milliseconds (ms)", isTime: true },
+                            { label: t('versionDetails.cpuMemory', "CPU Memory"), value: version.cpu_memory_usage, desc: t('versionDetails.ramUsage', "RAM Usage"), formula: "Megabytes (MB)", unit: "MB", maxValue: 32000 },
+                            { label: t('versionDetails.gpuMemory', "GPU Memory"), value: version.gpu_memory_usage, desc: t('versionDetails.vramUsage', "VRAM Usage"), formula: "Megabytes (MB)", unit: "MB", maxValue: 24000 },
+                            { label: t('versionDetails.cameras', "Cameras"), value: version.cameras_supported, desc: t('versionDetails.maxStreams', "Max Streams"), formula: "Video Streams", unit: "CAMS", maxValue: 64 },
                           ];
 
                         // Custom Metrics
@@ -617,7 +673,7 @@ export default function VersionDetails() {
                             items.push({
                               label: k.replace(/_/g, ' '),
                               value: val,
-                              desc: "Custom Metric",
+                              desc: t('versionDetails.customMetric', "Custom Metric"),
                               formula: "Custom",
                               unit: unit,
                               isTime: false,
@@ -654,7 +710,7 @@ export default function VersionDetails() {
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
                   <Stack direction="row" spacing={1.5} alignItems="center">
                     <ImageIcon sx={{ color: theme.primary }} />
-                    <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Dataset Browser</Typography>
+                    <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>{t('versionDetails.datasetBrowser', 'Dataset Browser')}</Typography>
                     <Chip label={`${datasetFiles.length} Images`} size="small" variant="outlined" sx={{ fontWeight: 700, color: theme.textMain, borderColor: theme.border }} />
                   </Stack>
                   {!isFirstVersion && (
@@ -671,7 +727,7 @@ export default function VersionDetails() {
                           }}
                         />
                       }
-                      label={<Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>Show Full Repo</Typography>}
+                      label={<Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>{t('versionDetails.showFullRepo', 'Show Full Repo')}</Typography>}
                     />
                   )}
                 </Stack>
@@ -686,7 +742,7 @@ export default function VersionDetails() {
                 <Box sx={{ width: "100%", maxWidth: { xs: "85vw", md: "100%" }, minWidth: 0, display: "flex", gap: 2.5, overflowX: "auto", pb: 2, cursor: 'grab', minHeight: displayedDataset.length === 0 ? 200 : 'auto', '&::-webkit-scrollbar': { height: '8px' }, '&::-webkit-scrollbar-thumb': { bgcolor: alpha(theme.primary, 0.3), borderRadius: '10px', '&:hover': { bgcolor: alpha(theme.primary, 0.5) } } }}>
                   {displayedDataset.length === 0 ? (
                     <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
-                      <Typography variant="body2" color={theme.textMuted}>No dataset images available</Typography>
+                      <Typography variant="body2" color={theme.textMuted}>{t('versionDetails.noDatasetImages', 'No dataset images available')}</Typography>
                     </Box>
                   ) : (
                     <>
@@ -768,7 +824,7 @@ export default function VersionDetails() {
                           <Box sx={{ mb: 2, p: 1.5, borderRadius: "50%", bgcolor: alpha(theme.primary, 0.08), color: theme.primary }}>
                             <CategoryIcon fontSize="small" />
                           </Box>
-                          <Typography variant="caption" fontWeight={700} sx={{ color: theme.textSecondary, mb: 0.5 }}>Viewing</Typography>
+                          <Typography variant="caption" fontWeight={700} sx={{ color: theme.textSecondary, mb: 0.5 }}>{t('versionDetails.viewing', 'Viewing')}</Typography>
                           <Typography variant="h6" fontWeight={900} sx={{ color: theme.textMain, mb: 2 }}>
                             {Math.min(datasetVisibleCount, displayedDataset.length)} <Box component="span" sx={{ color: theme.textMuted, fontSize: '0.75em' }}>/ {displayedDataset.length}</Box>
                           </Typography>
@@ -782,7 +838,7 @@ export default function VersionDetails() {
                               onClick={() => setDatasetVisibleCount(prev => prev + 5)}
                               sx={{ borderRadius: "10px", textTransform: 'none', fontWeight: 700, boxShadow: 'none', bgcolor: theme.primary, '&:hover': { bgcolor: theme.primaryDark, boxShadow: 'none' }, '&.Mui-disabled': { bgcolor: alpha(theme.textMain, 0.05), color: theme.textMuted } }}
                             >
-                              Show More
+                              {t('versionDetails.showMore', 'Show More')}
                             </Button>
                             <Button
                               fullWidth
@@ -793,7 +849,7 @@ export default function VersionDetails() {
                               onClick={() => setDatasetVisibleCount(prev => Math.max(5, prev - 5))}
                               sx={{ borderRadius: "10px", textTransform: 'none', fontWeight: 700, borderWidth: "2px", borderColor: alpha(theme.textMain, 0.1), color: theme.textSecondary, '&:hover': { borderColor: theme.textMain, bgcolor: alpha(theme.textMain, 0.02), color: theme.textMain }, '&.Mui-disabled': { borderWidth: "1px", borderColor: alpha(theme.textMain, 0.05) } }}
                             >
-                              Show Less
+                              {t('versionDetails.showLess', 'Show Less')}
                             </Button>
                           </Stack>
                         </Card>
@@ -824,7 +880,7 @@ export default function VersionDetails() {
                   <Stack direction="row" spacing={1.5} alignItems="center">
                     <DescriptionIcon sx={{ color: theme.primary }} />
                     <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>
-                      Dataset Labels
+                      {t('versionDetails.datasetLabels', 'Dataset Labels')}
                     </Typography>
                     <Chip
                       label={`${labelFiles.length} Files`}
@@ -879,7 +935,7 @@ export default function VersionDetails() {
                 >
                   {displayedLabels.length === 0 ? (
                     <Box sx={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
-                      <Typography variant="body2" color={theme.textMuted}>No label files available</Typography>
+                      <Typography variant="body2" color={theme.textMuted}>{t('versionDetails.noLabelFiles', 'No label files available')}</Typography>
                     </Box>
                   ) : (
                     <>
@@ -921,12 +977,12 @@ export default function VersionDetails() {
                               </Typography>
 
                               <Stack direction="row" spacing={1}>
-                                <Tooltip title="View Metadata">
+                                <Tooltip title={t('versionDetails.viewMetadata', "View Metadata")}>
                                   <IconButton
                                     size="small"
                                     onClick={() =>
                                       navigate(
-                                        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}/artifacts/${label.id}`
+                                        `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}/artifacts/${label.id}`
                                       )
                                     }
                                   >
@@ -934,7 +990,7 @@ export default function VersionDetails() {
                                   </IconButton>
                                 </Tooltip>
 
-                                <Tooltip title="Download">
+                                <Tooltip title={t('versionDetails.download', "Download")}>
                                   <IconButton
                                     size="small"
                                     component="a"
@@ -989,7 +1045,7 @@ export default function VersionDetails() {
                               onClick={() => setLabelsVisibleCount(prev => prev + 5)}
                               sx={{ borderRadius: "10px", textTransform: 'none', fontWeight: 700, boxShadow: 'none', bgcolor: theme.primary, '&:hover': { bgcolor: theme.primaryDark, boxShadow: 'none' }, '&.Mui-disabled': { bgcolor: alpha(theme.textMain, 0.05), color: theme.textMuted } }}
                             >
-                              More
+                              {t('versionDetails.more', 'More')}
                             </Button>
                             <Button
                               fullWidth
@@ -1000,7 +1056,7 @@ export default function VersionDetails() {
                               onClick={() => setLabelsVisibleCount(prev => Math.max(5, prev - 5))}
                               sx={{ borderRadius: "10px", textTransform: 'none', fontWeight: 700, borderWidth: "2px", borderColor: alpha(theme.textMain, 0.1), color: theme.textSecondary, '&:hover': { borderColor: theme.textMain, bgcolor: alpha(theme.textMain, 0.02), color: theme.textMain }, '&.Mui-disabled': { borderWidth: "1px", borderColor: alpha(theme.textMain, 0.05) } }}
                             >
-                              Less
+                              {t('versionDetails.less', 'Less')}
                             </Button>
                           </Stack>
                         </Card>
@@ -1015,7 +1071,7 @@ export default function VersionDetails() {
             <Box>
               <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                 <HubIcon sx={{ color: theme.primary }} />
-                <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Model Weights</Typography>
+                <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>{t('versionDetails.modelWeights', 'Model Weights')}</Typography>
               </Stack>
               {renderFileList(modelFiles, <HistoryIcon fontSize="small" />, false)}
             </Box>
@@ -1024,7 +1080,7 @@ export default function VersionDetails() {
             <Box>
               <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 3 }}>
                 <CodeIcon sx={{ color: theme.primary }} />
-                <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>Training Source</Typography>
+                <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>{t('versionDetails.trainingSource', 'Training Source')}</Typography>
               </Stack>
               {renderFileList(codeFiles, <CodeIcon fontSize="small" />)}
             </Box>
@@ -1035,9 +1091,9 @@ export default function VersionDetails() {
       {/* ================= DOWNLOAD DIALOG ================= */}
       < Dialog open={downloadOpen} onClose={() => setDownloadOpen(false)
       } PaperProps={{ sx: { borderRadius: '24px', p: 1, bgcolor: theme.background } }}>
-        <DialogTitle sx={{ fontWeight: 700, letterSpacing: "-0.02em", color: theme.textMain }}>Export Version Bundle</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, letterSpacing: "-0.02em", color: theme.textMain }}>{t('versionDetails.exportVersionBundle', 'Export Version Bundle')}</DialogTitle>
         <DialogContent>
-          <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3 }}>Choose the data layers to include in the generated archive.</Typography>
+          <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3 }}>{t('versionDetails.chooseDataLayers', 'Choose the data layers to include in the generated archive.')}</Typography>
           <Stack spacing={1}>
             {["dataset", "labels", "model", "code"].map((k) => {
               const isDisabled =
@@ -1068,7 +1124,7 @@ export default function VersionDetails() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setDownloadOpen(false)} sx={{ fontWeight: 700, color: theme.textMuted, textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={() => setDownloadOpen(false)} sx={{ fontWeight: 700, color: theme.textMuted, textTransform: 'none' }}>{t('versionDetails.cancel', 'Cancel')}</Button>
           <Button
             variant="contained"
             onClick={handleDownload}
@@ -1086,7 +1142,7 @@ export default function VersionDetails() {
             }}
           >
             {downloadLoading ? <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} /> : null}
-            {downloadLoading ? "Starting..." : "Generate ZIP"}
+            {downloadLoading ? t('versionDetails.starting', "Starting...") : t('versionDetails.generateZip', "Generate ZIP")}
           </Button>
         </DialogActions>
       </Dialog >
@@ -1096,15 +1152,15 @@ export default function VersionDetails() {
         onClose={() => setDeleteArtifactId(null)}
         PaperProps={{ sx: { borderRadius: "16px", p: 1, bgcolor: theme.paper, border: `1px solid ${theme.border}` } }}
       >
-        <DialogTitle sx={{ fontWeight: 700, pb: 1, color: theme.textMain }}>Delete Artifact?</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, pb: 1, color: theme.textMain }}>{t('versionDetails.deleteArtifactTitle', 'Delete Artifact?')}</DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ color: theme.textSecondary }}>
-            Are you sure you want to delete this file? This action cannot be undone.
+            {t('versionDetails.deleteArtifactWarning', 'Are you sure you want to delete this file? This action cannot be undone.')}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={() => setDeleteArtifactId(null)} sx={{ color: theme.textSecondary, fontWeight: 700, textTransform: 'none' }}>
-            Cancel
+            {t('versionDetails.cancel', 'Cancel')}
           </Button>
           <Button
             onClick={handleDeleteArtifact}
@@ -1113,7 +1169,7 @@ export default function VersionDetails() {
             sx={{ borderRadius: "8px", fontWeight: 700, boxShadow: 'none', textTransform: 'none' }}
             startIcon={<DeleteIcon />}
           >
-            Delete
+            {t('versionDetails.delete', 'Delete')}
           </Button>
         </DialogActions>
       </Dialog>

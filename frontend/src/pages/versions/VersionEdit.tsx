@@ -29,6 +29,7 @@ import UploadFileIcon from "@mui/icons-material/UploadFile";
 import InventoryIcon from "@mui/icons-material/Inventory";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import axios from "../../api/axios";
 import axiosBase from "axios";
 import { useTheme } from "../../theme/ThemeContext";
@@ -53,6 +54,7 @@ export default function VersionEdit() {
   const { factoryId, algorithmId, modelId, versionId } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const datasetInputRef = useRef<HTMLInputElement>(null);
   const labelInputRef = useRef<HTMLInputElement>(null);
@@ -67,10 +69,14 @@ export default function VersionEdit() {
     precision: "",
     recall: "",
     f1_score: "",
-    tp: "",
-    tn: "",
-    fp: "",
-    fn: "",
+    frame_tp: "",
+    frame_tn: "",
+    frame_fp: "",
+    frame_fn: "",
+    alert_tp: "",
+    alert_tn: "",
+    alert_fp: "",
+    alert_fn: "",
   });
 
   const [resourceMetrics, setResourceMetrics] = useState<MetricItem[]>([]);
@@ -174,7 +180,7 @@ export default function VersionEdit() {
     const fetchVersion = async () => {
       try {
         const res = await axios.get(
-          `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}`
+          `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}`
         );
         const data = res.data;
         setNote(data.note || "");
@@ -186,10 +192,14 @@ export default function VersionEdit() {
           precision: data.precision?.toString() || "",
           recall: data.recall?.toString() || "",
           f1_score: data.f1_score?.toString() || "",
-          tp: data.tp?.toString() || "",
-          tn: data.tn?.toString() || "",
-          fp: data.fp?.toString() || "",
-          fn: data.fn?.toString() || "",
+          frame_tp: data.frame_tp?.toString() || "",
+          frame_tn: data.frame_tn?.toString() || "",
+          frame_fp: data.frame_fp?.toString() || "",
+          frame_fn: data.frame_fn?.toString() || "",
+          alert_tp: data.alert_tp?.toString() || "",
+          alert_tn: data.alert_tn?.toString() || "",
+          alert_fp: data.alert_fp?.toString() || "",
+          alert_fn: data.alert_fn?.toString() || "",
         };
         setEvalMetrics(fetchedEvalMetrics);
 
@@ -586,7 +596,7 @@ export default function VersionEdit() {
 
       // Send the request
       await axios.post(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}/edit`,
+        `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}/edit`,
         formData,
         { signal: controller.signal }
       );
@@ -621,14 +631,14 @@ export default function VersionEdit() {
       // 2️⃣ Activate version if toggle ON
       if (isActive) {
         await axios.post(
-          `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}/checkout`,
+          `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}/checkout`,
           null,
           { signal: controller.signal }
         );
       }
 
       navigate(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionId}`
+        `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}`
       );
     } catch (err: any) {
       if (err.name === 'AbortError' || axiosBase.isCancel(err)) {
@@ -698,10 +708,11 @@ export default function VersionEdit() {
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent"
                 }}>
-                  Refine <Box component="span" sx={{ color: theme.primary, WebkitTextFillColor: "initial" }}>Artifacts</Box>
+                  {t("versionEdit.titlePrefix")}{" "}
+                  <Box component="span" sx={{ color: theme.primary, WebkitTextFillColor: "initial" }}>{t("versionEdit.titleSuffix")}</Box>
                 </Typography>
                 <Typography variant="body2" sx={{ color: theme.textMuted, fontWeight: 600, mt: 0.5 }}>
-                  Precision metadata management and production artifact versioning.
+                  {t("versionEdit.subtitle")}
                 </Typography>
               </Box>
             </Stack>
@@ -748,8 +759,8 @@ export default function VersionEdit() {
                       <InventoryIcon />
                     </Box>
                     <Box>
-                      <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>Inventory Manager</Typography>
-                      <Typography variant="caption" sx={{ color: theme.textMuted }}>Manage datasets, labels, and core artifacts.</Typography>
+                      <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>{t("versionEdit.inventoryManager")}</Typography>
+                      <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("versionEdit.inventoryManagerSub")}</Typography>
                     </Box>
                   </Stack>
 
@@ -758,7 +769,7 @@ export default function VersionEdit() {
                     <Grid size={{ xs: 12, md: 3 }}>
                       <Stack spacing={2} alignItems="center">
                         <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMuted, letterSpacing: "1px" }}>
-                          DATASET REVISION
+                          {t("versionEdit.datasetRevision")}
                         </Typography>
                         <Stack direction="row" spacing={1} sx={{
                           bgcolor: alpha(theme.background, 0.5),
@@ -783,7 +794,7 @@ export default function VersionEdit() {
                               "&:hover": { bgcolor: datasetMode === "replace" ? theme.primary : alpha(theme.primary, 0.05) }
                             }}
                           >
-                            Replace
+                            {t("versionEdit.replace")}
                           </Button>
                           <Button
                             fullWidth
@@ -801,7 +812,7 @@ export default function VersionEdit() {
                               "&:hover": { bgcolor: datasetMode === "append" ? theme.primary : alpha(theme.primary, 0.05) }
                             }}
                           >
-                            Add New
+                            {t("versionEdit.addNew")}
                           </Button>
                         </Stack>
 
@@ -816,14 +827,14 @@ export default function VersionEdit() {
                           {datasetFiles.length > 0 ? (
                             <>
                               <CheckCircleIcon sx={{ mb: 1 }} />
-                              <Typography variant="body2" fontWeight={800}>{datasetFiles.length} Images Staged</Typography>
-                              <Typography variant="caption">Click to update selection</Typography>
+                              <Typography variant="body2" fontWeight={800}>{t("versionEdit.imagesStaged", { count: datasetFiles.length })}</Typography>
+                              <Typography variant="caption">{t("versionEdit.clickToUpdate")}</Typography>
                             </>
                           ) : (
                             <>
                               <UploadFileIcon sx={{ mb: 1 }} />
-                              <Typography variant="body2" fontWeight={800}>{datasetMode === "append" ? "Add Images" : "Replace Images"}</Typography>
-                              <Typography variant="caption">Stage folder or files</Typography>
+                              <Typography variant="body2" fontWeight={800}>{datasetMode === "append" ? t("versionEdit.addImages") : t("versionEdit.replaceImages")}</Typography>
+                              <Typography variant="caption">{t("versionEdit.stageFolderOrFiles")}</Typography>
                             </>
                           )}
                         </Button>
@@ -847,7 +858,7 @@ export default function VersionEdit() {
                     <Grid size={{ xs: 12, md: 3 }}>
                       <Stack spacing={2} alignItems="center">
                         <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMuted, letterSpacing: "1px" }}>
-                          LABEL REVISION
+                          {t("versionEdit.labelRevision")}
                         </Typography>
                         <Stack direction="row" spacing={1} sx={{
                           bgcolor: alpha(theme.background, 0.5),
@@ -872,7 +883,7 @@ export default function VersionEdit() {
                               "&:hover": { bgcolor: labelMode === "replace" ? theme.primary : alpha(theme.primary, 0.05) }
                             }}
                           >
-                            Replace
+                            {t("versionEdit.replace")}
                           </Button>
                           <Button
                             fullWidth
@@ -890,7 +901,7 @@ export default function VersionEdit() {
                               "&:hover": { bgcolor: labelMode === "append" ? theme.primary : alpha(theme.primary, 0.05) }
                             }}
                           >
-                            Add New
+                            {t("versionEdit.addNew")}
                           </Button>
                         </Stack>
 
@@ -905,14 +916,14 @@ export default function VersionEdit() {
                           {labelFiles.length > 0 ? (
                             <>
                               <CheckCircleIcon sx={{ mb: 1 }} />
-                              <Typography variant="body2" fontWeight={800}>{labelFiles.length} Labels Staged</Typography>
-                              <Typography variant="caption">Click to update selection</Typography>
+                              <Typography variant="body2" fontWeight={800}>{t("versionEdit.labelsStaged", { count: labelFiles.length })}</Typography>
+                              <Typography variant="caption">{t("versionEdit.clickToUpdate")}</Typography>
                             </>
                           ) : (
                             <>
                               <UploadFileIcon sx={{ mb: 1 }} />
-                              <Typography variant="body2" fontWeight={800}>{labelMode === "append" ? "Add Labels" : "Replace Labels"}</Typography>
-                              <Typography variant="caption">Stage folder or files</Typography>
+                              <Typography variant="body2" fontWeight={800}>{labelMode === "append" ? t("versionEdit.addLabels") : t("versionEdit.replaceLabels")}</Typography>
+                              <Typography variant="caption">{t("versionEdit.stageFolderOrFiles")}</Typography>
                             </>
                           )}
                         </Button>
@@ -941,7 +952,7 @@ export default function VersionEdit() {
                           fontWeight={800}
                           sx={{ color: theme.textMuted, letterSpacing: "1px" }}
                         >
-                          MODEL BINARIES
+                          {t("versionEdit.modelBinaries")}
                         </Typography>
 
                         <Button
@@ -953,8 +964,8 @@ export default function VersionEdit() {
                           {...getButtonProps(modelFiles.length > 0)}
                         >
                           {modelFiles.length > 0
-                            ? `${modelFiles.length} Binaries Staged`
-                            : "Upload Model Files"}
+                            ? t("versionEdit.binariesStaged", { count: modelFiles.length })
+                            : t("versionEdit.uploadModelFiles")}
                           <input
                             hidden
                             type="file"
@@ -1016,7 +1027,7 @@ export default function VersionEdit() {
                     <Grid size={{ xs: 12, md: 3 }}>
                       <Stack spacing={2} alignItems="center">
                         <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMuted, letterSpacing: "1px" }}>
-                          SOURCE REVISION
+                          {t("versionEdit.sourceRevision")}
                         </Typography>
 
                         <Button
@@ -1031,14 +1042,14 @@ export default function VersionEdit() {
                           {codeFiles.length > 0 ? (
                             <>
                               <CheckCircleIcon sx={{ mb: 1 }} />
-                              <Typography variant="body2" fontWeight={800}>{codeFiles.length} Scripts Staged</Typography>
-                              <Typography variant="caption">Ready for revision</Typography>
+                              <Typography variant="body2" fontWeight={800}>{t("versionEdit.scriptsStaged", { count: codeFiles.length })}</Typography>
+                              <Typography variant="caption">{t("versionEdit.readyForRevision")}</Typography>
                             </>
                           ) : (
                             <>
                               <UploadFileIcon sx={{ mb: 1 }} />
-                              <Typography variant="body2" fontWeight={800}>Update Source</Typography>
-                              <Typography variant="caption">Drag & drop files</Typography>
+                              <Typography variant="body2" fontWeight={800}>{t("versionEdit.updateSource")}</Typography>
+                              <Typography variant="caption">{t("versionEdit.dragDropFiles")}</Typography>
                             </>
                           )}
                           <input
@@ -1099,8 +1110,8 @@ export default function VersionEdit() {
                       <AssessmentIcon />
                     </Box>
                     <Box>
-                      <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>Performance Metrics</Typography>
-                      <Typography variant="caption" sx={{ color: theme.textMuted }}>Update evaluation results from the latest benchmark.</Typography>
+                      <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>{t("versionEdit.performanceMetrics")}</Typography>
+                      <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("versionEdit.performanceMetricsSub")}</Typography>
                     </Box>
                   </Stack>
                   <PerformanceMetricsInput metrics={evalMetrics} onChange={setEvalMetrics} />
@@ -1131,8 +1142,8 @@ export default function VersionEdit() {
                       <SettingsIcon />
                     </Box>
                     <Box>
-                      <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>Hyperparameters</Typography>
-                      <Typography variant="caption" sx={{ color: theme.textMuted }}>Refine the operational parameters for this model version.</Typography>
+                      <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>{t("versionEdit.hyperparameters")}</Typography>
+                      <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("versionEdit.hyperparametersSub")}</Typography>
                     </Box>
                   </Stack>
 
@@ -1197,8 +1208,8 @@ export default function VersionEdit() {
                   <Box sx={{ mt: 5, pt: 4, borderTop: `1px dashed ${theme.border}` }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
                       <Box>
-                        <Typography variant="subtitle1" fontWeight={800} sx={{ color: theme.textMain }}>Custom Parameters</Typography>
-                        <Typography variant="caption" sx={{ color: theme.textMuted }}>Add any additional dynamic parameters for this run.</Typography>
+                        <Typography variant="subtitle1" fontWeight={800} sx={{ color: theme.textMain }}>{t("versionEdit.customParameters")}</Typography>
+                        <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("versionEdit.customParametersSub")}</Typography>
                       </Box>
                       <Button
                         startIcon={<AddIcon />}
@@ -1213,7 +1224,7 @@ export default function VersionEdit() {
                           boxShadow: `0 8px 16px ${alpha(theme.primary, 0.2)}`
                         }}
                       >
-                        Add Field
+                        {t("versionEdit.addField")}
                       </Button>
                     </Stack>
 
@@ -1224,7 +1235,7 @@ export default function VersionEdit() {
                             <TextField
                               fullWidth
                               size="small"
-                              placeholder="Key (e.g. dropout)"
+                              placeholder={t("versionCreate.keyPlaceholder") || "Key (e.g. dropout)"}
                               value={param.key}
                               inputProps={{ style: { color: theme.textMain } }}
                               onChange={(e) => {
@@ -1247,7 +1258,7 @@ export default function VersionEdit() {
                             <TextField
                               fullWidth
                               size="small"
-                              placeholder="Value"
+                              placeholder={t("versionCreate.valuePlaceholder") || "Value"}
                               value={param.value}
                               inputProps={{ style: { color: theme.textMain } }}
                               onChange={(e) => {
@@ -1283,7 +1294,7 @@ export default function VersionEdit() {
                       {customParams.length === 0 && (
                         <Box sx={{ py: 3, textAlign: 'center', border: `1px dashed ${theme.border}`, borderRadius: "16px", bgcolor: alpha(theme.background, 0.3) }}>
                           <Typography variant="caption" sx={{ color: theme.textMuted, fontStyle: 'italic', fontWeight: 600 }}>
-                            No custom parameters defined.
+                            {t("versionEdit.noCustomParams")}
                           </Typography>
                         </Box>
                       )}
@@ -1305,8 +1316,8 @@ export default function VersionEdit() {
                       <CheckCircleIcon />
                     </Box>
                     <Box>
-                      <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>Production Lifecycle</Typography>
-                      <Typography variant="caption" sx={{ color: theme.textMuted }}>Manage visibility and deployment status.</Typography>
+                      <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>{t("versionEdit.productionLifecycle")}</Typography>
+                      <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("versionEdit.productionLifecycleSub")}</Typography>
                     </Box>
                   </Stack>
                   <Paper variant="outlined" sx={{
@@ -1320,10 +1331,29 @@ export default function VersionEdit() {
                     transition: "all 0.3s ease"
                   }}>
                     <Box>
-                      <Typography variant="body1" fontWeight={800} sx={{ color: theme.textMain }}>Promote to Production</Typography>
-                      <Typography variant="body2" color={theme.textMuted}>Activating this version will set it as the primary candidate for live inference.</Typography>
+                      <Typography variant="body1" fontWeight={800} sx={{ color: theme.textMain }}>{t("versionEdit.promoteToProduction")}</Typography>
+                      <Typography variant="body2" color={theme.textMuted}>{t("versionEdit.promoteToProductionSub")}</Typography>
                     </Box>
-                    <FormControlLabel control={<Switch checked={isActive} onChange={(e) => setIsActive(e.target.checked)} color="success" sx={{ '& .MuiSwitch-thumb': { boxShadow: '0 2px 4px rgba(0,0,0,0.2)' } }} />} label="" />
+                    <FormControlLabel 
+                      control={
+                        <Switch 
+                          checked={isActive} 
+                          onChange={(e) => setIsActive(e.target.checked)} 
+                          color="success" 
+                          sx={{ 
+                            '& .MuiSwitch-thumb': { 
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                              bgcolor: isActive ? theme.success : theme.mode === 'dark' ? '#fff' : undefined
+                            },
+                            '& .MuiSwitch-track': {
+                              opacity: 0.6,
+                              bgcolor: isActive ? theme.success : theme.mode === 'dark' ? alpha('#fff', 0.5) : undefined
+                            }
+                          }} 
+                        />
+                      } 
+                      label="" 
+                    />
                   </Paper>
                 </CardContent>
               </Card>
@@ -1341,15 +1371,15 @@ export default function VersionEdit() {
                       <DescriptionIcon />
                     </Box>
                     <Box>
-                      <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>Revision Log</Typography>
-                      <Typography variant="caption" sx={{ color: theme.textMuted }}>Provide context for this update cycle.</Typography>
+                      <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>{t("versionEdit.revisionLog")}</Typography>
+                      <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("versionEdit.revisionLogSub")}</Typography>
                     </Box>
                   </Stack>
                   <TextField
                     fullWidth
                     multiline
                     rows={4}
-                    placeholder="Document the changes, architectural shifts, or fixed issues in this revision..."
+                    placeholder={t("versionEdit.revisionPlaceholder")}
                     value={note}
                     inputProps={{ style: { color: theme.textMain } }}
                     onChange={(e) => setNote(e.target.value)}
@@ -1402,7 +1432,7 @@ export default function VersionEdit() {
                 '&:hover': { bgcolor: alpha(theme.textMain, 0.05), borderColor: theme.textMain }
               }}
             >
-              Cancel
+              {t("versionEdit.cancel")}
             </Button>
             <Button
               variant="contained"
@@ -1424,7 +1454,7 @@ export default function VersionEdit() {
                 }
               }}
             >
-              {saving ? <CircularProgress size={24} sx={{ color: "white" }} /> : "Commit Version"}
+              {saving ? <CircularProgress size={24} sx={{ color: "white" }} /> : t("versionEdit.commitVersion")}
             </Button>
           </Stack>
         </Container>
@@ -1433,14 +1463,14 @@ export default function VersionEdit() {
         open={datasetDialogOpen}
         onClose={() => setDatasetDialogOpen(false)}
         onUpload={(files) => setDatasetFiles(prev => datasetMode === "append" ? [...prev, ...files] : files)}
-        title="Stage Dataset Artifacts"
+        title={t("versionCreate.stageDatasetTitle") || "Stage Dataset Artifacts"}
       />
 
       <FileUploadDialog
         open={labelDialogOpen}
         onClose={() => setLabelDialogOpen(false)}
         onUpload={(files) => setLabelFiles(prev => labelMode === "append" ? [...prev, ...files] : files)}
-        title="Stage Label Artifacts"
+        title={t("versionCreate.stageLabelTitle") || "Stage Label Artifacts"}
         allowedExtensions={ALLOWED_LABEL_EXTENSIONS}
       />
     </Box>

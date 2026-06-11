@@ -31,20 +31,32 @@ import { useTheme } from "../../theme/ThemeContext";
 import FileUploadDialog from "../../components/FileUploadDialog";
 import { useBackgroundUploader } from "../../contexts/BackgroundUploaderContext";
 import ImageModal from "../../components/ImageModal";
+import { useTranslation } from "react-i18next";
 
 const getFileCategory = (name: string) => {
   const ext = name.toLowerCase().split('.').pop();
-  if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext!)) return "Photos & Images";
-  if (['ppt', 'pptx'].includes(ext!)) return "Presentations (PPT)";
-  if (['pdf'].includes(ext!)) return "PDF Documents";
-  if (['py', 'js', 'ts', 'tsx', 'jsx', 'java', 'cpp', 'c', 'h', 'cs', 'go', 'rb', 'php', 'sh', 'bat', 'ps1', 'json', 'xml', 'yaml', 'yml', 'md', 'sql'].includes(ext!)) return "Code & Scripts";
-  return "Other Resources";
+  if (['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext!)) return "images";
+  if (['ppt', 'pptx'].includes(ext!)) return "presentations";
+  if (['pdf'].includes(ext!)) return "documents";
+  if (['py', 'js', 'ts', 'tsx', 'jsx', 'java', 'cpp', 'c', 'h', 'cs', 'go', 'rb', 'php', 'sh', 'bat', 'ps1', 'json', 'xml', 'yaml', 'yml', 'md', 'sql'].includes(ext!)) return "code";
+  return "other";
+};
+
+const getCategoryLabel = (categoryKey: string, t: any) => {
+  switch (categoryKey) {
+    case "images": return t("algorithmArtifact.photosAndImages", "Photos & Images");
+    case "presentations": return t("algorithmArtifact.presentations", "Presentations (PPT)");
+    case "documents": return t("algorithmArtifact.pdfDocuments", "PDF Documents");
+    case "code": return t("algorithmArtifact.codeAndScripts", "Code & Scripts");
+    default: return t("algorithmArtifact.otherResources", "Other Resources");
+  }
 };
 
 export default function AlgorithmArtifactPage() {
   const { algorithmId } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const [files, setFiles] = useState<any[]>([]);
   const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
@@ -97,23 +109,10 @@ export default function AlgorithmArtifactPage() {
     }, 500);
   };
 
-  // Helper to map UI category names to backend keys
-  const getBackendCategory = (uiCategory: string) => {
-    if (uiCategory === "Photos & Images") return "images";
-    if (uiCategory === "Presentations (PPT)") return "presentations";
-    if (uiCategory === "PDF Documents") return "documents";
-    if (uiCategory === "Code & Scripts") return "code";
-    return "other";
-  };
 
   // Helper to check if a category has files
   const hasFiles = (backendKey: string) => {
-    // We need to reverse lookup or iterate all files
-    // Simpler: iterate groupedFiles
-    for (const [uiCat, files] of Object.entries(groupedFiles) as any) {
-      if (getBackendCategory(uiCat) === backendKey && files.length > 0) return true;
-    }
-    return false;
+    return (groupedFiles[backendKey] || []).length > 0;
   };
 
   const handleUpload = (uploadedFiles: File[]) => {
@@ -127,7 +126,7 @@ export default function AlgorithmArtifactPage() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Delete artifact?")) return;
+    if (!confirm(t("algorithmArtifact.deleteConfirm", "Delete artifact?"))) return;
     await axios.delete(`/kb/files/${id}`);
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
@@ -234,15 +233,15 @@ export default function AlgorithmArtifactPage() {
                     '&:hover': { color: theme.primary }
                   }}
                 >
-                  <ArrowBackIcon sx={{ mr: 0.5, fontSize: '1rem', color: theme.textMain }} /> Artifacts
+                  <ArrowBackIcon sx={{ mr: 0.5, fontSize: '1rem', color: theme.textMain }} /> {t("algorithmArtifact.artifacts", "Artifacts")}
                 </MuiLink>
                 <Typography sx={{ color: theme.textMain, fontSize: '0.875rem', fontWeight: 600 }}>
-                  Repository Assets
+                  {t("algorithmArtifact.repositoryAssets", "Repository Assets")}
                 </Typography>
               </Breadcrumbs>
-
+ 
               <Typography variant="h4" fontWeight={900} sx={{ color: theme.textMain, letterSpacing: "-0.04em" }}>
-                Knowledge <Box component="span" sx={{ color: theme.primary }}>Repository</Box>
+                {t("algorithmArtifact.knowledgeRepository", "Knowledge Repository")}
               </Typography>
             </Box>
 
@@ -268,7 +267,7 @@ export default function AlgorithmArtifactPage() {
                   transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)"
                 }}
               >
-                Upload Assets
+                {t("algorithmArtifact.uploadAssets", "Upload Assets")}
               </Button>
               <Button
                 variant="outlined"
@@ -295,7 +294,7 @@ export default function AlgorithmArtifactPage() {
                   "&:hover": { borderColor: theme.primary, color: theme.primary, bgcolor: alpha(theme.primary, 0.04) }
                 }}
               >
-                Export Bundle
+                {t("algorithmArtifact.exportBundle", "Export Bundle")}
               </Button>
             </Stack>
           </Stack>
@@ -316,10 +315,10 @@ export default function AlgorithmArtifactPage() {
             }}
           >
             <Typography variant="h5" fontWeight={800} sx={{ color: theme.textMuted }}>
-              This repository is currently empty.
+              {t("algorithmArtifact.emptyTitle", "This repository is currently empty.")}
             </Typography>
             <Typography sx={{ color: theme.textMuted, mt: 1, fontWeight: 500 }}>
-              Use the upload button above to start adding assets.
+              {t("algorithmArtifact.emptyDesc", "Use the upload button above to start adding assets.")}
             </Typography>
           </Paper>
         ) : (
@@ -336,10 +335,10 @@ export default function AlgorithmArtifactPage() {
                   <CategoryIcon sx={{ fontSize: 24 }} />
                 </Box>
                 <Typography variant="h6" fontWeight={900} sx={{ color: theme.textMain, letterSpacing: '-0.02em' }}>
-                  {category}
+                  {getCategoryLabel(category, t)}
                 </Typography>
                 <Chip
-                  label={`${groupedFiles[category].length} items`}
+                  label={t("algorithmArtifact.itemsCount", { count: groupedFiles[category].length, defaultValue: `${groupedFiles[category].length} items` })}
                   size="small"
                   sx={{
                     fontWeight: 800,
@@ -453,7 +452,7 @@ export default function AlgorithmArtifactPage() {
                                 },
                               }}
                             >
-                              View in Netron
+                              {t("algorithmArtifact.viewInNetron", "View in Netron")}
                             </Button>
                           )}
                           <Button
@@ -485,7 +484,7 @@ export default function AlgorithmArtifactPage() {
                               }
                             }}
                           >
-                            {downloadingId === file.id ? "Starting..." : "Download Resource"}
+                            {downloadingId === file.id ? t("algorithmArtifact.downloadStarting", "Starting...") : t("algorithmArtifact.downloadResource", "Download Resource")}
                           </Button>
                         </Box>
                       </CardContent>
@@ -527,7 +526,7 @@ export default function AlgorithmArtifactPage() {
                     </Box>
 
                     <Typography variant="caption" fontWeight={700} sx={{ color: theme.textSecondary, mb: 0.5 }}>
-                      Viewing
+                      {t("algorithmArtifact.viewing", "Viewing")}
                     </Typography>
                     <Typography variant="h6" fontWeight={900} sx={{ color: theme.textMain, mb: 2 }}>
                       {Math.min(visibleCounts[category] || 5, groupedFiles[category].length)} <Box component="span" sx={{ color: theme.textMuted, fontSize: '0.75em' }}>/ {groupedFiles[category].length}</Box>
@@ -554,7 +553,7 @@ export default function AlgorithmArtifactPage() {
                           '&.Mui-disabled': { bgcolor: alpha(theme.textMain, 0.05), color: theme.textMuted }
                         }}
                       >
-                        Show More
+                        {t("algorithmArtifact.showMore", "Show More")}
                       </Button>
 
                       <Button
@@ -582,7 +581,7 @@ export default function AlgorithmArtifactPage() {
                           '&.Mui-disabled': { borderWidth: "1px", borderColor: alpha(theme.textMain, 0.05) }
                         }}
                       >
-                        Show Less
+                        {t("algorithmArtifact.showLess", "Show Less")}
                       </Button>
                     </Stack>
                   </Card>
@@ -598,18 +597,20 @@ export default function AlgorithmArtifactPage() {
       <Dialog open={downloadDialogOpen} onClose={() => setDownloadDialogOpen(false)}
         PaperProps={{ sx: { borderRadius: '24px', p: 1, bgcolor: theme.background } }}
       >
-        <DialogTitle sx={{ fontWeight: 700, letterSpacing: "-0.02em", color: theme.textMain }}>Download Artifact Bundle</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700, letterSpacing: "-0.02em", color: theme.textMain }}>
+          {t("algorithmArtifact.downloadBundleTitle", "Download Artifact Bundle")}
+        </DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3 }}>
-            Select the categories to include in the ZIP archive.
+            {t("algorithmArtifact.downloadBundleDesc", "Select the categories to include in the ZIP archive.")}
           </Typography>
           <Stack spacing={1}>
             {[
-              { key: "images", label: "Photos & Images" },
-              { key: "presentations", label: "Presentations (PPT)" },
-              { key: "documents", label: "PDF Documents" },
-              { key: "code", label: "Code & Scripts" },
-              { key: "other", label: "Other Resources" }
+              { key: "images", label: t("algorithmArtifact.photosAndImages", "Photos & Images") },
+              { key: "presentations", label: t("algorithmArtifact.presentations", "Presentations (PPT)") },
+              { key: "documents", label: t("algorithmArtifact.pdfDocuments", "PDF Documents") },
+              { key: "code", label: t("algorithmArtifact.codeAndScripts", "Code & Scripts") },
+              { key: "other", label: t("algorithmArtifact.otherResources", "Other Resources") }
             ].map(({ key, label }) => {
               const isDisabled = !hasFiles(key);
               return (
@@ -625,7 +626,7 @@ export default function AlgorithmArtifactPage() {
                   }
                   label={
                     <Typography variant="body2" fontWeight={700} sx={{ color: isDisabled ? theme.textMuted : theme.textMain, opacity: isDisabled ? 0.5 : 1 }}>
-                      {label} {isDisabled && "(Not Available)"}
+                      {label} {isDisabled && `(${t("algorithmArtifact.notAvailable", "Not Available")})`}
                     </Typography>
                   }
                 />
@@ -634,7 +635,9 @@ export default function AlgorithmArtifactPage() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setDownloadDialogOpen(false)} sx={{ fontWeight: 700, color: theme.textMuted, textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={() => setDownloadDialogOpen(false)} sx={{ fontWeight: 700, color: theme.textMuted, textTransform: 'none' }}>
+            {t("algorithmArtifact.cancel", "Cancel")}
+          </Button>
           <Button
             variant="contained"
             onClick={handleDownload}
@@ -652,16 +655,16 @@ export default function AlgorithmArtifactPage() {
             }}
           >
             {downloadLoading ? <CircularProgress size={20} color="inherit" sx={{ mr: 1 }} /> : null}
-            {downloadLoading ? "Preparing..." : "Download ZIP"}
+            {downloadLoading ? t("algorithmArtifact.preparing", "Preparing...") : t("algorithmArtifact.downloadZip", "Download ZIP")}
           </Button>
         </DialogActions>
       </Dialog >
-
+ 
       <FileUploadDialog
         open={uploadDialogOpen}
         onClose={() => setUploadDialogOpen(false)}
         onUpload={handleUpload}
-        title="Stage Algorithm Assets"
+        title={t("algorithmArtifact.uploadDialogTitle", "Stage Algorithm Assets")}
         allowDirectory={true}
       />
 

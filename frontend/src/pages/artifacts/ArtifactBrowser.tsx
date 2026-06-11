@@ -19,10 +19,12 @@ import { useNavigate } from "react-router-dom";
 import axios from "../../api/axios";
 
 import { useTheme } from "../../theme/ThemeContext";
+import { useTranslation } from "react-i18next";
 
 export default function ArtifactBrowser() {
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const [algorithms, setAlgorithms] = useState<any[]>([]);
   const [search, setSearch] = useState("");
@@ -100,7 +102,7 @@ export default function ArtifactBrowser() {
             <Stack direction="row" alignItems="center" spacing={2}>
               {/* Page Title */}
               <Typography variant="h5" fontWeight={900} sx={{ letterSpacing: "-0.02em", color: theme.textMain }}>
-                Artifact <Box component="span" sx={{ color: theme.primary }}>Browser</Box>
+                {t('artifactBrowser.artifact', 'Artifact')} <Box component="span" sx={{ color: theme.primary }}>{t('artifactBrowser.browser', 'Browser')}</Box>
               </Typography>
             </Stack>
 
@@ -120,7 +122,7 @@ export default function ArtifactBrowser() {
                 transition: "all 0.2s"
               }}
             >
-              New Repository
+              {t('artifactBrowser.newRepository', 'New Repository')}
             </Button>
           </Stack>
         </Container>
@@ -161,7 +163,7 @@ export default function ArtifactBrowser() {
             </IconButton>
             <InputBase
               sx={{ ml: 1, flex: 1, fontWeight: 500, color: theme.textMain }}
-              placeholder="Search repositories..."
+              placeholder={t('artifactBrowser.searchRepositories', "Search repositories...")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -183,10 +185,10 @@ export default function ArtifactBrowser() {
               >
                 <FolderIcon sx={{ fontSize: 64, color: theme.textMuted, mb: 2, opacity: 0.5 }} />
                 <Typography variant="h6" fontWeight={700} sx={{ color: theme.textMain, mb: 1 }}>
-                  No Repositories Found
+                  {t('artifactBrowser.noRepositoriesFound', 'No Repositories Found')}
                 </Typography>
                 <Typography variant="body2" sx={{ color: theme.textMuted, maxWidth: 400, textAlign: "center" }}>
-                  Create your first knowledge repository to start organizing artifacts and documentation.
+                  {t('artifactBrowser.noRepositoriesDesc', 'Create your first knowledge repository to start organizing artifacts and documentation.')}
                 </Typography>
                 <Button
                   variant="outlined"
@@ -202,7 +204,7 @@ export default function ArtifactBrowser() {
                     "&:hover": { borderColor: theme.primary, bgcolor: alpha(theme.primary, 0.05) }
                   }}
                 >
-                  Create Repository
+                  {t('artifactBrowser.createRepository', 'Create Repository')}
                 </Button>
               </Box>
             ) : (
@@ -281,12 +283,12 @@ export default function ArtifactBrowser() {
                             mb: 2
                           }}
                         >
-                          {algo.description || "No description provided."}
+                          {algo.description || t('artifactBrowser.noDescription', "No description provided.")}
                         </Typography>
 
                         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: "auto", pt: 2, borderTop: `1px solid ${theme.border}` }}>
                           <Chip
-                            label={`${algo.file_count || 0} Files`}
+                            label={t('artifactBrowser.filesCount', { count: algo.file_count || 0, defaultValue: `${algo.file_count || 0} Files` })}
                             size="small"
                             sx={{ bgcolor: theme.background, fontWeight: 700, color: theme.textSecondary }}
                           />
@@ -295,7 +297,7 @@ export default function ArtifactBrowser() {
                             onClick={() => navigate(`/artifacts/algorithms/${algo.id}`)}
                             sx={{ fontWeight: 700, color: theme.primary, textTransform: "none" }}
                           >
-                            Open Repository
+                            {t('artifactBrowser.openRepository', 'Open Repository')}
                           </Button>
                         </Stack>
 
@@ -318,13 +320,13 @@ export default function ArtifactBrowser() {
         PaperProps={{ sx: { borderRadius: "24px", p: 1, minWidth: 400, bgcolor: theme.paper } }}
       >
         <DialogTitle fontWeight={900} sx={{ pb: 1, color: theme.textMain }}>
-          New Repository
+          {t('artifactBrowser.newRepository', 'New Repository')}
         </DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             fullWidth
-            label="Repository Name"
+            label={t('artifactBrowser.repositoryName', "Repository Name")}
             value={newAlgoName}
             onChange={(e) => setNewAlgoName(e.target.value)}
             sx={{
@@ -335,12 +337,12 @@ export default function ArtifactBrowser() {
           />
           <TextField
             fullWidth
-            label="Description"
+            label={t('artifactBrowser.description', "Description")}
             multiline
             rows={3}
             value={newAlgoDesc}
             onChange={(e) => setNewAlgoDesc(e.target.value)}
-            placeholder="What is this algorithm for?"
+            placeholder={t('artifactBrowser.descriptionPlaceholder', "What is this algorithm for?")}
             sx={{
               "& .MuiOutlinedInput-root": { color: theme.textMain, borderRadius: "12px", "& fieldset": { borderColor: theme.border } },
               "& .MuiInputLabel-root": { color: theme.textMuted }
@@ -348,7 +350,7 @@ export default function ArtifactBrowser() {
           />
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setOpenModal(false)} sx={{ fontWeight: 700, color: theme.textMuted }}>Cancel</Button>
+          <Button onClick={() => setOpenModal(false)} sx={{ fontWeight: 700, color: theme.textMuted }}>{t('artifactBrowser.cancel', 'Cancel')}</Button>
           <Button
             variant="contained"
             onClick={handleCreateAlgo}
@@ -365,7 +367,7 @@ export default function ArtifactBrowser() {
               }
             }}
           >
-            Create
+            {t('artifactBrowser.create', 'Create')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -377,12 +379,12 @@ export default function ArtifactBrowser() {
         PaperProps={{ sx: { borderRadius: "24px", p: 1, minWidth: 500, bgcolor: theme.background } }}
       >
         <DialogTitle sx={{ fontWeight: 900, color: theme.textMain, letterSpacing: "-0.02em", pt: 3 }}>
-          Edit Repository
+          {t('artifactBrowser.editRepository', 'Edit Repository')}
         </DialogTitle>
         <DialogContent sx={{ py: 1 }}>
           <Stack spacing={3} sx={{ mt: 1 }}>
             <Box>
-              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Repository Name</Typography>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{t('artifactBrowser.repositoryName', 'Repository Name')}</Typography>
               <TextField
                 fullWidth
                 variant="outlined"
@@ -394,7 +396,7 @@ export default function ArtifactBrowser() {
               />
             </Box>
             <Box>
-              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Description</Typography>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{t('artifactBrowser.description', 'Description')}</Typography>
               <TextField
                 fullWidth
                 multiline
@@ -411,7 +413,7 @@ export default function ArtifactBrowser() {
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
           <Button onClick={() => setEditAlgo(null)} sx={{ fontWeight: 700, color: theme.textMuted, textTransform: 'none', px: 3 }}>
-            Cancel
+            {t('artifactBrowser.cancel', 'Cancel')}
           </Button>
           <Button
             variant="contained"
@@ -432,7 +434,7 @@ export default function ArtifactBrowser() {
             }}
             disabled={!editName.trim()}
           >
-            Save Changes
+            {t('artifactBrowser.saveChanges', 'Save Changes')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -451,8 +453,8 @@ export default function ArtifactBrowser() {
               <FolderIcon />
             </Box>
             <Box>
-              <Typography variant="h5" fontWeight={900} sx={{ lineHeight: 1, color: theme.textMain }}>Repository Details</Typography>
-              <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 700 }}>READ MODE</Typography>
+              <Typography variant="h5" fontWeight={900} sx={{ lineHeight: 1, color: theme.textMain }}>{t('artifactBrowser.repositoryDetails', 'Repository Details')}</Typography>
+              <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 700 }}>{t('artifactBrowser.readMode', 'READ MODE')}</Typography>
             </Box>
           </Stack>
           <IconButton onClick={() => setViewAlgo(null)} sx={{ bgcolor: theme.surface, border: `1px solid ${theme.border}` }}>
@@ -463,7 +465,7 @@ export default function ArtifactBrowser() {
           <Stack spacing={4}>
             <Box>
               <Typography variant="overline" fontWeight={800} sx={{ color: theme.textMuted, letterSpacing: "0.05em", mb: 1, display: 'block' }}>
-                REPOSITORY NAME
+                {t('artifactBrowser.repositoryNameUpper', 'REPOSITORY NAME')}
               </Typography>
               <Typography variant="h4" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>
                 {viewAlgo?.name}
@@ -472,7 +474,7 @@ export default function ArtifactBrowser() {
 
             <Box>
               <Typography variant="overline" fontWeight={800} sx={{ color: theme.textMuted, letterSpacing: "0.05em", mb: 1.5, display: 'block' }}>
-                DESCRIPTION
+                {t('artifactBrowser.descriptionUpper', 'DESCRIPTION')}
               </Typography>
               <Paper
                 elevation={0}
@@ -485,7 +487,7 @@ export default function ArtifactBrowser() {
                 }}
               >
                 <Typography variant="body1" sx={{ whiteSpace: "pre-wrap", lineHeight: 1.8, color: theme.textMain }}>
-                  {viewAlgo?.description || "No description available for this repository."}
+                  {viewAlgo?.description || t('artifactBrowser.noDescriptionAvailable', "No description available for this repository.")}
                 </Typography>
               </Paper>
             </Box>
@@ -506,7 +508,7 @@ export default function ArtifactBrowser() {
               "&:hover": { bgcolor: theme.surface, borderColor: theme.textMuted }
             }}
           >
-            Close Viewer
+            {t('artifactBrowser.closeViewer', 'Close Viewer')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -518,18 +520,18 @@ export default function ArtifactBrowser() {
         PaperProps={{ sx: { borderRadius: "24px", p: 2, bgcolor: theme.paper } }}
       >
         <DialogTitle fontWeight={900} sx={{ color: theme.error }}>
-          Delete Repository?
+          {t('artifactBrowser.deleteRepository', 'Delete Repository?')}
         </DialogTitle>
         <DialogContent>
           <Typography sx={{ color: theme.textSecondary }}>
-            Are you sure you want to delete <strong>{deleteAlgoName}</strong>?
+            {t('artifactBrowser.deleteAreYouSure', 'Are you sure you want to delete')} <strong>{deleteAlgoName}</strong>?
           </Typography>
           <Typography variant="caption" sx={{ display: "block", mt: 2, color: theme.textMuted }}>
-            This action is permanent and will remove all uploaded documents.
+            {t('artifactBrowser.deletePermanent', 'This action is permanent and will remove all uploaded documents.')}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ pt: 2 }}>
-          <Button onClick={() => setDeleteAlgoId(null)} sx={{ fontWeight: 700, color: theme.textMuted }}>Cancel</Button>
+          <Button onClick={() => setDeleteAlgoId(null)} sx={{ fontWeight: 700, color: theme.textMuted }}>{t('artifactBrowser.cancel', 'Cancel')}</Button>
           <Button
             variant="contained"
             color="error"
@@ -547,7 +549,7 @@ export default function ArtifactBrowser() {
             }}
             sx={{ borderRadius: "10px", fontWeight: 700, px: 3, bgcolor: theme.error }}
           >
-            {deleting ? "Deleting..." : "Delete Permanently"}
+            {deleting ? t('artifactBrowser.deleting', "Deleting...") : t('artifactBrowser.deletePermanently', "Delete Permanently")}
           </Button>
         </DialogActions>
       </Dialog>

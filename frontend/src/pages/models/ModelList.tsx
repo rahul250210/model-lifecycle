@@ -25,6 +25,7 @@ import HubIcon from "@mui/icons-material/Hub";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
+import FactoryIcon from "@mui/icons-material/Factory";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HistoryIcon from "@mui/icons-material/History";
@@ -36,12 +37,16 @@ import CircularProgress from "@mui/material/CircularProgress";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axios";
 
+import toast from "react-hot-toast";
+
 import { useTheme } from "../../theme/ThemeContext";
+import { useTranslation } from "react-i18next";
 
 export default function ModelList() {
   const { factoryId, algorithmId } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const [models, setModels] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,14 +60,16 @@ export default function ModelList() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [factoryReportLoading, setFactoryReportLoading] = useState(false);
 
   // Delete Dialog States
   const [deleteOpen, setDeleteOpen] = useState(false);
 
-  const handleGenerateAlgorithmReport = async () => {
+  const handleGenerateFactoryReport = async () => {
+    setFactoryReportLoading(true);
     try {
       const response = await axios.get(
-        `/factories/${factoryId}/algorithms/${algorithmId}/report`,
+        `/factories/${factoryId}/report`,
         { responseType: 'blob' }
       );
 
@@ -71,7 +78,7 @@ export default function ModelList() {
       link.href = url;
 
       const contentDisposition = response.headers['content-disposition'];
-      let filename = `${algorithmName.replace(/ /g, '_').toLowerCase()}_report.csv`;
+      let filename = `factory_${factoryName.replace(/ /g, '_').toLowerCase()}_report.csv`;
       if (contentDisposition) {
         const match = contentDisposition.match(/filename="?([^"]+)"?/);
         if (match && match.length === 2) {
@@ -85,9 +92,12 @@ export default function ModelList() {
 
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
+      toast.success(t('factoryList.reportSuccess', "Report downloaded successfully"));
     } catch (error) {
-      console.error("Error downloading algorithm report:", error);
-      alert("Failed to generate algorithm report");
+      console.error("Error downloading factory report:", error);
+      toast.error(t('factoryList.reportFail', "Failed to generate report. Please try again."));
+    } finally {
+      setFactoryReportLoading(false);
     }
   };
 
@@ -95,7 +105,7 @@ export default function ModelList() {
     e.stopPropagation();
     try {
       const response = await axios.get(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models/${model.id}/report`,
+        `/algorithms/${algorithmId}/factories/${factoryId}/models/${model.id}/report`,
         { responseType: 'blob' }
       );
 
@@ -118,9 +128,10 @@ export default function ModelList() {
 
       window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
+      toast.success(t('modelList.modelReportSuccess', "Model report downloaded"));
     } catch (error) {
       console.error("Error downloading report:", error);
-      alert("Failed to generate model report");
+      toast.error(t('modelList.modelReportFail', "Failed to generate model report"));
     }
   };
 
@@ -128,22 +139,18 @@ export default function ModelList() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Using Promise.allReflected if one fails? No, normal Promise.all
-        // Need to be careful about 404s if fetching all algorithms but simple error catching is fine for now
-        const [modelsRes, factoryRes, allAlgosRes] = await Promise.all([
-          axios.get(`/factories/${factoryId}/algorithms/${algorithmId}/models`),
+        const [modelsRes, factoryRes, algoRes] = await Promise.all([
+          axios.get(`/algorithms/${algorithmId}/factories/${factoryId}/models`),
           axios.get(`/factories/${factoryId}`),
-          axios.get(`/factories/${factoryId}/algorithms`)
+          axios.get(`/algorithms/${algorithmId}`)
         ]);
 
         setModels(modelsRes.data);
         if (factoryRes.data && factoryRes.data.name) {
           setFactoryName(factoryRes.data.name);
         }
-
-        const currentAlgo = (allAlgosRes.data as any[]).find((a: any) => a.id == algorithmId);
-        if (currentAlgo) {
-          setAlgorithmName(currentAlgo.name);
+        if (algoRes.data && algoRes.data.name) {
+          setAlgorithmName(algoRes.data.name);
         }
 
       } catch (err) {
@@ -172,7 +179,7 @@ export default function ModelList() {
             <Box>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
                 <IconButton
-                  onClick={() => navigate(`/factories/${factoryId}/algorithms`)}
+                  onClick={() => navigate(`/algorithms/${algorithmId}/factories`)}
                   sx={{
                     bgcolor: theme.paper,
                     border: `1px solid ${theme.border}`,
@@ -185,34 +192,55 @@ export default function ModelList() {
                 <Breadcrumbs separator={<NavigateNextIcon fontSize="small" sx={{ color: theme.textSecondary }} />} aria-label="breadcrumb">
                   <Link
                     underline="hover"
-                    onClick={() => navigate(`/factories/${factoryId}`)}
+                    onClick={() => navigate(`/algorithms`)}
                     sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textSecondary }}
                   >
-                    {factoryName}
+                    {t('modelList.algorithms', 'Algorithms')}
                   </Link>
                   <Link
                     underline="hover"
                     color="inherit"
-                    onClick={() => navigate(`/factories/${factoryId}/algorithms`)}
+                    onClick={() => navigate(`/algorithms/${algorithmId}/factories`)}
                     sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textSecondary }}
                   >
-                    {factoryName}
+                    {algorithmName}
                   </Link>
-                  <Typography fontWeight={700} sx={{ fontSize: '1.2rem', color: theme.textMain }}>{algorithmName}</Typography>
+                  <Typography fontWeight={700} sx={{ fontSize: '1.2rem', color: theme.textMain }}>{factoryName}</Typography>
                 </Breadcrumbs>
               </Stack>
               <Typography variant="h5" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em", mb: 1 }}>
-                Model <Box component="span" sx={{ color: theme.primary }}>Repository</Box>
+                {t('modelList.model', 'Model')} <Box component="span" sx={{ color: theme.primary }}>{t('modelList.repository', 'Repository')}</Box>
               </Typography>
               <Typography variant="h6" sx={{ color: theme.textMuted, fontWeight: 400, maxWidth: 600 }}>
-                Manage specific model implementations and track their version history.
+                {t('modelList.subtitle', 'Manage specific model implementations and track their version history.')}
               </Typography>
             </Box >
             <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 1 }}>
               <Button
                 variant="outlined"
-                startIcon={<DownloadIcon />}
-                onClick={handleGenerateAlgorithmReport}
+                startIcon={<FactoryIcon />}
+                onClick={() => navigate(`/factories/${factoryId}`)}
+                sx={{
+                  borderRadius: "14px",
+                  fontWeight: 700,
+                  fontSize: "1rem",
+                  px: 3,
+                  py: 1.5,
+                  textTransform: 'none',
+                  border: `1px solid ${theme.border}`,
+                  color: theme.primary,
+                  borderColor: alpha(theme.primary, 0.5),
+                  bgcolor: alpha(theme.primary, 0.05),
+                  "&:hover": { bgcolor: alpha(theme.primary, 0.1), borderColor: theme.primary },
+                }}
+              >
+                {t('modelList.factoryOverview', 'Factory Overview')}
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={factoryReportLoading ? <CircularProgress size={14} sx={{ color: theme.success }} /> : <DownloadIcon />}
+                onClick={handleGenerateFactoryReport}
+                disabled={factoryReportLoading}
                 sx={{
                   borderRadius: "14px",
                   fontWeight: 700,
@@ -227,12 +255,12 @@ export default function ModelList() {
                   "&:hover": { bgcolor: alpha(theme.success, 0.1), borderColor: theme.success },
                 }}
               >
-                Algorithm Report
+                {factoryReportLoading ? t('factoryOverview.generating', 'Generating…') : t('modelList.factoryReport', 'Factory Report')}
               </Button>
               <Button
                 variant="contained"
                 startIcon={<AddIcon />}
-                onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/create`)}
+                onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/create`)}
                 sx={{
                   bgcolor: theme.primary,
                   px: 4,
@@ -246,7 +274,7 @@ export default function ModelList() {
                   transition: "all 0.2s",
                 }}
               >
-                Add Model
+                {t('modelList.addModel', 'Add Model')}
               </Button>
             </Stack>
           </Stack >
@@ -264,6 +292,7 @@ export default function ModelList() {
                     bgcolor: theme.paper,
                     border: `1px solid ${theme.border}`,
                     transition: "all 0.3s",
+                    cursor: "pointer",
                     "&:hover": {
                       borderColor: theme.primary,
                       boxShadow: `0 25px 30px -5px ${alpha("#000", 0.08)}`,
@@ -271,14 +300,15 @@ export default function ModelList() {
                     },
                   }}
                   elevation={0}
+                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${model.id}`)}
                 >
                   <CardContent sx={{ p: 3 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
                       <Box sx={{ p: 1, bgcolor: alpha(theme.primary, 0.08), borderRadius: "10px" }}>
                         <HubIcon sx={{ color: theme.primary, fontSize: 20 }} />
                       </Box>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <IconButton size="small" onClick={(e) => handleGenerateReport(model, e)} title="Download Model Report">
+                      <Box sx={{ display: 'flex', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
+                        <IconButton size="small" onClick={(e) => handleGenerateReport(model, e)} title={t('modelList.downloadModelReport', 'Download Model Report')}>
                           <DownloadIcon fontSize="small" sx={{ color: theme.success }} />
                         </IconButton>
                         <IconButton size="small" onClick={(e) => {
@@ -305,14 +335,14 @@ export default function ModelList() {
                     </Typography>
 
                     <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3, minHeight: 40, lineHeight: 1.6 }}>
-                      {model.description || "No description provided for this model instance."}
+                      {model.description || t('modelList.noDescription', 'No description provided for this model instance.')}
                     </Typography>
 
                     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ pt: 3, borderTop: `1px solid ${theme.border}`, flexWrap: "wrap", gap: 1 }}>
                       <Stack direction="row" spacing={2} alignItems="center">
                         <Chip
                           icon={<HistoryIcon style={{ fontSize: 18 }} />}
-                          label={`${model.versions_count} Versions`}
+                          label={t('modelList.versions', '{{count}} Versions', { count: model.versions_count })}
                           sx={{
                             bgcolor: theme.primaryLight,
                             color: theme.primary,
@@ -322,13 +352,12 @@ export default function ModelList() {
                           }}
                         />
                         <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 600 }}>
-                          Created {new Date(model.created_at).toLocaleDateString()}
+                          {t('modelList.created', 'Created {{date}}', { date: new Date(model.created_at).toLocaleDateString() })}
                         </Typography>
                       </Stack>
 
                       <Box
                         className="arrow-icon"
-                        onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${model.id}`)}
                         sx={{
                           opacity: 0,
                           transform: "translateX(-10px)",
@@ -337,13 +366,12 @@ export default function ModelList() {
                           display: 'flex',
                           alignItems: 'center',
                           gap: 1,
-                          cursor: 'pointer',
                           p: 1,
                           borderRadius: '8px',
                           '&:hover': { bgcolor: alpha(theme.primary, 0.05) }
                         }}
                       >
-                        <Typography variant="button" fontWeight={700}>Versions</Typography>
+                        <Typography variant="button" fontWeight={700}>{t('modelList.versionsLink', 'Versions')}</Typography>
                         <ArrowForwardIcon />
                       </Box>
                     </Stack>
@@ -359,8 +387,8 @@ export default function ModelList() {
           models.length === 0 && (
             <Paper variant="outlined" sx={{ py: 15, textAlign: 'center', borderRadius: '32px', borderStyle: 'dashed', bgcolor: 'transparent' }}>
               <HubIcon sx={{ fontSize: 64, color: alpha(theme.textMuted, 0.2), mb: 3 }} />
-              <Typography variant="h5" fontWeight={700} color={theme.textMain}>No models registered</Typography>
-              <Typography variant="body1" color={theme.textMuted}>Get started by adding your first model implementation to this algorithm.</Typography>
+              <Typography variant="h5" fontWeight={700} color={theme.textMain}>{t('modelList.noModelsTitle', 'No models registered')}</Typography>
+              <Typography variant="body1" color={theme.textMuted}>{t('modelList.noModelsDesc', 'Get started by adding your first model implementation to this algorithm.')}</Typography>
             </Paper>
           )
         }
@@ -373,12 +401,12 @@ export default function ModelList() {
         PaperProps={{ sx: { borderRadius: "24px", p: 1, maxWidth: 500, width: '100%', bgcolor: theme.background } }}
       >
         <DialogTitle sx={{ fontWeight: 900, color: theme.textMain, letterSpacing: "-0.02em", pt: 3 }}>
-          Edit Model Details
+          {t('modelList.editModelDetails', 'Edit Model Details')}
         </DialogTitle>
         <DialogContent sx={{ py: 1 }}>
           <Stack spacing={3} sx={{ mt: 1 }}>
             <Box>
-              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Model Name</Typography>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{t('modelList.modelName', 'Model Name')}</Typography>
               <TextField
                 fullWidth
                 variant="outlined"
@@ -388,7 +416,7 @@ export default function ModelList() {
               />
             </Box>
             <Box>
-              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Description</Typography>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{t('modelList.description', 'Description')}</Typography>
               <TextField
                 fullWidth
                 multiline
@@ -402,14 +430,14 @@ export default function ModelList() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setEditOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700, textTransform: 'none', px: 3 }}>Cancel</Button>
+          <Button onClick={() => setEditOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700, textTransform: 'none', px: 3 }}>{t('modelList.cancel', 'Cancel')}</Button>
           <Button
             disabled={saving}
             onClick={async () => {
               if (!selectedModel) return;
               try {
                 setSaving(true);
-                const res = await axios.put(`/factories/${factoryId}/algorithms/${algorithmId}/models/${selectedModel.id}`, {
+                const res = await axios.put(`/algorithms/${algorithmId}/factories/${factoryId}/models/${selectedModel.id}`, {
                   name: editName,
                   description: editDescription,
                 });
@@ -419,21 +447,19 @@ export default function ModelList() {
             }}
             variant="contained" sx={{ bgcolor: theme.primary, borderRadius: "12px", fontWeight: 700, px: 4, py: 1.2, textTransform: 'none', boxShadow: `0 8px 16px -4px ${alpha(theme.primary, 0.3)}` }}
           >
-            {saving ? <CircularProgress size={20} color="inherit" /> : "Save Changes"}
+            {saving ? <CircularProgress size={20} color="inherit" /> : t('modelList.saveChanges', 'Save Changes')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Dialog */}
       < Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} PaperProps={{ sx: { borderRadius: "24px", bgcolor: theme.paper } }}>
-        <DialogTitle sx={{ fontWeight: 800, color: theme.textMain }}>Delete Model?</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800, color: theme.textMain }}>{t('modelList.deleteTitle', 'Delete Model?')}</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" sx={{ color: theme.textMuted }}>
-            Are you sure you want to delete <strong>{selectedModel?.name}</strong>? All associated versions and experiments will be lost.
-          </Typography>
+          <Typography variant="body1" sx={{ color: theme.textMuted }} dangerouslySetInnerHTML={{ __html: t('modelList.deleteWarning', 'Are you sure you want to delete <strong>{{name}}</strong>? All associated versions and experiments will be lost.', { name: selectedModel?.name }) }} />
         </DialogContent>
         <DialogActions sx={{ p: 4 }}>
-          <Button onClick={() => setDeleteOpen(false)} sx={{ fontWeight: 700, color: theme.textMain }}>Cancel</Button>
+          <Button onClick={() => setDeleteOpen(false)} sx={{ fontWeight: 700, color: theme.textMain }}>{t('modelList.cancel', 'Cancel')}</Button>
           <Button
             variant="contained"
             color="error"
@@ -441,13 +467,13 @@ export default function ModelList() {
             onClick={async () => {
               if (!selectedModel) return;
               try {
-                await axios.delete(`/factories/${factoryId}/algorithms/${algorithmId}/models/${selectedModel.id}`);
+                await axios.delete(`/algorithms/${algorithmId}/factories/${factoryId}/models/${selectedModel.id}`);
                 setModels((prev) => prev.filter((m) => m.id !== selectedModel.id));
                 setDeleteOpen(false);
               } catch (err) { console.error(err); }
             }}
           >
-            Delete Model
+            {t('modelList.deleteModel', 'Delete Model')}
           </Button>
         </DialogActions>
       </Dialog >

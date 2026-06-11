@@ -48,6 +48,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import axios, { API_BASE_URL } from "../../api/axios";
 
 import { useTheme } from "../../theme/ThemeContext";
+import { useTranslation } from "react-i18next";
 
 /* ==========================================================================
    TYPES
@@ -71,6 +72,7 @@ export default function VersionTimeline() {
   const { factoryId, algorithmId, modelId } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
   // Call context hook at top level
   const { cancelUploadsForVersion } = useBackgroundUploader();
 
@@ -85,11 +87,10 @@ export default function VersionTimeline() {
   // Selection for Comparison
   const [isCompareMode, setIsCompareMode] = useState(false);
   const [selectedForCompare, setSelectedForCompare] = useState<number[]>([]);
-
   const fetchVersions = async () => {
     try {
       const res = await axios.get(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`
+        `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions`
       );
       const sorted = [...res.data].sort((a, b) => b.version_number - a.version_number);
       setVersions(sorted);
@@ -112,7 +113,7 @@ export default function VersionTimeline() {
       setRollbackOpen(false);
 
       await axios.post(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${selectedVersion.id}/checkout`
+        `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${selectedVersion.id}/checkout`
       );
       await fetchVersions();
     } catch (err) {
@@ -156,13 +157,13 @@ export default function VersionTimeline() {
     try {
       // Fire and forget (awaiting but UI is already updated)
       await axios.delete(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${versionToDelete.id}`
+        `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionToDelete.id}`
       );
     } catch (err) {
       console.error("Delete failed", err);
       // REVERT on failure
       setVersions(previousVersions);
-      alert("Failed to delete version.");
+      alert(t('versionTimeline.deleteFail', "Failed to delete version."));
     }
   };
 
@@ -170,7 +171,7 @@ export default function VersionTimeline() {
     setDownloadLoading(vId);
 
     // Default to all artifact types for quick download
-    const downloadUrl = `${API_BASE_URL}/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${vId}/download?dataset=true&labels=true&model=true&code=true`;
+    const downloadUrl = `${API_BASE_URL}/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${vId}/download?dataset=true&labels=true&model=true&code=true`;
 
     setTimeout(() => {
       window.location.href = downloadUrl;
@@ -183,7 +184,6 @@ export default function VersionTimeline() {
   const toggleCompareSelection = (id: number) => {
     setSelectedForCompare(prev => {
       if (prev.includes(id)) return prev.filter(x => x !== id);
-      if (prev.length >= 2) return prev; // Limit to 2
       return [...prev, id];
     });
   };
@@ -211,7 +211,7 @@ export default function VersionTimeline() {
           <Box sx={{ pt: 4, pb: 2, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <Stack direction="row" spacing={2} alignItems="center">
               <IconButton
-                onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}`)}
+                onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}`)}
                 sx={{
                   bgcolor: theme.paper,
                   border: `1px solid ${theme.border}`,
@@ -223,38 +223,66 @@ export default function VersionTimeline() {
               </IconButton>
               <Box>
                 <Typography variant="h4" fontWeight={900} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>
-                  Model <Box component="span" sx={{ color: theme.primary }}>History</Box>
+                  {t('versionTimeline.model', 'Model')} <Box component="span" sx={{ color: theme.primary }}>{t('versionTimeline.history', 'History')}</Box>
                 </Typography>
                 <Typography variant="body2" sx={{ color: theme.textMuted, fontWeight: 600, mt: 0.5 }}>
-                  Track evolution, metrics, and manage production rollbacks.
+                  {t('versionTimeline.description', 'Track evolution, metrics, and manage production rollbacks.')}
                 </Typography>
               </Box>
             </Stack>
 
-            <Button
-              variant={isCompareMode ? "contained" : "outlined"}
-              startIcon={isCompareMode ? <CheckIcon /> : <CompareIcon />}
-              onClick={() => {
-                setIsCompareMode(!isCompareMode);
-                setSelectedForCompare([]);
-              }}
-              sx={{
-                borderRadius: "14px",
-                px: 3,
-                py: 1.25,
-                textTransform: "none",
-                fontWeight: 800,
-                borderColor: theme.border,
-                color: isCompareMode ? "#fff" : theme.textMain,
-                bgcolor: isCompareMode ? theme.primary : "transparent",
-                "&:hover": {
-                  bgcolor: isCompareMode ? theme.primaryDark : alpha(theme.primary, 0.05),
-                  borderColor: theme.primary
-                }
-              }}
-            >
-              {isCompareMode ? "Exit Compare" : "Compare Versions"}
-            </Button>
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              {isCompareMode && versions.length > 0 && (
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    const allIds = versions.map(v => v.id);
+                    const isAllSelected = selectedForCompare.length === allIds.length;
+                    setSelectedForCompare(isAllSelected ? [] : allIds);
+                  }}
+                  sx={{
+                    borderRadius: "14px",
+                    px: 3,
+                    py: 1.25,
+                    textTransform: "none",
+                    fontWeight: 800,
+                    borderColor: theme.border,
+                    color: theme.textMain,
+                    "&:hover": {
+                      bgcolor: alpha(theme.primary, 0.05),
+                      borderColor: theme.primary
+                    }
+                  }}
+                >
+                  {selectedForCompare.length === versions.length ? t('versionTimeline.deselectAll', "Deselect All") : t('versionTimeline.selectAll', "Select All")}
+                </Button>
+              )}
+
+              <Button
+                variant={isCompareMode ? "contained" : "outlined"}
+                startIcon={isCompareMode ? <CheckIcon /> : <CompareIcon />}
+                onClick={() => {
+                  setIsCompareMode(!isCompareMode);
+                  setSelectedForCompare([]);
+                }}
+                sx={{
+                  borderRadius: "14px",
+                  px: 3,
+                  py: 1.25,
+                  textTransform: "none",
+                  fontWeight: 800,
+                  borderColor: theme.border,
+                  color: isCompareMode ? "#fff" : theme.textMain,
+                  bgcolor: isCompareMode ? theme.primary : "transparent",
+                  "&:hover": {
+                    bgcolor: isCompareMode ? theme.primaryDark : alpha(theme.primary, 0.05),
+                    borderColor: theme.primary
+                  }
+                }}
+              >
+                {isCompareMode ? t('versionTimeline.exitCompare', "Exit Compare") : t('versionTimeline.compareVersions', "Compare Versions")}
+              </Button>
+            </Stack>
           </Box>
         </Container>
       </Box>
@@ -274,8 +302,8 @@ export default function VersionTimeline() {
               }}
             >
               <HistoryIcon sx={{ fontSize: 64, color: alpha(theme.textMuted, 0.2), mb: 2 }} />
-              <Typography variant="h6" fontWeight={700} color={theme.textMain}>No Versions Found</Typography>
-              <Typography variant="body2" color={theme.textMuted}>This model hasn't been iterated yet.</Typography>
+              <Typography variant="h6" fontWeight={700} color={theme.textMain}>{t('versionTimeline.noVersionsFound', 'No Versions Found')}</Typography>
+              <Typography variant="body2" color={theme.textMuted}>{t('versionTimeline.noVersionsSub', "This model hasn't been iterated yet.")}</Typography>
             </Paper>
           ) : (
             <Timeline position="right" sx={{ p: 0 }}>
@@ -337,11 +365,11 @@ export default function VersionTimeline() {
                               <Box>
                                 <Stack direction="row" spacing={1} alignItems="center">
                                   <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>
-                                    Version {version.version_number}
+                                    {t('versionTimeline.version', { number: version.version_number, defaultValue: `Version ${version.version_number}` })}
                                   </Typography>
                                   {version.is_active && (
                                     <Chip
-                                      label="Live"
+                                      label={t('versionTimeline.live', 'Live')}
                                       size="small"
                                       sx={{
                                         bgcolor: alpha(theme.success, 0.1),
@@ -363,7 +391,7 @@ export default function VersionTimeline() {
 
                             <Stack direction="row" spacing={0.5}>
                               {!version.is_active && (
-                                <Tooltip title="Rollback to this version">
+                                <Tooltip title={t('versionTimeline.rollbackTooltip', "Rollback to this version")}>
                                   <IconButton
                                     size="small"
                                     onClick={() => {
@@ -377,16 +405,16 @@ export default function VersionTimeline() {
                                   </IconButton>
                                 </Tooltip>
                               )}
-                              <Tooltip title="View Details">
+                              <Tooltip title={t('versionTimeline.viewDetailsTooltip', "View Details")}>
                                 <IconButton
                                   size="small"
-                                  onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${version.id}`)}
+                                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${version.id}`)}
                                   sx={{ color: theme.primary, bgcolor: alpha(theme.primary, 0.05) }}
                                 >
                                   <ViewIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>
-                              <Tooltip title="Quick Download ZIP">
+                              <Tooltip title={t('versionTimeline.downloadTooltip', "Quick Download ZIP")}>
                                 <IconButton
                                   size="small"
                                   onClick={() => handleDownload(version.id)}
@@ -400,7 +428,7 @@ export default function VersionTimeline() {
                                   )}
                                 </IconButton>
                               </Tooltip>
-                              <Tooltip title="Delete">
+                              <Tooltip title={t('versionTimeline.deleteTooltip', "Delete")}>
                                 <IconButton
                                   size="small"
                                   color="error"
@@ -419,11 +447,11 @@ export default function VersionTimeline() {
                           {/* Version Metrics Snapshot */}
                           <Stack direction="row" spacing={3} sx={{ mt: 3, pt: 2, borderTop: `1px solid ${theme.border}`, width: '100%' }}>
                             <Box>
-                              <Typography variant="caption" fontWeight={600} sx={{ color: theme.textMuted, textTransform: "uppercase", display: "block" }}>Accuracy</Typography>
+                              <Typography variant="caption" fontWeight={600} sx={{ color: theme.textMuted, textTransform: "uppercase", display: "block" }}>{t('versionTimeline.accuracy', 'Accuracy')}</Typography>
                               <Typography variant="body2" fontWeight={600} color={theme.textMain}>{version.accuracy ? `${version.accuracy}%` : "—"}</Typography>
                             </Box>
                             <Box>
-                              <Typography variant="caption" fontWeight={600} sx={{ color: theme.textMuted, textTransform: "uppercase", display: "block" }}>F1 Score</Typography>
+                              <Typography variant="caption" fontWeight={600} sx={{ color: theme.textMuted, textTransform: "uppercase", display: "block" }}>{t('versionTimeline.f1Score', 'F1 Score')}</Typography>
                               <Typography variant="body2" fontWeight={600} color={theme.textMain}>{version.f1_score ? `${version.f1_score}%` : "—"}</Typography>
                             </Box>
                           </Stack>
@@ -462,19 +490,24 @@ export default function VersionTimeline() {
             >
               <Box>
                 <Typography variant="caption" fontWeight={900} sx={{ color: theme.primary, letterSpacing: 2, display: "block", mb: 0.5 }}>
-                  COMPARISON STAGED
+                  {t('versionTimeline.comparisonStaged', 'COMPARISON STAGED')}
                 </Typography>
                 <Typography variant="body2" fontWeight={800} sx={{ color: theme.textMain }}>
-                  {selectedForCompare.length} of 2 versions selected
+                  {t('versionTimeline.versionsSelected', { count: selectedForCompare.length, defaultValue: `${selectedForCompare.length} versions selected` })}
                 </Typography>
               </Box>
 
               <Button
                 variant="contained"
-                disabled={selectedForCompare.length !== 2}
+                disabled={selectedForCompare.length < 2}
                 onClick={() => {
-                  const [v1, v2] = selectedForCompare;
-                  navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/compare?left=${v1}&right=${v2}`);
+                  const sorted = [...selectedForCompare].sort((a, b) => {
+                    const vA = versions.find(v => v.id === a)?.version_number ?? 0;
+                    const vB = versions.find(v => v.id === b)?.version_number ?? 0;
+                    return vA - vB;
+                  });
+                  const idsStr = sorted.join(",");
+                  navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/compare?left=${sorted[0]}&right=${sorted[sorted.length - 1]}&ids=${idsStr}`);
                 }}
                 sx={{
                   borderRadius: "16px",
@@ -496,7 +529,7 @@ export default function VersionTimeline() {
                   }
                 }}
               >
-                Compare Now
+                {t('versionTimeline.compareNow', 'Compare Now')}
               </Button>
             </Box>
           )}
@@ -510,24 +543,24 @@ export default function VersionTimeline() {
         PaperProps={{ sx: { borderRadius: "24px", p: 1, bgcolor: theme.background } }}
       >
         <DialogTitle sx={{ fontWeight: 800, color: theme.textMain }}>
-          Delete Version {selectedVersion?.version_number}
+          {t('versionTimeline.deleteVersionTitle', { number: selectedVersion?.version_number, defaultValue: `Delete Version ${selectedVersion?.version_number}` })}
         </DialogTitle>
         <DialogContent>
           <Typography sx={{ color: theme.textMuted, mb: 2 }}>
             {selectedVersion?.is_active
-              ? "This version is currently LIVE. Deleting it will impact production stability."
-              : "Are you sure you want to remove this iteration? This action is permanent."}
+              ? t('versionTimeline.deleteLiveWarning', "This version is currently LIVE. Deleting it will impact production stability.")
+              : t('versionTimeline.deleteWarning', "Are you sure you want to remove this iteration? This action is permanent.")}
           </Typography>
           {selectedVersion?.is_active && (
             <Paper elevation={0} sx={{ p: 2, bgcolor: alpha(theme.danger, 0.05), borderRadius: "12px", border: `1px solid ${alpha(theme.danger, 0.1)}` }}>
               <Typography color="error" variant="body2" fontWeight={700}>
-                ⚠️ High Risk Action: Active Model Deletion
+                {t('versionTimeline.highRiskAction', "⚠️ High Risk Action: Active Model Deletion")}
               </Typography>
             </Paper>
           )}
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setDeleteOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700 }}>Cancel</Button>
+          <Button onClick={() => setDeleteOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700 }}>{t('versionTimeline.cancel', 'Cancel')}</Button>
           <Button
             color="error"
             variant="contained"
@@ -539,7 +572,7 @@ export default function VersionTimeline() {
               boxShadow: "none",
             }}
           >
-            Delete Version
+            {t('versionTimeline.deleteVersionBtn', 'Delete Version')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -552,29 +585,28 @@ export default function VersionTimeline() {
         PaperProps={{ sx: { borderRadius: "24px", p: 1, bgcolor: theme.background } }}
       >
         <DialogTitle sx={{ fontWeight: 800, color: theme.textMain }}>
-          Confirm Rollback to v{selectedVersion?.version_number}
+          {t('versionTimeline.confirmRollbackTitle', { number: selectedVersion?.version_number, defaultValue: `Confirm Rollback to v${selectedVersion?.version_number}` })}
         </DialogTitle>
         <DialogContent>
           <Typography sx={{ color: theme.textMuted, mb: 2 }}>
-            This will set Version {selectedVersion?.version_number} as the <strong>Active Production Model</strong>.
-            All new inference requests will be routed to this version.
+            {t('versionTimeline.rollbackDescription', { number: selectedVersion?.version_number, defaultValue: `This will set Version ${selectedVersion?.version_number} as the Active Production Model. All new inference requests will be routed to this version.` })}
           </Typography>
           <Paper elevation={0} sx={{ p: 2, bgcolor: alpha(theme.warning, 0.05), borderRadius: "12px", border: `1px solid ${alpha(theme.warning, 0.1)}` }}>
             <Stack direction="row" spacing={1.5} alignItems="flex-start">
               <RollbackIcon sx={{ color: theme.warning, mt: 0.3 }} fontSize="small" />
               <Box>
                 <Typography color={theme.warning} variant="body2" fontWeight={700}>
-                  Production Environment Change
+                  {t('versionTimeline.productionChange', 'Production Environment Change')}
                 </Typography>
                 <Typography variant="caption" sx={{ color: theme.textMuted }}>
-                  Ensure downstream services are compatible with this version's input/output schema.
+                  {t('versionTimeline.productionChangeDesc', "Ensure downstream services are compatible with this version's input/output schema.")}
                 </Typography>
               </Box>
             </Stack>
           </Paper>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setRollbackOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700 }}>Cancel</Button>
+          <Button onClick={() => setRollbackOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700 }}>{t('versionTimeline.cancel', 'Cancel')}</Button>
           <Button
             variant="contained"
             onClick={processRollback}
@@ -588,7 +620,7 @@ export default function VersionTimeline() {
               "&:hover": { bgcolor: alpha(theme.warning, 0.9) }
             }}
           >
-            Confirm Rollback
+            {t('versionTimeline.confirmRollbackBtn', 'Confirm Rollback')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -18,14 +18,16 @@ import HubIcon from "@mui/icons-material/Hub";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionIcon from "@mui/icons-material/Description";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import axios from "../../api/axios";
 
 import { useTheme } from "../../theme/ThemeContext";
 
 export default function ModelCreate() {
-  const { factoryId, algorithmId } = useParams();
+  const { algorithmId, factoryId } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -34,7 +36,7 @@ export default function ModelCreate() {
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      setError("Model name is required");
+      setError(t("modelCreate.nameRequired"));
       return;
     }
 
@@ -43,17 +45,17 @@ export default function ModelCreate() {
       setError("");
 
       await axios.post(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models`,
+        `/algorithms/${algorithmId}/factories/${factoryId}/models`,
         {
           name,
           description,
         }
       );
 
-      navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models`);
+      navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models`);
     } catch (err) {
       console.error(err);
-      setError("Failed to create model. Please try again.");
+      setError(t("modelCreate.failedCreate"));
     } finally {
       setLoading(false);
     }
@@ -64,7 +66,7 @@ export default function ModelCreate() {
       {/* Navigation Header */}
       <Box sx={{ display: "flex", alignItems: "center", mb: 4 }}>
         <IconButton
-          onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models`)}
+          onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models`)}
           sx={{
             mr: 2,
             bgcolor: theme.paper,
@@ -76,10 +78,10 @@ export default function ModelCreate() {
         </IconButton>
         <Box>
           <Typography variant="h5" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>
-            Initialize New Model
+            {t("modelCreate.title")}
           </Typography>
           <Typography variant="body2" sx={{ color: theme.textMuted, fontWeight: 500 }}>
-            Create a specific model instance under your chosen algorithm blueprint.
+            {t("modelCreate.subtitle")}
           </Typography>
         </Box>
       </Box>
@@ -120,7 +122,7 @@ export default function ModelCreate() {
             >
               <HubIcon sx={{ color: theme.primary, fontSize: 20 }} />
               <Typography variant="subtitle2" fontWeight={700} sx={{ color: theme.primary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Model Specifications
+                {t("modelCreate.sectionHeader")}
               </Typography>
             </Box>
 
@@ -130,12 +132,12 @@ export default function ModelCreate() {
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
-                      Model Name
+                      {t("modelCreate.nameLabel")}
                     </Typography>
                     <Typography variant="caption" sx={{ color: theme.error }}>*</Typography>
                   </Box>
                   <TextField
-                    placeholder="e.g. YOLOv8 Fire Detection, Sentiment-v2-Large"
+                    placeholder={t("modelCreate.namePlaceholder")}
                     fullWidth
                     value={name}
                     onChange={(e) => {
@@ -161,12 +163,12 @@ export default function ModelCreate() {
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
-                      Description
+                      {t("modelCreate.descLabel")}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: theme.textMuted }}>(Optional)</Typography>
+                    <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("modelCreate.descOptional")}</Typography>
                   </Box>
                   <TextField
-                    placeholder="Describe the objective, base architecture, or specific use-case..."
+                    placeholder={t("modelCreate.descPlaceholder")}
                     fullWidth
                     multiline
                     rows={4}
@@ -207,7 +209,7 @@ export default function ModelCreate() {
                 <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, pt: 2 }}>
                   <Button
                     variant="text"
-                    onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models`)}
+                    onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models`)}
                     disabled={loading}
                     sx={{
                       px: 3,
@@ -218,7 +220,7 @@ export default function ModelCreate() {
                       "&:hover": { bgcolor: alpha(theme.textMuted, 0.05) }
                     }}
                   >
-                    Cancel
+                    {t("modelCreate.cancel")}
                   </Button>
 
                   <Button
@@ -248,7 +250,7 @@ export default function ModelCreate() {
                     {loading ? (
                       <CircularProgress size={20} color="inherit" />
                     ) : (
-                      "Create Model"
+                      t("modelCreate.create")
                     )}
                   </Button>
                 </Box>
@@ -272,7 +274,7 @@ export default function ModelCreate() {
             >
               <DescriptionIcon sx={{ fontSize: 14, color: theme.textMuted }} />
               <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 500 }}>
-                Models represent actual deployments or specific versions of your algorithms.
+                {t("modelCreate.tipText")}
               </Typography>
             </Paper>
           </Box>

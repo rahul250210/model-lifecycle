@@ -19,6 +19,7 @@ import TimelineIcon from "@mui/icons-material/TimelineOutlined";
 import { alpha } from "@mui/material";
 import instance from "../api/axios";
 import { useTheme } from "../theme/ThemeContext";
+import { useTranslation } from "react-i18next";
 
 export interface NestedItem {
   id: number;
@@ -67,6 +68,7 @@ export const NestedDropdown = ({
 }: NestedDropdownProps) => {
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [children, setChildren] = useState<NestedItemWithState[]>([]);
   const [loading, setLoading] = useState(false);
@@ -79,35 +81,35 @@ export const NestedDropdown = ({
     try {
       let response;
 
-      if (item.type === "factory") {
-        // Fetch algorithms for this factory
-        response = await instance.get(`/factories/${item.id}/algorithms`);
+      if (item.type === "algorithm") {
+        // Fetch factories for this algorithm
+        response = await instance.get(`/algorithms/${item.id}/factories`);
         setChildren(
-          response.data.map((algo: any) => ({
-            id: algo.id,
-            name: algo.name,
-            type: "algorithm",
-            factoryId: item.id,
+          response.data.map((factory: any) => ({
+            id: factory.id,
+            name: factory.name,
+            type: "factory",
+            algorithmId: item.id,
           }))
         );
-      } else if (item.type === "algorithm") {
-        // Fetch models for this algorithm
+      } else if (item.type === "factory") {
+        // Fetch models for this factory under this algorithm
         response = await instance.get(
-          `/factories/${parentFactoryId}/algorithms/${item.id}/models`
+          `/algorithms/${parentAlgorithmId}/factories/${item.id}/models`
         );
         setChildren(
           response.data.map((model: any) => ({
             id: model.id,
             name: model.name,
             type: "model",
-            factoryId: parentFactoryId,
-            algorithmId: item.id,
+            factoryId: item.id,
+            algorithmId: parentAlgorithmId,
           }))
         );
       } else if (item.type === "model") {
-        // Fetch versions for this model
+        // Fetch versions for this model under this algorithm and factory
         response = await instance.get(
-          `/factories/${parentFactoryId}/algorithms/${parentAlgorithmId}/models/${item.id}/versions`
+          `/algorithms/${parentAlgorithmId}/factories/${parentFactoryId}/models/${item.id}/versions`
         );
         setChildren(
           response.data.map((version: any) => ({
@@ -157,17 +159,17 @@ export const NestedDropdown = ({
 
     // Navigate based on item type
     switch (item.type) {
-      case "factory":
-        navigate(`/factories/${item.id}/algorithms`);
-        break;
       case "algorithm":
-        navigate(`/factories/${parentFactoryId}/algorithms/${item.id}/models`);
+        navigate(`/algorithms/${item.id}/factories`);
+        break;
+      case "factory":
+        navigate(`/algorithms/${parentAlgorithmId}/factories/${item.id}/models`);
         break;
       case "model":
-        navigate(`/factories/${parentFactoryId}/algorithms/${parentAlgorithmId}/models/${item.id}/versions`);
+        navigate(`/algorithms/${parentAlgorithmId}/factories/${parentFactoryId}/models/${item.id}/versions`);
         break;
       case "version":
-        navigate(`/factories/${parentFactoryId}/algorithms/${parentAlgorithmId}/models/${item.modelId}/versions/${item.id}`);
+        navigate(`/algorithms/${parentAlgorithmId}/factories/${parentFactoryId}/models/${item.modelId}/versions/${item.id}`);
         break;
     }
   };
@@ -295,7 +297,7 @@ export const NestedDropdown = ({
               }}
             >
               <ListItemText
-                primary="No items"
+                primary={t("sidebar.noItems", "No items")}
                 primaryTypographyProps={{
                   fontSize: "0.8rem",
                   color: theme.textMuted,
@@ -329,37 +331,38 @@ export const NestedDropdown = ({
   );
 };
 
-interface FactoriesDropdownProps {
+interface AlgorithmsDropdownProps {
   onItemSelect?: (item: NestedItem) => void;
   collapsed?: boolean;
 }
 
-export const FactoriesDropdown = ({ onItemSelect, collapsed = false }: FactoriesDropdownProps) => {
+export const AlgorithmsDropdown = ({ onItemSelect, collapsed = false }: AlgorithmsDropdownProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  const [factories, setFactories] = useState<NestedItemWithState[]>([]);
+  const [algorithms, setAlgorithms] = useState<NestedItemWithState[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isActive = location.pathname.startsWith("/factories");
+  const isActive = location.pathname.startsWith("/algorithms");
 
-  const fetchFactories = async (showLoading = true) => {
+  const fetchAlgorithms = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     setError(null);
 
     try {
-      const response = await instance.get("/factories");
-      const factoriesData = response.data.map((factory: any) => ({
-        id: factory.id,
-        name: factory.name,
-        type: "factory",
+      const response = await instance.get("/algorithms");
+      const algosData = response.data.map((algo: any) => ({
+        id: algo.id,
+        name: algo.name,
+        type: "algorithm",
       }));
-      setFactories(factoriesData);
+      setAlgorithms(algosData);
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Failed to load factories");
-      console.error("Error fetching factories:", err);
+      setError(err.response?.data?.detail || "Failed to load algorithms");
+      console.error("Error fetching algorithms:", err);
     } finally {
       if (showLoading) setLoading(false);
     }
@@ -370,11 +373,11 @@ export const FactoriesDropdown = ({ onItemSelect, collapsed = false }: Factories
     if (!expanded) return;
 
     // Fetch immediately when expanded (show loading)
-    fetchFactories(true);
+    fetchAlgorithms(true);
 
     // Set up polling interval to refresh every 10 seconds while expanded (no loading spinner)
     const pollInterval = setInterval(() => {
-      fetchFactories(false);
+      fetchAlgorithms(false);
     }, 10000);
 
     // Cleanup interval when component unmounts or expanded changes to false
@@ -382,7 +385,7 @@ export const FactoriesDropdown = ({ onItemSelect, collapsed = false }: Factories
   }, [expanded]);
 
   const handleClick = () => {
-    navigate("/factories");
+    navigate("/algorithms");
   };
 
   return (
@@ -417,10 +420,10 @@ export const FactoriesDropdown = ({ onItemSelect, collapsed = false }: Factories
           }}
         >
           {loading && <CircularProgress size={20} />}
-          {!loading && <FactoryIcon fontSize="small" />}
+          {!loading && <ScienceIcon fontSize="small" />}
         </ListItemIcon>
         <ListItemText
-          primary="Factories"
+          primary={t("sidebar.algorithms", "Algorithms")}
           primaryTypographyProps={{
             fontSize: "0.95rem",
             fontWeight: isActive ? 800 : 600,
@@ -478,10 +481,10 @@ export const FactoriesDropdown = ({ onItemSelect, collapsed = false }: Factories
             borderLeft: `1px solid ${alpha(theme.border, 0.5)}`
           }}
         >
-          {factories.length === 0 && !loading ? (
+          {algorithms.length === 0 && !loading ? (
             <ListItemButton disabled sx={{ py: 2, justifyContent: "center" }}>
               <ListItemText
-                primary="No factories created yet"
+                primary={t("sidebar.noAlgorithms", "No algorithms created yet")}
                 primaryTypographyProps={{
                   fontSize: "0.8rem",
                   color: theme.textMuted,
@@ -490,15 +493,15 @@ export const FactoriesDropdown = ({ onItemSelect, collapsed = false }: Factories
               />
             </ListItemButton>
           ) : (
-            factories.map((factory) => (
+            algorithms.map((algo) => (
               <Box
-                key={`factory-${factory.id}`}
+                key={`algorithm-${algo.id}`}
                 component="li"
                 sx={{ listStyle: "none" }}
               >
                 <NestedDropdown
                   level={0}
-                  item={factory}
+                  item={algo}
                   onItemSelect={onItemSelect}
                   collapsed={collapsed}
                 />

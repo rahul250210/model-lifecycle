@@ -17,15 +17,16 @@ import {
 import SchemaIcon from "@mui/icons-material/Schema";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionIcon from "@mui/icons-material/Description";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import axios from "../../api/axios";
 
 import { useTheme } from "../../theme/ThemeContext";
 
 export default function AlgorithmCreate() {
-  const { factoryId } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -34,7 +35,7 @@ export default function AlgorithmCreate() {
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      setError("Algorithm name is required");
+      setError(t("algorithmCreate.nameRequired"));
       return;
     }
 
@@ -42,15 +43,16 @@ export default function AlgorithmCreate() {
       setLoading(true);
       setError("");
 
-      await axios.post(`/factories/${factoryId}/algorithms`, {
+      await axios.post("/algorithms", {
         name,
         description,
       });
 
-      navigate(`/factories/${factoryId}/algorithms`);
-    } catch (err) {
+      navigate("/algorithms");
+    } catch (err: any) {
       console.error(err);
-      setError("Failed to create algorithm. Please try again.");
+      const msg = err.response?.data?.detail || t("algorithmCreate.failedCreate");
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -61,7 +63,7 @@ export default function AlgorithmCreate() {
       {/* Navigation Header */}
       <Box sx={{ display: "flex", alignItems: "center", mb: 4 }}>
         <IconButton
-          onClick={() => navigate(`/factories/${factoryId}`)}
+          onClick={() => navigate("/algorithms")}
           sx={{
             mr: 2,
             bgcolor: theme.paper,
@@ -73,10 +75,10 @@ export default function AlgorithmCreate() {
         </IconButton>
         <Box>
           <Typography variant="h5" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>
-            New Algorithm Architecture
+            {t("algorithmCreate.title")}
           </Typography>
           <Typography variant="body2" sx={{ color: theme.textMuted, fontWeight: 500 }}>
-            Define a high-level blueprint for your factory's production models.
+            {t("algorithmCreate.subtitle")}
           </Typography>
         </Box>
       </Box>
@@ -117,7 +119,7 @@ export default function AlgorithmCreate() {
             >
               <SchemaIcon sx={{ color: theme.primary, fontSize: 20 }} />
               <Typography variant="subtitle2" fontWeight={700} sx={{ color: theme.primary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Architecture Details
+                {t("algorithmCreate.sectionHeader")}
               </Typography>
             </Box>
 
@@ -127,12 +129,12 @@ export default function AlgorithmCreate() {
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
-                      Algorithm Name
+                      {t("algorithmCreate.nameLabel")}
                     </Typography>
                     <Typography variant="caption" sx={{ color: theme.error }}>*</Typography>
                   </Box>
                   <TextField
-                    placeholder="e.g. Fire & Smoke Detection, Quality Control CNN"
+                    placeholder={t("algorithmCreate.namePlaceholder")}
                     fullWidth
                     value={name}
                     onChange={(e) => {
@@ -158,12 +160,12 @@ export default function AlgorithmCreate() {
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
-                      Logic Description
+                      {t("algorithmCreate.descLabel")}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: theme.textMuted }}>(Optional)</Typography>
+                    <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("algorithmCreate.descOptional")}</Typography>
                   </Box>
                   <TextField
-                    placeholder="Briefly describe the purpose and primary logic of this algorithm..."
+                    placeholder={t("algorithmCreate.descPlaceholder")}
                     fullWidth
                     multiline
                     rows={4}
@@ -204,7 +206,7 @@ export default function AlgorithmCreate() {
                 <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, pt: 2 }}>
                   <Button
                     variant="text"
-                    onClick={() => navigate(`/factories/${factoryId}`)}
+                    onClick={() => navigate("/algorithms")}
                     disabled={loading}
                     sx={{
                       px: 3,
@@ -215,7 +217,7 @@ export default function AlgorithmCreate() {
                       "&:hover": { bgcolor: alpha(theme.textMuted, 0.05) }
                     }}
                   >
-                    Cancel
+                    {t("algorithmCreate.cancel")}
                   </Button>
 
                   <Button
@@ -245,7 +247,7 @@ export default function AlgorithmCreate() {
                     {loading ? (
                       <CircularProgress size={20} color="inherit" />
                     ) : (
-                      "Create Algorithm"
+                      t("algorithmCreate.create")
                     )}
                   </Button>
                 </Box>
@@ -269,7 +271,7 @@ export default function AlgorithmCreate() {
             >
               <DescriptionIcon sx={{ fontSize: 14, color: theme.textMuted }} />
               <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 500 }}>
-                Algorithms act as the architectural parent for multiple model variations.
+                {t("algorithmCreate.tipText")}
               </Typography>
             </Paper>
           </Box>

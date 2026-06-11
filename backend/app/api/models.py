@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from app.api.deps import get_db
 from app.models.model import Model
 from app.models.algorithm import Algorithm
+from app.models.factory import Factory
 from app.models.version import ModelVersion
 from app.schemas.model import ModelCreate, ModelOut
 from app.utils.logger import logger
@@ -18,32 +19,30 @@ router = APIRouter()
 # CREATE MODEL
 # ======================================================
 @router.post(
-    "/{factory_id}/algorithms/{algorithm_id}/models",
+    "/{algorithm_id}/factories/{factory_id}/models",
     response_model=ModelOut,
     status_code=status.HTTP_201_CREATED,
 )
 def create_model(
-    factory_id: int,
     algorithm_id: int,
+    factory_id: int,
     model: ModelCreate,
     db: Session = Depends(get_db),
 ):
-    algorithm = (
-        db.query(Algorithm)
-        .filter(
-            Algorithm.id == algorithm_id,
-            Algorithm.factory_id == factory_id,
-        )
-        .first()
-    )
+    algorithm = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
     if not algorithm:
         raise HTTPException(404, "Algorithm not found")
 
-    # Prevent duplicate model names
+    factory = db.query(Factory).filter(Factory.id == factory_id).first()
+    if not factory:
+        raise HTTPException(404, "Factory not found")
+
+    # Prevent duplicate model names in this algorithm at this factory
     existing = (
         db.query(Model)
         .filter(
             Model.algorithm_id == algorithm_id,
+            Model.factory_id == factory_id,
             func.lower(Model.name) == model.name.lower(),
         )
         .first()
@@ -51,13 +50,14 @@ def create_model(
     if existing:
         raise HTTPException(
             status_code=400,
-            detail="Model with this name already exists",
+            detail="Model with this name already exists in this factory for this algorithm",
         )
 
     db_model = Model(
         name=model.name,
         description=model.description,
         algorithm_id=algorithm_id,
+        factory_id=factory_id,
     )
     db.add(db_model)
     db.commit()
@@ -72,24 +72,21 @@ def create_model(
 # LIST MODELS (WITH VERSION COUNT)
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models",
+    "/{algorithm_id}/factories/{factory_id}/models",
     response_model=list[ModelOut],
 )
 def list_models(
-    factory_id: int,
     algorithm_id: int,
+    factory_id: int,
     db: Session = Depends(get_db),
 ):
-    algorithm = (
-        db.query(Algorithm)
-        .filter(
-            Algorithm.id == algorithm_id,
-            Algorithm.factory_id == factory_id,
-        )
-        .first()
-    )
+    algorithm = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
     if not algorithm:
         raise HTTPException(404, "Algorithm not found")
+
+    factory = db.query(Factory).filter(Factory.id == factory_id).first()
+    if not factory:
+        raise HTTPException(404, "Factory not found")
 
     models = (
         db.query(
@@ -97,7 +94,7 @@ def list_models(
             func.count(ModelVersion.id).label("versions_count"),
         )
         .outerjoin(ModelVersion, ModelVersion.model_id == Model.id)
-        .filter(Model.algorithm_id == algorithm_id)
+        .filter(Model.algorithm_id == algorithm_id, Model.factory_id == factory_id)
         .group_by(Model.id)
         .order_by(Model.created_at.desc())
         .all()
@@ -112,15 +109,15 @@ def list_models(
 
 
 # ======================================================
-# UPDATE MODEL (SAFE EDIT)
+# UPDATE MODEL
 # ======================================================
 @router.put(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}",
     response_model=ModelOut,
 )
 def update_model(
-    factory_id: int,
     algorithm_id: int,
+    factory_id: int,
     model_id: int,
     model: ModelCreate,
     db: Session = Depends(get_db),
@@ -130,6 +127,7 @@ def update_model(
         .filter(
             Model.id == model_id,
             Model.algorithm_id == algorithm_id,
+            Model.factory_id == factory_id,
         )
         .first()
     )
@@ -142,6 +140,7 @@ def update_model(
         db.query(Model)
         .filter(
             Model.algorithm_id == algorithm_id,
+            Model.factory_id == factory_id,
             func.lower(Model.name) == model.name.lower(),
             Model.id != model_id,
         )
@@ -165,15 +164,15 @@ def update_model(
 
 
 # ======================================================
-# DELETE MODEL (SAFE DELETE)
+# DELETE MODEL
 # ======================================================
 @router.delete(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_model(
-    factory_id: int,
     algorithm_id: int,
+    factory_id: int,
     model_id: int,
     db: Session = Depends(get_db),
 ):
@@ -182,6 +181,7 @@ def delete_model(
         .filter(
             Model.id == model_id,
             Model.algorithm_id == algorithm_id,
+            Model.factory_id == factory_id,
         )
         .first()
     )
@@ -189,20 +189,10 @@ def delete_model(
     if not model:
         raise HTTPException(404, "Model not found")
 
-    #  BLOCK DELETE IF VERSIONS EXIST
-    version_count = (
-        db.query(func.count(ModelVersion.id))
-        .filter(ModelVersion.model_id == model_id)
-        .scalar()
-    )
-
-   # delete versions first
+    # delete versions first
     db.query(ModelVersion).filter(
         ModelVersion.model_id == model_id
     ).delete()
-
-
-
 
     db.delete(model)
     db.commit()
@@ -213,12 +203,12 @@ def delete_model(
 # GET MODEL BY ID
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}",
     response_model=ModelOut,
 )
 def get_model(
-    factory_id: int,
     algorithm_id: int,
+    factory_id: int,
     model_id: int,
     db: Session = Depends(get_db),
 ):
@@ -227,6 +217,7 @@ def get_model(
         .filter(
             Model.id == model_id,
             Model.algorithm_id == algorithm_id,
+            Model.factory_id == factory_id,
         )
         .first()
     )
@@ -234,7 +225,6 @@ def get_model(
     if not model:
         raise HTTPException(404, "Model not found")
 
-    # attach versions_count (for UI consistency)
     model.versions_count = (
         db.query(func.count(ModelVersion.id))
         .filter(ModelVersion.model_id == model_id)
@@ -243,15 +233,16 @@ def get_model(
 
     return model
 
+
 # ======================================================
 # GENERATE REPORT (CSV)
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/report",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/report",
 )
 def generate_model_report(
-    factory_id: int,
     algorithm_id: int,
+    factory_id: int,
     model_id: int,
     db: Session = Depends(get_db),
 ):
@@ -260,6 +251,7 @@ def generate_model_report(
         .filter(
             Model.id == model_id,
             Model.algorithm_id == algorithm_id,
+            Model.factory_id == factory_id,
         )
         .first()
     )
@@ -294,13 +286,8 @@ def generate_model_report(
     ])
 
     for v in versions:
-        # Get total dataset count from delta if available
         dataset_count = v.delta.dataset_count if v.delta and v.delta.dataset_count is not None else 0
-        
-        # Format hyperparameters
         hyperparameters = str(v.parameters) if v.parameters else "None"
-        
-        # Format created_at to clean string (day-month-year time)
         created_at_str = v.created_at.strftime("%d-%m-%Y %H:%M:%S") if v.created_at else "N/A"
 
         csv_writer.writerow([

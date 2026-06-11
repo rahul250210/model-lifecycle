@@ -23,7 +23,6 @@ import {
   Divider,
   Grid,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
 import FactoryIcon from "@mui/icons-material/Factory";
 import SchemaIcon from "@mui/icons-material/Schema";
 import HubIcon from "@mui/icons-material/Hub";
@@ -32,9 +31,12 @@ import EditIcon from "@mui/icons-material/Edit";
 import SearchIcon from "@mui/icons-material/Search";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import DownloadIcon from "@mui/icons-material/Download";
 
 import { useNavigate } from "react-router-dom";
 import axios from "../../api/axios";
+import toast from "react-hot-toast";
+import { useTranslation } from "react-i18next";
 
 import { useTheme } from "../../theme/ThemeContext";
 
@@ -48,11 +50,13 @@ interface Factory {
   algorithms_count: number;
   models_count: number;
   created_at: string;
+  algorithm_names?: string[];
 }
 
 export default function FactoryList() {
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
   const [factories, setFactories] = useState<Factory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -67,6 +71,32 @@ export default function FactoryList() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [factoryToDelete, setFactoryToDelete] = useState<Factory | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const handleCardReport = async (e: React.MouseEvent, factory: Factory) => {
+    e.preventDefault();
+    e.stopPropagation();
+    try {
+      const response = await axios.get(`/factories/${factory.id}/report`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const contentDisposition = response.headers['content-disposition'];
+      let filename = `factory_${factory.name.replace(/ /g, '_').toLowerCase()}_report.csv`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) filename = match[1];
+      }
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      toast.success(t('factoryList.reportSuccess', 'Report downloaded successfully'));
+    } catch (err) {
+      console.error('Failed to generate factory report', err);
+      toast.error(t('factoryList.reportFail', 'Failed to generate report. Please try again.'));
+    }
+  };
 
   const fetchFactories = async () => {
     try {
@@ -102,8 +132,10 @@ export default function FactoryList() {
       setFactories((prev) => prev.filter((f) => f.id !== factoryToDelete.id));
       setDeleteOpen(false);
       setFactoryToDelete(null);
+      toast.success(t('factoryList.deleteSuccess', 'Factory deleted'));
     } catch (err) {
       console.error("Delete failed", err);
+      toast.error(t('factoryList.deleteFail', 'Failed to delete factory'));
     } finally {
       setDeleteLoading(false);
     }
@@ -127,8 +159,10 @@ export default function FactoryList() {
       });
       await fetchFactories();
       setEditOpen(false);
+      toast.success(t('factoryList.updateSuccess', 'Factory updated successfully'));
     } catch (err) {
       console.error("Update failed", err);
+      toast.error(t('factoryList.updateFail', 'Failed to update factory'));
     }
   };
 
@@ -154,30 +188,13 @@ export default function FactoryList() {
           <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={3}>
             <Box>
               <Typography variant="h5" fontWeight={900} sx={{ color: theme.textMain, letterSpacing: "-0.04em" }}>
-                Production <Box component="span" sx={{ color: theme.primary }}>Factories</Box>
+                {t('factoryList.titlePrefix', 'Production ')}<Box component="span" sx={{ color: theme.primary }}>{t('factoryList.titleSuffix', 'Factories')}</Box>
               </Typography>
               <Typography variant="body1" sx={{ color: theme.textMuted, mt: 1, fontWeight: 500 }}>
-                Manage your high-level infrastructure clusters and pipeline nodes.
+                {t('factoryList.description', 'Manage your high-level infrastructure clusters and pipeline nodes.')}
               </Typography>
             </Box>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => navigate("/factories/create")}
-              sx={{
-                bgcolor: theme.primary,
-                borderRadius: "14px",
-                px: 4,
-                py: 1.5,
-                fontWeight: 800,
-                textTransform: "none",
-                boxShadow: `0 10px 15px -3px ${alpha(theme.primary, 0.3)}`,
-                "&:hover": { bgcolor: "#4338CA", transform: "translateY(-2px)" },
-                transition: "all 0.2s",
-              }}
-            >
-              New Factory
-            </Button>
+
           </Stack>
         </Box>
 
@@ -195,7 +212,7 @@ export default function FactoryList() {
         >
           <TextField
             fullWidth
-            placeholder="Search factories..."
+            placeholder={t('factoryList.searchPlaceholder', 'Search factories...')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             variant="standard"
@@ -215,8 +232,8 @@ export default function FactoryList() {
         {filteredFactories.length === 0 ? (
           <Box sx={{ py: 10, textAlign: 'center', bgcolor: alpha(theme.paper, 0.5), borderRadius: '32px', border: `2px dashed ${theme.border}` }}>
             <FactoryIcon sx={{ fontSize: 64, color: alpha(theme.textMuted, 0.2), mb: 2 }} />
-            <Typography variant="h6" fontWeight={700} color={theme.textMain}>No factories match your search</Typography>
-            <Typography variant="body2" color={theme.textMuted}>Try adjusting your filters or create a new cluster.</Typography>
+            <Typography variant="h6" fontWeight={700} color={theme.textMain}>{t('factoryList.noFactories', 'No factories match your search')}</Typography>
+            <Typography variant="body2" color={theme.textMuted}>{t('factoryList.noFactoriesSub', 'Try adjusting your filters or create a new cluster.')}</Typography>
           </Box>
         ) : (
           <Grid container spacing={4}>
@@ -237,12 +254,15 @@ export default function FactoryList() {
                     }
                   }}
                 >
-                  {/* Card Actions (Edit/Delete) */}
+                  {/* Card Actions (Edit/Delete/Download) */}
                   <Box sx={{ px: 3, pt: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <Box sx={{ p: 1, bgcolor: alpha(theme.primary, 0.1), borderRadius: "10px", display: 'flex' }}>
                       <FactoryIcon sx={{ color: theme.primary, fontSize: 20 }} />
                     </Box>
                     <Box>
+                      <IconButton size="small" onClick={(e) => handleCardReport(e, factory)} title="Download Factory Report">
+                        <DownloadIcon fontSize="small" sx={{ color: theme.success }} />
+                      </IconButton>
                       <IconButton size="small" onClick={(e) => openEdit(e, factory)} sx={{ mr: 0.5 }}>
                         <EditIcon fontSize="small" sx={{ color: theme.textMuted }} />
                       </IconButton>
@@ -258,30 +278,49 @@ export default function FactoryList() {
                     </Typography>
 
                     <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3, minHeight: 40, lineHeight: 1.6 }}>
-                      {factory.description || "No summary provided for this factory."}
+                      {factory.description || t('factoryList.noSummary', 'No summary provided for this factory.')}
                     </Typography>
 
-                    <Stack direction="row" spacing={1.5} sx={{ mb: 3 }}>
+                    <Stack direction="row" spacing={1.5} sx={{ mb: 2 }}>
                       <Chip
                         icon={<SchemaIcon sx={{ fontSize: '14px !important' }} />}
-                        label={`${factory.algorithms_count} Algos`}
+                        label={t('factoryList.algos', '{{count}} Algos', { count: factory.algorithms_count })}
                         size="small"
                         sx={{ bgcolor: alpha(theme.success, 0.08), color: theme.success, fontWeight: 700, borderRadius: '8px' }}
                       />
                       <Chip
                         icon={<HubIcon sx={{ fontSize: '14px !important' }} />}
-                        label={`${factory.models_count} Models`}
+                        label={t('factoryList.models', '{{count}} Models', { count: factory.models_count })}
                         size="small"
                         sx={{ bgcolor: alpha(theme.warning, 0.08), color: theme.warning, fontWeight: 700, borderRadius: '8px' }}
                       />
                     </Stack>
 
+                    {factory.algorithm_names && factory.algorithm_names.length > 0 && (
+                      <Box sx={{ mb: 3, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                        {factory.algorithm_names.map((name, idx) => (
+                          <Chip
+                            key={idx}
+                            label={name}
+                            size="small"
+                            variant="outlined"
+                            sx={{
+                              borderColor: alpha(theme.primary, 0.25),
+                              color: theme.primary,
+                              fontWeight: 700,
+                              fontSize: '0.7rem',
+                              borderRadius: '6px',
+                              height: 20,
+                              bgcolor: alpha(theme.primary, 0.02)
+                            }}
+                          />
+                        ))}
+                      </Box>
+                    )}
+
                     <Divider sx={{ mb: 2, borderColor: alpha(theme.border, 0.5) }} />
 
-                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, textTransform: 'uppercase' }}>
-
-                      </Typography>
+                    <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
                       <Box
                         onClick={() => navigate(`/factories/${factory.id}`)}
                         className="arrow-icon"
@@ -301,7 +340,7 @@ export default function FactoryList() {
                           }
                         }}
                       >
-                        <Typography variant="button" fontWeight={800} sx={{ fontSize: '0.7rem' }}>ENTER</Typography>
+                        <Typography variant="button" fontWeight={800} sx={{ fontSize: '0.7rem' }}>{t('factoryList.enter', 'ENTER')}</Typography>
                         <ArrowForwardIcon sx={{ fontSize: 16 }} />
                       </Box>
                     </Box>
@@ -320,12 +359,12 @@ export default function FactoryList() {
         PaperProps={{ sx: { borderRadius: "24px", p: 1, maxWidth: 500, width: '100%', bgcolor: theme.background } }}
       >
         <DialogTitle sx={{ fontWeight: 900, color: theme.textMain, letterSpacing: "-0.02em", pt: 3 }}>
-          Edit Configuration
+          {t('factoryList.editTitle', 'Edit Configuration')}
         </DialogTitle>
         <DialogContent sx={{ py: 1 }}>
           <Stack spacing={3} sx={{ mt: 1 }}>
             <Box>
-              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Factory Name</Typography>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{t('factoryList.factoryName', 'Factory Name')}</Typography>
               <TextField
                 fullWidth
                 variant="outlined"
@@ -335,7 +374,7 @@ export default function FactoryList() {
               />
             </Box>
             <Box>
-              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Description</Typography>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{t('factoryList.factoryDesc', 'Description')}</Typography>
               <TextField
                 fullWidth
                 multiline
@@ -349,13 +388,13 @@ export default function FactoryList() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setEditOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700, textTransform: 'none', px: 3 }}>Cancel</Button>
+          <Button onClick={() => setEditOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700, textTransform: 'none', px: 3 }}>{t('factoryList.cancel', 'Cancel')}</Button>
           <Button
             onClick={saveEdit}
             variant="contained"
             sx={{ bgcolor: theme.primary, borderRadius: '12px', px: 4, py: 1.2, fontWeight: 700, textTransform: 'none', boxShadow: `0 8px 16px -4px ${alpha(theme.primary, 0.3)}` }}
           >
-            Save Changes
+            {t('factoryList.saveChanges', 'Save Changes')}
           </Button>
         </DialogActions>
       </Dialog>
@@ -382,10 +421,10 @@ export default function FactoryList() {
             <WarningAmberIcon sx={{ fontSize: 32 }} />
           </Box>
           <Typography variant="h5" fontWeight={900} sx={{ color: theme.textMain, mb: 1 }}>
-            Delete Factory?
+            {t('factoryList.deleteTitle', 'Delete Factory?')}
           </Typography>
           <Typography variant="body2" sx={{ color: theme.textMuted, lineHeight: 1.6 }}>
-            Are you sure you want to delete <strong>{factoryToDelete?.name}</strong>? This action will permanently remove all associated algorithms and models.
+            {t('factoryList.deleteDesc', 'Are you sure you want to delete')} <strong>{factoryToDelete?.name}</strong>? {t('factoryList.deleteDescWarning', 'This action will permanently remove all associated algorithms and models.')}
           </Typography>
         </Box>
         <DialogActions sx={{ p: 3, justifyContent: 'center', gap: 2 }}>
@@ -395,7 +434,7 @@ export default function FactoryList() {
             disabled={deleteLoading}
             sx={{ color: theme.textMuted, fontWeight: 800, textTransform: 'none', py: 1.2, borderRadius: '12px', border: `1px solid ${theme.border}` }}
           >
-            Keep Factory
+            {t('factoryList.keepFactory', 'Keep Factory')}
           </Button>
           <Button
             fullWidth
@@ -412,7 +451,7 @@ export default function FactoryList() {
               boxShadow: `0 8px 16px -4px ${alpha(theme.danger, 0.4)}`
             }}
           >
-            {deleteLoading ? <CircularProgress size={24} color="inherit" /> : "Yes, Delete"}
+            {deleteLoading ? <CircularProgress size={24} color="inherit" /> : t('factoryList.yesDelete', 'Yes, Delete')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -32,19 +32,19 @@ import Link from "@mui/material/Link";
 import NavigateNextIcon from "@mui/icons-material/NavigateNext";
 import CircularProgress from "@mui/material/CircularProgress";
 
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axios from "../../api/axios";
 
 import { useTheme } from "../../theme/ThemeContext";
+import { useTranslation } from "react-i18next";
 
 export default function AlgorithmList() {
-  const { factoryId } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const [algorithms, setAlgorithms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [factoryName, setFactoryName] = useState("Factory");
 
   // Edit Dialog States
   const [editOpen, setEditOpen] = useState(false);
@@ -60,7 +60,7 @@ export default function AlgorithmList() {
     e.stopPropagation();
     try {
       const response = await axios.get(
-        `/factories/${factoryId}/algorithms/${algo.id}/report`,
+        `/algorithms/${algo.id}/report`,
         { responseType: 'blob' }
       );
 
@@ -85,30 +85,25 @@ export default function AlgorithmList() {
       document.body.removeChild(link);
     } catch (error) {
       console.error("Error downloading report:", error);
-      alert("Failed to generate algorithm report");
+      alert(t('algorithmList.reportDownloadFail', "Failed to generate algorithm report"));
+    }
+  };
+
+  const fetchAlgorithms = async () => {
+    try {
+      setLoading(true);
+      const res = await axios.get("/algorithms");
+      setAlgorithms(res.data);
+    } catch (err) {
+      console.error("Failed to load algorithms", err);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [algoRes, factoryRes] = await Promise.all([
-          axios.get(`/factories/${factoryId}/algorithms`),
-          axios.get(`/factories/${factoryId}`)
-        ]);
-        setAlgorithms(algoRes.data);
-        if (factoryRes.data && factoryRes.data.name) {
-          setFactoryName(factoryRes.data.name);
-        }
-      } catch (err) {
-        console.error("Failed to load data", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [factoryId]);
+    fetchAlgorithms();
+  }, []);
 
   if (loading) {
     return (
@@ -127,7 +122,7 @@ export default function AlgorithmList() {
             <Box>
               <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
                 <IconButton
-                  onClick={() => navigate(`/factories/${factoryId}`)}
+                  onClick={() => navigate(`/dashboard`)}
                   sx={{
                     bgcolor: theme.paper,
                     border: `1px solid ${theme.border}`,
@@ -141,25 +136,25 @@ export default function AlgorithmList() {
                   <Link
                     underline="hover"
                     color="inherit"
-                    onClick={() => navigate(`/factories/${factoryId}`)}
+                    onClick={() => navigate(`/dashboard`)}
                     sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textSecondary }}
                   >
-                    Factories
+                    {t('algorithmList.dashboard', 'Dashboard')}
                   </Link>
-                  <Typography fontWeight={700} sx={{ fontSize: '1.2rem', color: theme.textMain }}>{factoryName}</Typography>
+                  <Typography fontWeight={700} sx={{ fontSize: '1.2rem', color: theme.textMain }}>{t('algorithmList.algorithms', 'Algorithms')}</Typography>
                 </Breadcrumbs>
               </Stack>
               <Typography variant="h5" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em", mb: 1 }}>
-                Algorithm <Box component="span" sx={{ color: theme.primary }}>Library</Box>
+                {t('algorithmList.algorithm', 'Algorithm')} <Box component="span" sx={{ color: theme.primary }}>{t('algorithmList.library', 'Library')}</Box>
               </Typography>
               <Typography variant="h6" sx={{ color: theme.textMuted, fontWeight: 400, maxWidth: 600 }}>
-                Manage high-level architectural blueprints and view their associated production models.
+                {t('algorithmList.subtitle', 'Manage high-level architectural blueprints and view their associated production models.')}
               </Typography>
             </Box >
             <Button
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => navigate(`/factories/${factoryId}/algorithms/create`)}
+              onClick={() => navigate("/algorithms/create")}
               sx={{
                 bgcolor: theme.primary,
                 px: 4,
@@ -173,7 +168,7 @@ export default function AlgorithmList() {
                 transition: "all 0.2s",
               }}
             >
-              Create Algorithm
+              {t('algorithmList.createAlgorithm', 'Create Algorithm')}
             </Button>
           </Stack >
         </Box >
@@ -190,6 +185,7 @@ export default function AlgorithmList() {
                     bgcolor: theme.paper,
                     border: `1px solid ${theme.border}`,
                     transition: "border-color 0.3s",
+                    cursor: "pointer",
                     "&:hover": {
                       borderColor: theme.primary,
                       boxShadow: `0 25px 30px -5px ${alpha("#000", 0.08)}`,
@@ -197,14 +193,15 @@ export default function AlgorithmList() {
                     },
                   }}
                   elevation={0}
+                  onClick={() => navigate(`/algorithms/${algo.id}/factories`)}
                 >
                   <CardContent sx={{ p: 3 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 4 }}>
                       <Box sx={{ p: 1, bgcolor: alpha(theme.primary, 0.08), borderRadius: "10px" }}>
                         <SchemaIcon sx={{ color: theme.primary, fontSize: 20 }} />
                       </Box>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <IconButton size="small" onClick={(e) => handleGenerateReport(algo, e)} title="Download Algorithm Report">
+                      <Box sx={{ display: 'flex', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
+                        <IconButton size="small" onClick={(e) => handleGenerateReport(algo, e)} title={t('algorithmList.downloadReport', 'Algorithm Report')}>
                           <DownloadIcon fontSize="small" sx={{ color: theme.success }} />
                         </IconButton>
                         <IconButton size="small" onClick={(e) => {
@@ -231,13 +228,13 @@ export default function AlgorithmList() {
                     </Typography>
 
                     <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3, minHeight: 40, lineHeight: 1.6 }}>
-                      {algo.description || "No description provided for this algorithm."}
+                      {algo.description || t('algorithmList.noDescription', 'No description provided for this algorithm.')}
                     </Typography>
 
                     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ pt: 3, borderTop: `1px solid ${theme.border}`, flexWrap: "wrap", gap: 1 }}>
                       <Stack direction="row" spacing={2}>
                         <Chip
-                          label={`${algo.models_count} Active Models`}
+                          label={t('algorithmList.activeModels', '{{count}} Active Models', { count: algo.models_count })}
                           sx={{
                             bgcolor: theme.primaryLight,
                             color: theme.primary,
@@ -251,7 +248,6 @@ export default function AlgorithmList() {
 
                       <Box
                         className="arrow-icon"
-                        onClick={() => navigate(`/factories/${factoryId}/algorithms/${algo.id}/models`)}
                         sx={{
                           opacity: 0,
                           transform: "translateX(-10px)",
@@ -260,13 +256,12 @@ export default function AlgorithmList() {
                           display: 'flex',
                           alignItems: 'center',
                           gap: 1,
-                          cursor: 'pointer',
                           p: 1,
                           borderRadius: '8px',
                           '&:hover': { bgcolor: alpha(theme.primary, 0.05) }
                         }}
                       >
-                        <Typography variant="button" fontWeight={700}>View Models</Typography>
+                        <Typography variant="button" fontWeight={700}>{t('algorithmList.viewFactories', 'View Factories')}</Typography>
                         <ArrowForwardIcon />
                       </Box>
                     </Stack>
@@ -282,8 +277,8 @@ export default function AlgorithmList() {
           algorithms.length === 0 && (
             <Paper variant="outlined" sx={{ py: 15, textAlign: 'center', borderRadius: '32px', borderStyle: 'dashed', bgcolor: 'transparent' }}>
               <SchemaIcon sx={{ fontSize: 64, color: alpha(theme.textMuted, 0.2), mb: 3 }} />
-              <Typography variant="h5" fontWeight={700} color={theme.textMain}>No algorithms found</Typography>
-              <Typography variant="body1" color={theme.textMuted}>This factory is empty. Get started by creating your first algorithm architecture.</Typography>
+              <Typography variant="h5" fontWeight={700} color={theme.textMain}>{t('algorithmList.noAlgorithmsTitle', 'No algorithms found')}</Typography>
+              <Typography variant="body1" color={theme.textMuted}>{t('algorithmList.noAlgorithmsDesc', 'Blueprints database is empty. Get started by creating your first global algorithm architecture.')}</Typography>
             </Paper>
           )
         }
@@ -296,12 +291,12 @@ export default function AlgorithmList() {
         PaperProps={{ sx: { borderRadius: "24px", p: 1, maxWidth: 500, width: '100%', bgcolor: theme.background } }}
       >
         <DialogTitle sx={{ fontWeight: 900, color: theme.textMain, letterSpacing: "-0.02em", pt: 3 }}>
-          Update Architecture
+          {t('algorithmList.updateArchitecture', 'Update Architecture')}
         </DialogTitle>
         <DialogContent sx={{ py: 1 }}>
           <Stack spacing={3} sx={{ mt: 1 }}>
             <Box>
-              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Algorithm Name</Typography>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{t('algorithmList.algorithmName', 'Algorithm Name')}</Typography>
               <TextField
                 fullWidth
                 variant="outlined"
@@ -311,7 +306,7 @@ export default function AlgorithmList() {
               />
             </Box>
             <Box>
-              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>Description</Typography>
+              <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, mb: 1, display: 'block', textTransform: 'uppercase' }}>{t('algorithmList.description', 'Description')}</Typography>
               <TextField
                 fullWidth
                 multiline
@@ -325,14 +320,14 @@ export default function AlgorithmList() {
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setEditOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700, px: 3, textTransform: 'none' }}>Cancel</Button>
+          <Button onClick={() => setEditOpen(false)} sx={{ color: theme.textMuted, fontWeight: 700, px: 3, textTransform: 'none' }}>{t('algorithmList.cancel', 'Cancel')}</Button>
           <Button
             disabled={saving}
             onClick={async () => {
               if (!selectedAlgo) return;
               try {
                 setSaving(true);
-                const res = await axios.put(`/factories/${factoryId}/algorithms/${selectedAlgo.id}`, {
+                const res = await axios.put(`/algorithms/${selectedAlgo.id}`, {
                   name: editName,
                   description: editDescription,
                 });
@@ -342,21 +337,19 @@ export default function AlgorithmList() {
             }}
             variant="contained" sx={{ bgcolor: theme.primary, borderRadius: "12px", fontWeight: 700, px: 4, py: 1.2, textTransform: 'none', boxShadow: `0 8px 16px -4px ${alpha(theme.primary, 0.3)}` }}
           >
-            {saving ? <CircularProgress size={20} color="inherit" /> : "Save Changes"}
+            {saving ? <CircularProgress size={20} color="inherit" /> : t('algorithmList.saveChanges', 'Save Changes')}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Delete Dialog */}
       < Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} PaperProps={{ sx: { borderRadius: "24px", bgcolor: theme.paper } }}>
-        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.25rem', color: theme.textMain }}>Permanently Delete?</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 800, fontSize: '1.25rem', color: theme.textMain }}>{t('algorithmList.deleteTitle', 'Permanently Delete?')}</DialogTitle>
         <DialogContent>
-          <Typography variant="body1" sx={{ color: theme.textMuted, lineHeight: 1.6 }}>
-            You are about to delete <strong>{selectedAlgo?.name}</strong>. This will orphan all associated models and experiments. This action cannot be reversed.
-          </Typography>
+          <Typography variant="body1" sx={{ color: theme.textMuted, lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: t('algorithmList.deleteWarning', 'You are about to delete <strong>{{name}}</strong>. This will delete all associated models and experiments across all factories. This action cannot be reversed.', { name: selectedAlgo?.name }) }} />
         </DialogContent>
         <DialogActions sx={{ p: 4 }}>
-          <Button onClick={() => setDeleteOpen(false)} sx={{ fontWeight: 700, color: theme.textMain, px: 3 }}>Keep it</Button>
+          <Button onClick={() => setDeleteOpen(false)} sx={{ fontWeight: 700, color: theme.textMain, px: 3 }}>{t('algorithmList.keepIt', 'Keep it')}</Button>
           <Button
             variant="contained"
             color="error"
@@ -364,13 +357,13 @@ export default function AlgorithmList() {
             onClick={async () => {
               if (!selectedAlgo) return;
               try {
-                await axios.delete(`/factories/${factoryId}/algorithms/${selectedAlgo.id}`);
+                await axios.delete(`/algorithms/${selectedAlgo.id}`);
                 setAlgorithms((prev) => prev.filter((a) => a.id !== selectedAlgo.id));
                 setDeleteOpen(false);
               } catch (err) { console.error(err); }
             }}
           >
-            Yes, Delete Algorithm
+            {t('algorithmList.yesDelete', 'Yes, Delete Algorithm')}
           </Button>
         </DialogActions>
       </Dialog >

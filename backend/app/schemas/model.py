@@ -10,6 +10,7 @@ class ModelOut(BaseModel):
     name: str
     description: str | None
     algorithm_id: int
+    factory_id: int
     created_at: datetime
     versions_count: int = 0
 

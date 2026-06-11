@@ -66,7 +66,7 @@ export default function ExperimentRun() {
     const fetchRun = async () => {
       try {
         const res = await axios.get(
-          `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments/${experimentId}/runs/${runId}`
+          `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/experiments/${experimentId}/runs/${runId}`
         );
         setRun(res.data);
       } catch (err) {
@@ -127,7 +127,7 @@ export default function ExperimentRun() {
           startIcon={<ArrowBackIcon />}
           onClick={() =>
             navigate(
-              `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments/${experimentId}`
+              `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/experiments`
             )
           }
           sx={{ mr: 2 }}

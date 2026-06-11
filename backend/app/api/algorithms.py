@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 import io
 import csv
@@ -20,40 +20,31 @@ from app.utils.logger import logger
 router = APIRouter()
 
 # ======================================================
-# CREATE ALGORITHM
+# CREATE ALGORITHM (GLOBAL)
 # ======================================================
 @router.post(
-    "/{factory_id}/algorithms",
+    "/",
     response_model=AlgorithmOut,
     status_code=status.HTTP_201_CREATED,
 )
 def create_algorithm(
-    factory_id: int,
     algorithm: AlgorithmCreate,
     db: Session = Depends(get_db),
 ):
-    factory = db.query(Factory).filter(Factory.id == factory_id).first()
-    if not factory:
-        raise HTTPException(404, "Factory not found")
-
     existing = (
         db.query(Algorithm)
-        .filter(
-            Algorithm.factory_id == factory_id,
-            func.lower(Algorithm.name) == algorithm.name.lower(),
-        )
+        .filter(func.lower(Algorithm.name) == algorithm.name.lower())
         .first()
     )
     if existing:
         raise HTTPException(
             status_code=400,
-            detail="Algorithm with this name already exists in this factory",
+            detail="Algorithm with this name already exists",
         )
 
     db_algorithm = Algorithm(
         name=algorithm.name,
         description=algorithm.description,
-        factory_id=factory_id,
     )
 
     db.add(db_algorithm)
@@ -67,26 +58,27 @@ def create_algorithm(
 
 
 # ======================================================
-# LIST ALGORITHMS
+# LIST ALGORITHMS (GLOBAL)
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms",
+    "/",
     response_model=list[AlgorithmOut],
 )
-def list_algorithms(factory_id: int, db: Session = Depends(get_db)):
-    factory = db.query(Factory).filter(Factory.id == factory_id).first()
-    if not factory:
-        raise HTTPException(404, "Factory not found")
-
+def list_algorithms(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db)
+):
     rows = (
         db.query(
             Algorithm,
             func.count(Model.id).label("models_count"),
         )
         .outerjoin(Model, Model.algorithm_id == Algorithm.id)
-        .filter(Algorithm.factory_id == factory_id)
         .group_by(Algorithm.id)
         .order_by(Algorithm.created_at.desc())
+        .offset(skip)
+        .limit(limit)
         .all()
     )
 
@@ -102,11 +94,10 @@ def list_algorithms(factory_id: int, db: Session = Depends(get_db)):
 # GET SINGLE ALGORITHM
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}",
+    "/{algorithm_id}",
     response_model=AlgorithmOut,
 )
 def get_algorithm(
-    factory_id: int,
     algorithm_id: int,
     db: Session = Depends(get_db),
 ):
@@ -116,10 +107,7 @@ def get_algorithm(
             func.count(Model.id).label("models_count"),
         )
         .outerjoin(Model, Model.algorithm_id == Algorithm.id)
-        .filter(
-            Algorithm.id == algorithm_id,
-            Algorithm.factory_id == factory_id,
-        )
+        .filter(Algorithm.id == algorithm_id)
         .group_by(Algorithm.id)
         .first()
     )
@@ -133,36 +121,27 @@ def get_algorithm(
 
 
 # ======================================================
-# UPDATE ALGORITHM (FIXED)
+# UPDATE ALGORITHM
 # ======================================================
 @router.put(
-    "/{factory_id}/algorithms/{algorithm_id}",
+    "/{algorithm_id}",
     response_model=AlgorithmOut,
 )
 def update_algorithm(
-    factory_id: int,
     algorithm_id: int,
     payload: AlgorithmUpdate,
     db: Session = Depends(get_db),
 ):
-    algo = (
-        db.query(Algorithm)
-        .filter(
-            Algorithm.id == algorithm_id,
-            Algorithm.factory_id == factory_id,
-        )
-        .first()
-    )
+    algo = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
 
     if not algo:
         raise HTTPException(404, "Algorithm not found")
 
-    # Duplicate name check (only if name is changing)
+    # Duplicate name check
     if payload.name and payload.name.lower() != algo.name.lower():
         exists = (
             db.query(Algorithm)
             .filter(
-                Algorithm.factory_id == factory_id,
                 func.lower(Algorithm.name) == payload.name.lower(),
                 Algorithm.id != algorithm_id,
             )
@@ -184,7 +163,6 @@ def update_algorithm(
 
     logger.info(f"Algorithm updated: {algo.name} (ID: {algo.id})")
 
-    # attach models_count
     algo.models_count = (
         db.query(func.count(Model.id))
         .filter(Model.algorithm_id == algo.id)
@@ -198,22 +176,14 @@ def update_algorithm(
 # DELETE ALGORITHM
 # ======================================================
 @router.delete(
-    "/{factory_id}/algorithms/{algorithm_id}",
+    "/{algorithm_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_algorithm(
-    factory_id: int,
     algorithm_id: int,
     db: Session = Depends(get_db),
 ):
-    algo = (
-        db.query(Algorithm)
-        .filter(
-            Algorithm.id == algorithm_id,
-            Algorithm.factory_id == factory_id,
-        )
-        .first()
-    )
+    algo = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
 
     if not algo:
         raise HTTPException(404, "Algorithm not found")
@@ -222,31 +192,111 @@ def delete_algorithm(
     db.commit()
     logger.info(f"Algorithm deleted: {algo.name} (ID: {algo.id})")
 
+
+# ======================================================
+# LIST ALL FACTORIES RUNNING AN ALGORITHM
+# ======================================================
+@router.get(
+    "/{algorithm_id}/factories"
+)
+def list_factories_for_algorithm(
+    algorithm_id: int,
+    db: Session = Depends(get_db)
+):
+    # Verify algorithm exists
+    algo = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
+    if not algo:
+        raise HTTPException(404, "Algorithm not found")
+
+    rows = (
+        db.query(
+            Factory.id,
+            Factory.name,
+            Factory.description,
+            Factory.created_at,
+            func.count(Model.id).label("models_count")
+        )
+        .outerjoin(Model, (Model.factory_id == Factory.id) & (Model.algorithm_id == algorithm_id))
+        .filter((Model.id.isnot(None)) | (Factory.created_by_algorithm_id == algorithm_id))
+        .group_by(Factory.id)
+        .order_by(Factory.name.asc())
+        .all()
+    )
+
+    return [
+        {
+            "id": r.id,
+            "name": r.name,
+            "description": r.description,
+            "created_at": r.created_at,
+            "models_count": r.models_count,
+        }
+        for r in rows
+    ]
+
+
+# ======================================================
+# LIST ALL VERSIONS UNDER AN ALGORITHM (FOR INHERITANCE)
+# ======================================================
+@router.get(
+    "/{algorithm_id}/versions"
+)
+def list_all_versions_for_algorithm(
+    algorithm_id: int,
+    db: Session = Depends(get_db)
+):
+    rows = (
+        db.query(
+            ModelVersion.id,
+            ModelVersion.version_number,
+            ModelVersion.accuracy,
+            ModelVersion.precision,
+            ModelVersion.recall,
+            ModelVersion.f1_score,
+            ModelVersion.created_at,
+            Model.name.label("model_name"),
+            Factory.name.label("factory_name")
+        )
+        .join(Model, Model.id == ModelVersion.model_id)
+        .join(Factory, Factory.id == Model.factory_id)
+        .filter(Model.algorithm_id == algorithm_id)
+        .order_by(Factory.name, Model.name, ModelVersion.version_number.desc())
+        .all()
+    )
+    return [
+        {
+            "id": r.id,
+            "version_number": r.version_number,
+            "accuracy": r.accuracy,
+            "precision": r.precision,
+            "recall": r.recall,
+            "f1_score": r.f1_score,
+            "created_at": r.created_at,
+            "model_name": r.model_name,
+            "factory_name": r.factory_name
+        }
+        for r in rows
+    ]
+
+
 # ======================================================
 # GENERATE REPORT (CSV)
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/report",
+    "/{algorithm_id}/report",
 )
 def generate_algorithm_report(
-    factory_id: int,
     algorithm_id: int,
     db: Session = Depends(get_db),
 ):
-    algo = (
-        db.query(Algorithm)
-        .filter(
-            Algorithm.id == algorithm_id,
-            Algorithm.factory_id == factory_id,
-        )
-        .first()
-    )
+    algo = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
 
     if not algo:
         raise HTTPException(404, "Algorithm not found")
 
     models = (
         db.query(Model)
+        .options(joinedload(Model.versions).joinedload(ModelVersion.delta), joinedload(Model.factory))
         .filter(Model.algorithm_id == algorithm_id)
         .order_by(Model.name.asc())
         .all()
@@ -257,6 +307,7 @@ def generate_algorithm_report(
     
     # Header Row
     csv_writer.writerow([
+        "Factory Name",
         "Model Name",
         "Version Number",
         "Created At",
@@ -273,25 +324,16 @@ def generate_algorithm_report(
     ])
 
     for model in models:
-        # Fetch versions for this specific model, ordered by version number
-        versions = (
-            db.query(ModelVersion)
-            .filter(ModelVersion.model_id == model.id)
-            .order_by(ModelVersion.version_number.asc())
-            .all()
-        )
+        # Sort versions in memory since they are eagerly loaded
+        versions = sorted(model.versions, key=lambda v: v.version_number)
         
         for v in versions:
-            # Get total dataset count from delta if available
             dataset_count = v.delta.dataset_count if v.delta and v.delta.dataset_count is not None else 0
-            
-            # Format hyperparameters
             hyperparameters = str(v.parameters) if v.parameters else "None"
-            
-            # Format created_at to clean string (day-month-year time)
             created_at_str = v.created_at.strftime("%d-%m-%Y %H:%M:%S") if v.created_at else "N/A"
 
             csv_writer.writerow([
+                model.factory.name if model.factory else "N/A",
                 model.name,
                 v.version_number,
                 created_at_str,
@@ -307,7 +349,6 @@ def generate_algorithm_report(
                 hyperparameters
             ])
             
-        # Add a blank row after each model's versions block to separate models clearly
         if versions:
             csv_writer.writerow([])
 
@@ -318,3 +359,46 @@ def generate_algorithm_report(
     safe_name = algo.name.replace(" ", "_").lower()
     response.headers["Content-Disposition"] = f"attachment; filename=algorithm_{safe_name}_report.csv"
     return response
+
+
+# ======================================================
+# REMOVE FACTORY FROM ALGORITHM
+# ======================================================
+@router.delete(
+    "/{algorithm_id}/factories/{factory_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_factory_from_algorithm(
+    algorithm_id: int,
+    factory_id: int,
+    db: Session = Depends(get_db),
+):
+    # Verify algorithm exists
+    algo = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
+    if not algo:
+        raise HTTPException(404, "Algorithm not found")
+
+    # Verify factory exists
+    factory = db.query(Factory).filter(Factory.id == factory_id).first()
+    if not factory:
+        raise HTTPException(404, "Factory not found")
+
+    # Get all model IDs for this algorithm at this factory
+    model_ids = [m.id for m in db.query(Model.id).filter(
+        Model.algorithm_id == algorithm_id,
+        Model.factory_id == factory_id
+    ).all()]
+
+    if model_ids:
+        # Delete model versions first
+        db.query(ModelVersion).filter(ModelVersion.model_id.in_(model_ids)).delete(synchronize_session=False)
+        # Delete models
+        db.query(Model).filter(Model.id.in_(model_ids)).delete(synchronize_session=False)
+
+    # If this factory was created_by_algorithm_id == algorithm_id, set it to None
+    if factory.created_by_algorithm_id == algorithm_id:
+        factory.created_by_algorithm_id = None
+
+    db.commit()
+    logger.info(f"Factory {factory.name} (ID: {factory.id}) removed from algorithm {algo.name} (ID: {algo.id})")
+

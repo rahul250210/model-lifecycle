@@ -26,11 +26,17 @@ class ModelVersion(Base):
     gpu_memory_usage = Column(Float, nullable=True) # MB
     cameras_supported = Column(Integer, nullable=True) # Count
     
-    # Confusion Matrix
-    tp = Column(Integer, nullable=True)
-    tn = Column(Integer, nullable=True)
-    fp = Column(Integer, nullable=True)
-    fn = Column(Integer, nullable=True)
+    # Frame-wise Confusion Matrix
+    frame_tp = Column(Integer, nullable=True)
+    frame_tn = Column(Integer, nullable=True)
+    frame_fp = Column(Integer, nullable=True)
+    frame_fn = Column(Integer, nullable=True)
+
+    # Alert-wise Confusion Matrix
+    alert_tp = Column(Integer, nullable=True)
+    alert_tn = Column(Integer, nullable=True)
+    alert_fp = Column(Integer, nullable=True)
+    alert_fn = Column(Integer, nullable=True)
 
     parameters = Column(JSONB, default=dict)
     resource_metrics = Column(JSONB, default=dict)

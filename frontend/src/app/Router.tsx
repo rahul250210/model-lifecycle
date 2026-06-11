@@ -8,6 +8,7 @@ import { Box, CircularProgress, Typography } from "@mui/material";
 const FactoryList = lazy(() => import("../pages/factories/FactoryList"));
 const FactoryCreate = lazy(() => import("../pages/factories/FactoryCreate"));
 const FactoryOverview = lazy(() => import("../pages/factories/FactoryOverview"));
+const FactoryListForAlgorithm = lazy(() => import("../pages/factories/FactoryListForAlgorithm"));
 
 /* =======================
    Dashboard Page (Lazy)
@@ -81,40 +82,32 @@ export default function Router() {
         <Route path="/dashboard" element={<Dashboard />} />
 
         {/* =======================
-            Factories
+            Factories (Management)
         ======================= */}
         <Route path="/factories" element={<FactoryList />} />
         <Route path="/factories/create" element={<FactoryCreate />} />
-
-        {/* OPTIONAL overview (not primary entry) */}
-        {/* Factory Dashboard / Overview */}
         <Route path="/factories/:factoryId" element={<FactoryOverview />} />
 
         {/* =======================
-            Algorithms (PRIMARY ENTRY AFTER FACTORY CLICK)
+            Algorithms (PRIMARY ENTRY)
         ======================= */}
-        <Route
-          path="/factories/:factoryId/algorithms"
-          element={<AlgorithmList />}
-        />
-        <Route
-          path="/factories/:factoryId/algorithms/create"
-          element={<AlgorithmCreate />}
-        />
+        <Route path="/algorithms" element={<AlgorithmList />} />
+        <Route path="/algorithms/create" element={<AlgorithmCreate />} />
+        <Route path="/algorithms/:algorithmId/factories" element={<FactoryListForAlgorithm />} />
 
         {/* =======================
             Models
         ======================= */}
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models"
+          path="/algorithms/:algorithmId/factories/:factoryId/models"
           element={<ModelList />}
         />
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/create"
+          path="/algorithms/:algorithmId/factories/:factoryId/models/create"
           element={<ModelCreate />}
         />
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId"
+          path="/algorithms/:algorithmId/factories/:factoryId/models/:modelId"
           element={<ModelOverview />}
         />
 
@@ -122,24 +115,23 @@ export default function Router() {
             Versions (DVC)
         ======================= */}
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/versions"
+          path="/algorithms/:algorithmId/factories/:factoryId/models/:modelId/versions"
           element={<VersionTimeline />}
         />
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/versions/create"
+          path="/algorithms/:algorithmId/factories/:factoryId/models/:modelId/versions/compare"
+          element={<VersionCompare />}
+        />
+        <Route
+          path="/algorithms/:algorithmId/factories/:factoryId/models/:modelId/versions/create"
           element={<VersionCreate />}
         />
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/versions/:versionId"
+          path="/algorithms/:algorithmId/factories/:factoryId/models/:modelId/versions/:versionId"
           element={<VersionDetails />}
         />
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/versions/compare"
-          element={<VersionCompare />}
-        />
-
-        <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/versions/:versionId/edit"
+          path="/algorithms/:algorithmId/factories/:factoryId/models/:modelId/versions/:versionId/edit"
           element={<VersionEdit />}
         />
 
@@ -147,15 +139,15 @@ export default function Router() {
             Experiments (MLflow)
         ======================= */}
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/experiments"
+          path="/algorithms/:algorithmId/factories/:factoryId/models/:modelId/experiments"
           element={<ExperimentList />}
         />
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/experiments/create"
+          path="/algorithms/:algorithmId/factories/:factoryId/models/:modelId/experiments/create"
           element={<ExperimentCreate />}
         />
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/experiments/:experimentId/runs/:runId"
+          path="/algorithms/:algorithmId/factories/:factoryId/models/:modelId/experiments/:experimentId/runs/:runId"
           element={<ExperimentRun />}
         />
 
@@ -170,15 +162,14 @@ export default function Router() {
 
         {/* Version-level artifacts */}
         <Route
-          path="/factories/:factoryId/algorithms/:algorithmId/models/:modelId/versions/:versionId/artifacts/:artifactId"
+          path="/algorithms/:algorithmId/factories/:factoryId/models/:modelId/versions/:versionId/artifacts/:artifactId"
           element={<ArtifactViewer />}
         />
-
 
         {/* =======================
             Fallback
         ======================= */}
-        <Route path="*" element={<Navigate to="/factories" />} />
+        <Route path="*" element={<Navigate to="/algorithms" />} />
       </Routes>
     </Suspense>
   );

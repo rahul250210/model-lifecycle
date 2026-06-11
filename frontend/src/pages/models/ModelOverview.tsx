@@ -25,6 +25,9 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import SpeedIcon from "@mui/icons-material/Speed";
 import DownloadIcon from "@mui/icons-material/Download";
+import ShowChartIcon from "@mui/icons-material/ShowChart";
+import MemoryIcon from "@mui/icons-material/Memory";
+import TuneIcon from "@mui/icons-material/Tune";
 import {
   XAxis,
   YAxis,
@@ -33,119 +36,209 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
-  Legend,
 } from "recharts";
 
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axios";
 import { useTheme } from "../../theme/ThemeContext";
+import { useTranslation } from "react-i18next";
 
-// --- UNIFIED CHART COMPONENT ---
-const UnifiedChart = ({ title, data, metrics }: any) => {
+// --- CUSTOM TOOLTIP ---
+const CustomTooltip = ({ active, payload, label, theme }: any) => {
+  if (!active || !payload || !payload.length) return null;
+  return (
+    <Box sx={{
+      bgcolor: theme.mode === 'dark' ? alpha(theme.paper, 0.95) : alpha('#fff', 0.97),
+      border: `1px solid ${alpha(theme.border, 0.4)}`,
+      borderRadius: '16px',
+      boxShadow: '0 16px 40px rgba(0,0,0,0.18)',
+      backdropFilter: 'blur(20px)',
+      p: 2,
+      minWidth: 160,
+    }}>
+      <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMuted, letterSpacing: 1, textTransform: 'uppercase', fontSize: '0.65rem', display: 'block', mb: 1.5 }}>
+        {label?.replace('v', '') || ''}
+      </Typography>
+      <Stack spacing={1}>
+        {payload.map((entry: any) => (
+          <Stack key={entry.dataKey} direction="row" alignItems="center" justifyContent="space-between" spacing={3}>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0, boxShadow: `0 0 6px ${entry.color}` }} />
+              <Typography variant="caption" sx={{ color: theme.textSecondary, fontWeight: 600, fontSize: '0.78rem' }}>{entry.name}</Typography>
+            </Stack>
+            <Typography variant="caption" sx={{ color: theme.textMain, fontWeight: 800, fontSize: '0.85rem', fontVariantNumeric: 'tabular-nums' }}>
+              {typeof entry.value === 'number' ? entry.value.toFixed(1) : entry.value ?? '--'}
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
+    </Box>
+  );
+};
+
+// --- PREMIUM CHART COMPONENT ---
+const PremiumChart = ({ title, subtitle, icon, data, metrics, accentColor }: any) => {
   const { theme } = useTheme();
+  const { t } = useTranslation();
+  const hasData = data && data.length > 0 && metrics.some((m: any) => data.some((d: any) => d[m.key] !== undefined && d[m.key] !== null && d[m.key] !== ''));
+
   return (
     <Paper elevation={0} sx={{
-      p: 3,
-      borderRadius: "24px",
-      border: `1px solid ${alpha(theme.border, 0.4)}`, // Subtler border
-      bgcolor: theme.mode === 'dark' ? alpha(theme.paper, 0.8) : alpha(theme.paper, 0.4),
-      backdropFilter: "blur(20px)",
-      height: "100%",
-      minHeight: 400,
+      p: 0,
+      borderRadius: '28px',
+      border: `1px solid ${alpha(theme.border, 0.35)}`,
+      bgcolor: theme.mode === 'dark' ? alpha(theme.paper, 0.7) : alpha(theme.paper, 0.6),
+      backdropFilter: 'blur(24px)',
+      overflow: 'hidden',
+      height: '100%',
       boxShadow: theme.mode === 'dark'
-        ? `0 8px 32px -8px rgba(0,0,0,0.5)`
-        : `0 8px 32px -8px ${alpha(theme.textMain, 0.05)}`,
-      transition: "box-shadow 0.3s ease-in-out, border-color 0.3s ease-in-out",
-      "&:hover": {
+        ? `0 8px 32px -8px rgba(0,0,0,0.6), inset 0 1px 0 ${alpha('#fff', 0.04)}`
+        : `0 8px 32px -8px ${alpha(accentColor || theme.primary, 0.08)}, inset 0 1px 0 rgba(255,255,255,0.8)`,
+      transition: 'box-shadow 0.35s ease, border-color 0.35s ease',
+      '&:hover': {
+        borderColor: alpha(accentColor || theme.primary, 0.3),
         boxShadow: theme.mode === 'dark'
-          ? `0 12px 48px -10px rgba(0,0,0,0.7)`
-          : `0 12px 40px -10px ${alpha(theme.textMain, 0.1)}`,
-        borderColor: alpha(theme.primary, 0.4)
+          ? `0 16px 48px -12px rgba(0,0,0,0.8), inset 0 1px 0 ${alpha('#fff', 0.06)}`
+          : `0 16px 48px -12px ${alpha(accentColor || theme.primary, 0.14)}`,
       }
     }}>
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-        <Typography variant="h6" fontWeight={800} sx={{
-          background: `linear-gradient(45deg, ${theme.textMain}, ${theme.textSecondary})`,
-          WebkitBackgroundClip: "text",
-          WebkitTextFillColor: "transparent"
-        }}>
-          {title}
-        </Typography>
-      </Stack>
-
-      <Box sx={{ height: 380, width: "100%" }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
-            <defs>
-              {metrics.map((m: any) => (
-                <linearGradient key={m.key} id={`gradient-${m.key}`} x1="0" y1="0" x2="0" y2="1">
-
-                </linearGradient>
-              ))}
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.border, 0.2)} />
-            <XAxis
-              dataKey="name"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: theme.textMuted, fontSize: 14, fontWeight: 800 }}
-              tickFormatter={(v) => v.replace('v', '')}
-              padding={{ left: 20 }}
-              label={{ value: "Version", position: "insideBottom", offset: -25, fill: theme.textSecondary, fontSize: 11, fontWeight: 800 }}
-            />
-            <YAxis
-              yAxisId="left"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: theme.textMuted, fontSize: 14, fontWeight: 800 }}
-              width={40}
-              padding={{ bottom: 12 }}
-            />
-            <Tooltip
-              contentStyle={{
-                borderRadius: '16px',
-                border: `1px solid ${alpha(theme.border, 0.5)}`,
-                boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
-                backgroundColor: alpha(theme.paper, 0.85),
-                backdropFilter: "blur(12px)",
-                padding: "12px 16px"
-              }}
-              itemStyle={{ fontWeight: 700, fontSize: '0.85rem' }}
-              labelStyle={{ display: 'none' }}
-              cursor={{ stroke: theme.textMuted, strokeWidth: 1, strokeDasharray: '4 4' }}
-            />
-            <Legend
-              verticalAlign="top"
-              align="right"
-              height={20}
-              iconType="circle"
-              iconSize={8}
-              wrapperStyle={{
-                fontWeight: 700,
-                fontSize: '0.7rem',
-                color: theme.textSecondary,
-                top: 0,
-                right: 10,
-                paddingBottom: '10px'
-              }}
-            />
-
+      {/* Header */}
+      <Box sx={{
+        px: 3.5, pt: 3, pb: 2.5,
+        borderBottom: `1px solid ${alpha(theme.border, 0.2)}`,
+        background: theme.mode === 'dark'
+          ? `linear-gradient(135deg, ${alpha(accentColor || theme.primary, 0.05)} 0%, transparent 60%)`
+          : `linear-gradient(135deg, ${alpha(accentColor || theme.primary, 0.04)} 0%, transparent 60%)`,
+      }}>
+        <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
+          <Stack direction="row" alignItems="center" spacing={1.5}>
+            <Box sx={{
+              p: 1.25,
+              borderRadius: '12px',
+              bgcolor: alpha(accentColor || theme.primary, 0.12),
+              color: accentColor || theme.primary,
+              display: 'flex',
+              alignItems: 'center',
+              boxShadow: `0 0 0 1px ${alpha(accentColor || theme.primary, 0.15)}`,
+            }}>
+              {icon}
+            </Box>
+            <Box>
+              <Typography variant="subtitle1" fontWeight={800} sx={{ color: theme.textMain, lineHeight: 1.2, letterSpacing: '-0.02em' }}>
+                {title}
+              </Typography>
+              {subtitle && (
+                <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 500, display: 'block', mt: 0.2 }}>
+                  {subtitle}
+                </Typography>
+              )}
+            </Box>
+          </Stack>
+          {/* Metric Pills */}
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" justifyContent="flex-end" sx={{ maxWidth: '55%' }}>
             {metrics.map((m: any) => (
-              <Area
-                key={m.key}
-                yAxisId="left"
-                type="monotone"
-                dataKey={m.key}
-                name={m.label}
-                stroke={m.color}
-                strokeWidth={3}
-                fill={`url(#gradient-${m.key})`}
-                dot={{ r: 4, fill: theme.paper, stroke: m.color, strokeWidth: 2 }}
-                activeDot={{ r: 7, strokeWidth: 0, fill: m.color }}
-              />
+              <Box key={m.key} sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.6,
+                px: 1.25,
+                py: 0.4,
+                borderRadius: '20px',
+                bgcolor: alpha(m.color, 0.1),
+                border: `1px solid ${alpha(m.color, 0.2)}`,
+              }}>
+                <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: m.color, boxShadow: `0 0 4px ${m.color}` }} />
+                <Typography variant="caption" sx={{ color: m.color, fontWeight: 700, fontSize: '0.68rem', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                  {m.label}
+                </Typography>
+              </Box>
             ))}
-          </AreaChart>
-        </ResponsiveContainer>
+          </Stack>
+        </Stack>
+      </Box>
+
+      {/* Chart Body */}
+      <Box sx={{ px: 1, pt: 2, pb: 1 }}>
+        {!hasData ? (
+          <Box sx={{ height: 280, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5 }}>
+            <Box sx={{ p: 2, borderRadius: '50%', bgcolor: alpha(accentColor || theme.primary, 0.08), color: alpha(accentColor || theme.primary, 0.4), display: 'flex' }}>
+              {icon}
+            </Box>
+            <Typography variant="body2" sx={{ color: theme.textMuted, fontWeight: 600 }}>{t('modelOverview.noData', 'No data recorded yet')}</Typography>
+            <Typography variant="caption" sx={{ color: alpha(theme.textMuted, 0.6) }}>{t('modelOverview.registerVersion', 'Register a version with metrics to see trends')}</Typography>
+          </Box>
+        ) : (
+          <Box sx={{ height: 310, width: '100%' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
+                <defs>
+                  {metrics.map((m: any) => (
+                    <linearGradient key={m.key} id={`pgrad-${m.key}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={m.color} stopOpacity={0.35} />
+                      <stop offset="55%" stopColor={m.color} stopOpacity={0.08} />
+                      <stop offset="100%" stopColor={m.color} stopOpacity={0} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid strokeDasharray="2 4" vertical={false} stroke={alpha(theme.border, 0.18)} />
+                <XAxis
+                  dataKey="name"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: theme.textMuted, fontSize: 12, fontWeight: 700 }}
+                  tickFormatter={(v) => v}
+                  padding={{ left: 10, right: 10 }}
+                />
+                <YAxis
+                  yAxisId="left"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: theme.textMuted, fontSize: 11, fontWeight: 600 }}
+                  width={36}
+                  domain={[0, 'auto']}
+                  allowDataOverflow={false}
+                />
+                <Tooltip
+                  content={(props: any) => <CustomTooltip {...props} theme={theme} />}
+                  cursor={{ stroke: alpha(theme.textMuted, 0.2), strokeWidth: 1.5, strokeDasharray: '5 5' }}
+                />
+                {metrics.map((m: any, idx: number) => (
+                  <Area
+                    key={m.key}
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey={m.key}
+                    name={m.label}
+                    stroke={m.color}
+                    strokeWidth={2.5}
+                    fill={`url(#pgrad-${m.key})`}
+                    strokeOpacity={0.95}
+                    connectNulls={false}
+                    dot={(props: any) => {
+                      const { cx, cy, stroke, value } = props;
+                      if (value === undefined || value === null || cy === undefined || cy === null || isNaN(cy)) return <g key={`dot-${idx}-${cx}`} />;
+                      return (
+                        <g key={`dot-${idx}-${cx}`}>
+                          <circle cx={cx} cy={cy} r={5} fill={theme.mode === 'dark' ? theme.paper : '#fff'} stroke={stroke} strokeWidth={2.5} />
+                        </g>
+                      );
+                    }}
+                    activeDot={(props: any) => {
+                      const { cx, cy, stroke, value } = props;
+                      if (value === undefined || value === null || cy === undefined || cy === null || isNaN(cy)) return <g key={`adot-${idx}-${cx}`} />;
+                      return (
+                        <g key={`adot-${idx}-${cx}`}>
+                          <circle cx={cx} cy={cy} r={7} fill={stroke} strokeWidth={0} opacity={0.2} />
+                          <circle cx={cx} cy={cy} r={4.5} fill={stroke} strokeWidth={0} />
+                        </g>
+                      );
+                    }}
+                  />
+                ))}
+              </AreaChart>
+            </ResponsiveContainer>
+          </Box>
+        )}
       </Box>
     </Paper>
   );
@@ -155,6 +248,7 @@ const UnifiedChart = ({ title, data, metrics }: any) => {
 const ActivityFeed = ({ versions, factoryId, algorithmId, modelId }: { versions: any[], factoryId: string, algorithmId: string, modelId: string }) => {
   const { theme } = useTheme();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   // Sort versions by most recent activity (updated_at)
   const sortedByActivity = [...versions].sort((a, b) =>
@@ -176,7 +270,7 @@ const ActivityFeed = ({ versions, factoryId, algorithmId, modelId }: { versions:
         bgcolor: theme.mode === 'dark' ? alpha(theme.paper, 0.9) : alpha(theme.paper, 0.6)
       }}>
         <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain }}>
-          Recent Activity
+          {t('modelOverview.recentActivity', 'Recent Activity')}
         </Typography>
       </Box>
       <Stack spacing={0}>
@@ -209,12 +303,12 @@ const ActivityFeed = ({ versions, factoryId, algorithmId, modelId }: { versions:
                   <Box>
                     <Stack direction="row" spacing={1} alignItems="center">
                       <Typography variant="body1" fontWeight={700} sx={{ color: theme.textMain }}>
-                        {isEdited ? "Version Edited" : "New Version Created"}
+                        {isEdited ? t('modelOverview.versionEdited', "Version Edited") : t('modelOverview.newVersionCreated', "New Version Created")}
                       </Typography>
-                      {v.is_active && <Chip label="Active" size="small" sx={{ height: 20, bgcolor: theme.success, color: '#fff', fontWeight: 700, fontSize: '0.65rem' }} />}
+                      {v.is_active && <Chip label={t('modelOverview.active', 'Active')} size="small" sx={{ height: 20, bgcolor: theme.success, color: '#fff', fontWeight: 700, fontSize: '0.65rem' }} />}
                     </Stack>
                     <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 500 }}>
-                      {v.updated_at ? new Date(v.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : "Just now"}
+                      {v.updated_at ? new Date(v.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : t('modelOverview.justNow', "Just now")}
                     </Typography>
                   </Box>
                 </Stack>
@@ -222,7 +316,7 @@ const ActivityFeed = ({ versions, factoryId, algorithmId, modelId }: { versions:
                 <Button
                   variant="outlined"
                   size="small"
-                  onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/${v.id}`)}
+                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${v.id}`)}
                   sx={{
                     borderRadius: "8px",
                     textTransform: 'none',
@@ -232,7 +326,7 @@ const ActivityFeed = ({ versions, factoryId, algorithmId, modelId }: { versions:
                     "&:hover": { borderColor: theme.primary, color: theme.primary, bgcolor: alpha(theme.primary, 0.05) }
                   }}
                 >
-                  View Details
+                  {t('modelOverview.viewDetails', 'View Details')}
                 </Button>
               </Stack>
 
@@ -271,8 +365,8 @@ const ActivityFeed = ({ versions, factoryId, algorithmId, modelId }: { versions:
         })}
         {versions.length === 0 && (
           <Box sx={{ p: 6, textAlign: "center" }}>
-            <Typography variant="body1" sx={{ color: theme.textMuted, fontWeight: 500 }}>No activity recorded yet.</Typography>
-            <Button variant="text" size="small" sx={{ mt: 1, textTransform: 'none' }}>Create your first version</Button>
+            <Typography variant="body1" sx={{ color: theme.textMuted, fontWeight: 500 }}>{t('modelOverview.noActivity', 'No activity recorded yet.')}</Typography>
+            <Button variant="text" size="small" sx={{ mt: 1, textTransform: 'none' }}>{t('modelOverview.createFirstVersion', 'Create your first version')}</Button>
           </Box>
         )}
       </Stack>
@@ -284,6 +378,7 @@ export default function ModelOverview() {
   const { factoryId, algorithmId, modelId } = useParams();
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const [model, setModel] = useState<any>(null);
   const [versions, setVersions] = useState<any[]>([]);
@@ -295,10 +390,10 @@ export default function ModelOverview() {
     const fetchData = async () => {
       try {
         const [modelRes, versionsRes, factoryRes, allAlgosRes] = await Promise.all([
-          axios.get(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}`),
-          axios.get(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`),
+          axios.get(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}`),
+          axios.get(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions`),
           axios.get(`/factories/${factoryId}`),
-          axios.get(`/factories/${factoryId}/algorithms`)
+          axios.get(`/algorithms`)
         ]);
 
         const sortedVersions = [...versionsRes.data].sort(
@@ -325,7 +420,7 @@ export default function ModelOverview() {
   const handleGenerateReport = async () => {
     try {
       const response = await axios.get(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/report`,
+        `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/report`,
         { responseType: 'blob' }
       );
 
@@ -352,7 +447,7 @@ export default function ModelOverview() {
       document.body.removeChild(link);
     } catch (error) {
       console.error("Error downloading report:", error);
-      alert("Failed to generate model report");
+      alert(t('modelOverview.reportDownloadFail', "Failed to generate model report"));
     }
   };
 
@@ -416,17 +511,24 @@ export default function ModelOverview() {
     </Paper>
   );
 
-  // --- PREPARE DATA FOR UNIFIED CHARTS ---
+  // --- PREPARE DATA FOR CHARTS ---
+  const toNum = (v: any) => (v !== undefined && v !== null && v !== '' && !isNaN(Number(v))) ? Number(v) : null;
+
   const chartData = [...versions].sort((a, b) => a.version_number - b.version_number).map(v => ({
     name: `v${v.version_number}`,
-    ...v,
-    parameters: v.parameters || {},
-    resource_metrics: v.resource_metrics || {},
-
-    // Flatten for ease of access if needed
-    learning_rate: v.parameters?.learning_rate,
-    batch_size: v.parameters?.batch_size,
-    epochs: v.parameters?.epochs,
+    // Performance metrics
+    accuracy:        toNum(v.accuracy),
+    precision:       toNum(v.precision),
+    recall:          toNum(v.recall),
+    f1_score:        toNum(v.f1_score),
+    // Resource metrics (columns)
+    cpu_utilization: toNum(v.cpu_utilization),
+    gpu_utilization: toNum(v.gpu_utilization),
+    inference_time:  toNum(v.inference_time),
+    // Training parameters (from parameters JSON)
+    learning_rate:   toNum(v.parameters?.learning_rate),
+    batch_size:      toNum(v.parameters?.batch_size),
+    epochs:          toNum(v.parameters?.epochs),
   }));
 
   return (
@@ -458,7 +560,7 @@ export default function ModelOverview() {
             {/* Breadcrumbs */}
             <Stack direction="row" spacing={2} alignItems="center">
               <IconButton
-                onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models`)}
+                onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models`)}
                 sx={{
                   bgcolor: alpha(theme.paper, 0.8),
                   border: `1px solid ${theme.border}`,
@@ -473,18 +575,26 @@ export default function ModelOverview() {
               <Breadcrumbs separator={<NavigateNextIcon fontSize="small" sx={{ color: theme.textMuted }} />} aria-label="breadcrumb">
                 <Link
                   underline="hover"
-                  onClick={() => navigate(`/factories/${factoryId}`)}
+                  onClick={() => navigate(`/algorithms`)}
                   sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 600, fontSize: '1.2rem', color: theme.textMuted }}
                 >
-                  {factoryName}
+                  {t('modelList.algorithms', 'Algorithms')}
                 </Link>
                 <Link
                   underline="hover"
                   color="inherit"
-                  onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models`)}
+                  onClick={() => navigate(`/algorithms/${algorithmId}/factories`)}
                   sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 600, fontSize: '1.2rem', color: theme.textMuted }}
                 >
                   {algorithmName}
+                </Link>
+                <Link
+                  underline="hover"
+                  color="inherit"
+                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models`)}
+                  sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 600, fontSize: '1.2rem', color: theme.textMuted }}
+                >
+                  {factoryName}
                 </Link>
                 <Typography color="text.primary" fontWeight={800} sx={{ fontSize: '1.2rem' }}>
                   {model?.name}
@@ -508,14 +618,14 @@ export default function ModelOverview() {
                   {model.name}
                 </Typography>
                 <Typography variant="h6" sx={{ color: theme.textMuted, fontWeight: 500, lineHeight: 1.6 }}>
-                  {model.description || "Detailed analysis of model performance metrics and iteration convergence."}
+                  {model.description || t('modelOverview.defaultDesc', "Detailed analysis of model performance metrics and iteration convergence.")}
                 </Typography>
               </Box>
 
               <Stack direction="row" spacing={2} sx={{ flexWrap: 'wrap', gap: 1 }}>
                 <Button
                   variant="outlined"
-                  onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions`)}
+                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions`)}
                   startIcon={<LayersIcon />}
                   sx={{
                     borderRadius: "12px",
@@ -529,7 +639,7 @@ export default function ModelOverview() {
                     "&:hover": { bgcolor: theme.background, borderColor: theme.textSecondary },
                   }}
                 >
-                  Manage Versions
+                  {t('modelOverview.manageVersions', 'Manage Versions')}
                 </Button>
                 <Button
                   variant="outlined"
@@ -548,12 +658,12 @@ export default function ModelOverview() {
                     "&:hover": { bgcolor: alpha(theme.success, 0.1), borderColor: theme.success },
                   }}
                 >
-                  Generate Report
+                  {t('modelOverview.generateReport', 'Generate Report')}
                 </Button>
                 <Button
                   variant="contained"
                   startIcon={<AddIcon />}
-                  onClick={() => navigate(`/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/versions/create`)}
+                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/create`)}
                   sx={{
                     bgcolor: theme.primary,
                     borderRadius: "12px",
@@ -565,7 +675,7 @@ export default function ModelOverview() {
                     "&:hover": { transform: "translateY(-1px)", boxShadow: `0 12px 20px -4px ${alpha(theme.primary, 0.6)}` },
                   }}
                 >
-                  New Version
+                  {t('modelOverview.newVersion', 'New Version')}
                 </Button>
               </Stack>
             </Stack>
@@ -575,11 +685,11 @@ export default function ModelOverview() {
         {/* METRIC SCORECARDS */}
         <Grid container spacing={3} sx={{ mb: 6 }}>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <MetricCard title="Total Versions" value={model.versions_count} icon={<LayersIcon />} color={theme.primary} />
+            <MetricCard title={t('modelOverview.totalVersions', 'Total Versions')} value={model.versions_count} icon={<LayersIcon />} color={theme.primary} />
           </Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <MetricCard
-              title="Peak Accuracy"
+              title={t('modelOverview.peakAccuracy', 'Peak Accuracy')}
               value={versions.length ? `${Math.max(...versions.map(v => v.accuracy || 0))}%` : "0%"}
               icon={<SpeedIcon />}
               color={theme.success}
@@ -587,66 +697,82 @@ export default function ModelOverview() {
           </Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <MetricCard
-              title="Active Version"
-              value={activeVersion ? `v${activeVersion.version_number}` : "None"}
+              title={t('modelOverview.activeVersion', 'Active Version')}
+              value={activeVersion ? `v${activeVersion.version_number}` : t('modelOverview.none', "None")}
               icon={<TrendingUpIcon />}
               color={theme.secondary}
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6, md: 3 }}>
             <MetricCard
-              title="Last Updated"
-              value={versions.length ? new Date(versions[versions.length - 1].created_at).toLocaleDateString() : "Never"}
+              title={t('modelOverview.lastUpdated', 'Last Updated')}
+              value={versions.length ? new Date(versions[versions.length - 1].created_at).toLocaleDateString() : t('modelOverview.never', "Never")}
               icon={<HubIcon />}
               color={theme.info}
             />
           </Grid>
         </Grid>
 
-        {/* UNIFIED GRAPHS SECTION */}
-        <Grid container spacing={4} sx={{ mb: 6 }}>
-          {/* Performance Graph */}
-          <Grid size={{ xs: 12 }}>
-            <UnifiedChart
-              title="Performance Metrics Overview"
-              data={chartData}
-              yAxisLabel="Percentage (%)"
-              metrics={[
-                { key: "accuracy", label: "Accuracy", color: theme.success },
-                { key: "precision", label: "Precision", color: theme.primary },
-                { key: "recall", label: "Recall", color: theme.warning },
-                { key: "f1_score", label: "F1 Score", color: theme.error }
-              ]}
-            />
-          </Grid>
+        {/* PREMIUM GRAPHS SECTION */}
+        <Box sx={{ mb: 6 }}>
+          {/* Section Header */}
+          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+            <Box sx={{ width: 4, height: 28, bgcolor: theme.primary, borderRadius: '4px', boxShadow: `0 0 12px ${alpha(theme.primary, 0.5)}` }} />
+            <Box>
+              <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: '-0.02em' }}>{t('modelOverview.versionAnalytics', 'Version Analytics')}</Typography>
+              <Typography variant="caption" sx={{ color: theme.textMuted }}>{t('modelOverview.versionAnalyticsSub', 'Track how metrics evolve across registered versions')}</Typography>
+            </Box>
+          </Stack>
 
-          {/* Resource Graph */}
-          <Grid size={{ xs: 12, md: 6 }}>
-            <UnifiedChart
-              title="Resource Consumption"
+          {/* Full-width Performance Chart */}
+          <Box sx={{ mb: 4 }}>
+            <PremiumChart
+              title={t('modelOverview.evaluationPerformance', 'Evaluation Performance')}
+              subtitle={t('modelOverview.evaluationPerformanceSub', 'Accuracy, precision, recall & F1 score over versions')}
+              icon={<ShowChartIcon sx={{ fontSize: 18 }} />}
+              accentColor={theme.success}
               data={chartData}
-              yAxisLabel="Utilization (%) / Time (ms)"
               metrics={[
-                { key: "cpu_utilization", label: "CPU Usage (%)", color: theme.warning },
-                { key: "gpu_utilization", label: "GPU Usage (%)", color: theme.secondary },
-                { key: "inference_time", label: "Inference Time (ms)", color: theme.info }
+                { key: "accuracy", label: t('modelOverview.accuracy', "Accuracy"), color: theme.success },
+                { key: "precision", label: t('modelOverview.precision', "Precision"), color: theme.primary },
+                { key: "recall", label: t('modelOverview.recall', "Recall"), color: theme.warning },
+                { key: "f1_score", label: t('modelOverview.f1Score', "F1 Score"), color: theme.error }
               ]}
             />
-          </Grid>
+          </Box>
 
-          {/* Training Params Graph */}
-          <Grid size={{ xs: 12, md: 6 }}>
-            <UnifiedChart
-              title="Training Parameters"
-              data={chartData}
-              yAxisLabel="Value"
-              metrics={[
-                { key: "batch_size", label: "Batch Size", color: theme.success },
-                { key: "epochs", label: "Epochs", color: theme.error },
-              ]}
-            />
+          {/* Side-by-side Resource & Training */}
+          <Grid container spacing={3}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <PremiumChart
+                title={t('modelOverview.resourceConsumption', 'Resource Consumption')}
+                subtitle={t('modelOverview.resourceConsumptionSub', 'CPU & GPU utilization and inference latency')}
+                icon={<MemoryIcon sx={{ fontSize: 18 }} />}
+                accentColor={theme.warning}
+                data={chartData}
+                metrics={[
+                  { key: "cpu_utilization", label: t('modelOverview.cpu', "CPU (%)"), color: theme.warning },
+                  { key: "gpu_utilization", label: t('modelOverview.gpu', "GPU (%)"), color: theme.secondary },
+                  { key: "inference_time", label: t('modelOverview.latency', "Latency (ms)"), color: theme.info }
+                ]}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <PremiumChart
+                title={t('modelOverview.trainingParameters', 'Training Parameters')}
+                subtitle={t('modelOverview.trainingParametersSub', 'Batch size and epoch configuration per version')}
+                icon={<TuneIcon sx={{ fontSize: 18 }} />}
+                accentColor={theme.secondary}
+                data={chartData}
+                metrics={[
+                  { key: "batch_size", label: t('modelOverview.batchSize', "Batch Size"), color: '#8b5cf6' },
+                  { key: "epochs", label: t('modelOverview.epochs', "Epochs"), color: '#ec4899' },
+                  { key: "learning_rate", label: t('modelOverview.lr', "LR"), color: '#06b6d4' },
+                ]}
+              />
+            </Grid>
           </Grid>
-        </Grid>
+        </Box>
 
         {/* RECENT ACTIVITY (MOVED TO BOTTOM) */}
         <Box sx={{ mb: 8 }}>

@@ -42,11 +42,15 @@ class VersionOut(BaseModel):
     gpu_memory_usage: float | None
     cameras_supported: int | None
 
-    
-    tp: int | None
-    tn: int | None
-    fp: int | None
-    fn: int | None
+    frame_tp: int | None
+    frame_tn: int | None
+    frame_fp: int | None
+    frame_fn: int | None
+
+    alert_tp: int | None
+    alert_tn: int | None
+    alert_fp: int | None
+    alert_fn: int | None
 
     parameters: Dict[str, Any] | None = None 
     resource_metrics: Dict[str, Any] | None = None 

@@ -53,7 +53,7 @@ export default function ExperimentList() {
     const fetchExperiments = async () => {
       try {
         const res = await axios.get(
-          `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments`
+          `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/experiments`
         );
         setExperiments(res.data);
       } catch (err) {
@@ -95,7 +95,7 @@ export default function ExperimentList() {
           startIcon={<ArrowBackIcon />}
           onClick={() =>
             navigate(
-              `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}`
+              `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}`
             )
           }
           sx={{ mr: 2 }}
@@ -117,7 +117,7 @@ export default function ExperimentList() {
           startIcon={<AddIcon />}
           onClick={() =>
             navigate(
-              `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments/create`
+              `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/experiments/create`
             )
           }
         >
@@ -154,7 +154,7 @@ export default function ExperimentList() {
                       sx={{ cursor: "pointer" }}
                       onClick={() =>
                         navigate(
-                          `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments/${exp.id}`
+                          `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/experiments/${exp.id}`
                         )
                       }
                     >

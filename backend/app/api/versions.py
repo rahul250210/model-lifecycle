@@ -16,6 +16,8 @@ from app.api.deps import get_db
 from app.models.model import Model
 from app.models.version import ModelVersion, VersionDelta
 from app.models.artifact import Artifact
+from app.models.algorithm import Algorithm
+from app.models.factory import Factory
 from app.schemas.version import VersionOut
 from app.utils.hashing import sha256_bytes
 from app.utils.logger import logger
@@ -41,14 +43,15 @@ TEMP_ROOT.mkdir(parents=True, exist_ok=True)
 # CREATE VERSION (TRUE DVC DATASET DELTA)
 # ======================================================
 @router.post(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/versions",
     response_model=VersionOut,
     status_code=status.HTTP_201_CREATED,
 )
 def create_version(
-    factory_id: int,
     algorithm_id: int,
+    factory_id: int,
     model_id: int,
+    base_version_id: int | None = Form(None),
     dataset_files: list[UploadFile] = File([]),
     label_files: list[UploadFile] = File([]),
     model_files: list[UploadFile] = File([]),
@@ -58,10 +61,14 @@ def create_version(
     precision: float | None = Form(None),
     recall: float | None = Form(None),
     f1_score: float | None = Form(None),
-    tp: int | None = Form(None),
-    tn: int | None = Form(None),
-    fp: int | None = Form(None),
-    fn: int | None = Form(None),
+    frame_tp: int | None = Form(None),
+    frame_tn: int | None = Form(None),
+    frame_fp: int | None = Form(None),
+    frame_fn: int | None = Form(None),
+    alert_tp: int | None = Form(None),
+    alert_tn: int | None = Form(None),
+    alert_fp: int | None = Form(None),
+    alert_fn: int | None = Form(None),
 
     # Performance
     cpu_utilization: float | None = Form(None),
@@ -93,7 +100,7 @@ def create_version(
     # -------------------------------
     model_obj = (
         db.query(Model)
-        .filter(Model.id == model_id, Model.algorithm_id == algorithm_id)
+        .filter(Model.id == model_id, Model.algorithm_id == algorithm_id, Model.factory_id == factory_id)
         .first()
     )
     if not model_obj:
@@ -149,15 +156,6 @@ def create_version(
     
     
     # -------------------------------
-    # Efficient Deduplication Strategy
-    # -------------------------------
-    # 1. We will NOT load the entire global artifact index.
-    # 2. We will compute checksums of incoming files first.
-    # 3. Then query DB for existing artifacts matching those checksums.
-    # -------------------------------
-
-    
-    # -------------------------------
     # Create new version
     # -------------------------------
     latest = (
@@ -181,10 +179,14 @@ def create_version(
         precision=precision,
         recall=recall,
         f1_score=f1_score,
-        tp=tp,
-        tn=tn,
-        fp=fp,
-        fn=fn,
+        frame_tp=frame_tp,
+        frame_tn=frame_tn,
+        frame_fp=frame_fp,
+        frame_fn=frame_fn,
+        alert_tp=alert_tp,
+        alert_tn=alert_tn,
+        alert_fp=alert_fp,
+        alert_fn=alert_fn,
         cpu_utilization=cpu_utilization,
         gpu_utilization=gpu_utilization,
         inference_time=inference_time,
@@ -196,6 +198,42 @@ def create_version(
     )
     db.add(version)
     db.flush()  # Populate version.id for artifacts
+
+    dataset_checksums: set[str] = set()
+    label_checksums: set[str] = set()
+
+    dataset_new = dataset_reused = 0
+    label_new = label_reused = 0
+
+    # --------------------------------------------------
+    # Base Version Inheritance
+    # --------------------------------------------------
+    if base_version_id:
+        base_artifacts = (
+            db.query(Artifact)
+            .filter(Artifact.version_id == base_version_id)
+            .filter(Artifact.type.in_(["dataset", "label"]))
+            .all()
+        )
+        for a in base_artifacts:
+            db.add(
+                Artifact(
+                    version_id=version.id,
+                    name=a.name,
+                    type=a.type,
+                    path=a.path,
+                    size=a.size,
+                    checksum=a.checksum,
+                )
+            )
+            if a.type == "dataset":
+                dataset_reused += 1
+                dataset_checksums.add(a.checksum)
+            else:
+                label_reused += 1
+                label_checksums.add(a.checksum)
+        db.flush()
+
     # Previous version snapshot (for delta calc)
     # -------------------------------
     prev_version = (
@@ -218,13 +256,6 @@ def create_version(
         for a in prev_version.artifacts
         if a.type == "label"
     } if prev_version else set()
-
-    
-    dataset_checksums: set[str] = set()
-    label_checksums: set[str] = set()
-
-    dataset_new = dataset_reused = 0
-    label_new = label_reused = 0
 
     new_files_on_disk = []
 
@@ -429,7 +460,7 @@ def create_version(
 # LIST ALL VERSIONS (TIMELINE)
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/versions",
     response_model=list[VersionOut],
 )
 def list_versions(
@@ -448,7 +479,7 @@ def list_versions(
 # GET VERSION DETAILS
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/versions/{version_id}",
     response_model=VersionOut,
 )
 def get_version(
@@ -475,7 +506,7 @@ def get_version(
 # CHECKOUT / ROLLBACK VERSION (DVC CORE)
 # ======================================================
 @router.post(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/checkout",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/versions/{version_id}/checkout",
     status_code=status.HTTP_200_OK,
 )
 def checkout_version(
@@ -508,7 +539,7 @@ def checkout_version(
 
 
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/delta"
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/versions/{version_id}/delta"
 )
 def get_version_delta(
     model_id: int,
@@ -598,7 +629,7 @@ def get_version_delta(
     }
 
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/compare-datasets/{v1_id}/{v2_id}"
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/compare-datasets/{v1_id}/{v2_id}"
 )
 def compare_datasets(
     model_id: int,
@@ -634,7 +665,7 @@ def compare_datasets(
 
 
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/download"
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/versions/{version_id}/download"
 )
 def download_version(
     model_id: int,
@@ -647,7 +678,12 @@ def download_version(
 ):
     version = (
         db.query(ModelVersion)
-        .options(joinedload(ModelVersion.model))
+        .options(
+            joinedload(ModelVersion.model)
+            .joinedload(Model.algorithm),
+            joinedload(ModelVersion.model)
+            .joinedload(Model.factory)
+        )
         .filter(
             ModelVersion.id == version_id,
             ModelVersion.model_id == model_id,
@@ -752,9 +788,19 @@ def download_version(
             traceback.print_exc()
             raise e
 
-    # Sanitize model name for filename
-    model_name_safe = version.model.name.lower().replace(" ", "_").replace("/", "_")
-    filename = f"{model_name_safe}_version_{version.version_number}.zip"
+    # Sanitize name component for safe filename
+    def sanitize(name: str) -> str:
+        return name.lower().replace(" ", "_").replace("/", "_").replace("\\", "_")
+
+    factory_name = version.model.factory.name if (version.model and version.model.factory) else "unknown_factory"
+    algorithm_name = version.model.algorithm.name if (version.model and version.model.algorithm) else "unknown_algorithm"
+    model_name = version.model.name if version.model else "unknown_model"
+
+    factory_safe = sanitize(factory_name)
+    algorithm_safe = sanitize(algorithm_name)
+    model_safe = sanitize(model_name)
+    
+    filename = f"{factory_safe}_{algorithm_safe}_{model_safe}_version_{version.version_number}.zip"
 
     return StreamingResponse(
         stream_generator(),
@@ -763,7 +809,7 @@ def download_version(
     )
 
 @router.delete(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/versions/{version_id}",
     status_code=204,
 )
 def delete_version(
@@ -844,7 +890,7 @@ def background_garbage_collection(artifacts_to_check: list[tuple[str, str]]):
 
 
 @router.post(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/edit",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/versions/{version_id}/edit",
     status_code=200,
 )
 def edit_version(
@@ -858,10 +904,14 @@ def edit_version(
     precision: float | None = Form(None),
     recall: float | None = Form(None),
     f1_score: float | None = Form(None),
-    tp: int | None = Form(None),
-    tn: int | None = Form(None),
-    fp: int | None = Form(None),
-    fn: int | None = Form(None),
+    frame_tp: int | None = Form(None),
+    frame_tn: int | None = Form(None),
+    frame_fp: int | None = Form(None),
+    frame_fn: int | None = Form(None),
+    alert_tp: int | None = Form(None),
+    alert_tn: int | None = Form(None),
+    alert_fp: int | None = Form(None),
+    alert_fn: int | None = Form(None),
 
     # Performance
     cpu_utilization: float | None = Form(None),
@@ -896,10 +946,14 @@ def edit_version(
         "precision": precision,
         "recall": recall,
         "f1_score": f1_score,
-        "tp": tp,
-        "tn": tn,
-        "fp": fp,
-        "fn": fn,
+        "frame_tp": frame_tp,
+        "frame_tn": frame_tn,
+        "frame_fp": frame_fp,
+        "frame_fn": frame_fn,
+        "alert_tp": alert_tp,
+        "alert_tn": alert_tn,
+        "alert_fp": alert_fp,
+        "alert_fn": alert_fn,
     }.items():
         if v is not None:
             # Range validation for percentage metrics
@@ -1078,7 +1132,7 @@ def edit_version(
                 save_single(f, "code")
 
         db.commit()
-        logger.info(f"Version updated: Version ID {version_id} (Model ID: {model_id})")
+        #logger.info(f"Version updated: Version ID {version_id} (Model ID: {model_id})")
     except Exception as e:
         db.rollback()
         # Clean up newly written files from disk
@@ -1095,7 +1149,7 @@ def edit_version(
 # LIST ARTIFACTS OF A VERSION
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/artifacts",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/versions/{version_id}/artifacts",
     response_model=list[ArtifactOut],
 )
 def list_artifacts(
@@ -1114,7 +1168,7 @@ def list_artifacts(
 # CHUNK UPLOAD (BACKGROUND STREAMING)
 # ======================================================
 @router.post(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/versions/{version_id}/upload_chunk",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/versions/{version_id}/upload_chunk",
     status_code=status.HTTP_200_OK,
 )
 def upload_chunk(
@@ -1126,6 +1180,15 @@ def upload_chunk(
     version = db.query(ModelVersion).filter(ModelVersion.id == version_id).first()
     if not version:
         raise HTTPException(404, "Version not found")
+
+    file_names = [f.filename for f in files]
+    if file_names:
+        db.query(Artifact).filter(
+            Artifact.version_id == version.id,
+            Artifact.type == artifact_type,
+            Artifact.name.in_(file_names)
+        ).delete(synchronize_session=False)
+        db.flush()
 
     # Reuse the bulk logic (simplified inline version for chunks)
     # 1. Checksums

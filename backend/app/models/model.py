@@ -10,6 +10,7 @@ class Model(Base):
     name = Column(String, index=True)
     description = Column(String, nullable=True)
     algorithm_id = Column(Integer, ForeignKey("algorithms.id", ondelete="CASCADE"))
+    factory_id = Column(Integer, ForeignKey("factories.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # runtime only
@@ -17,6 +18,11 @@ class Model(Base):
 
     algorithm = relationship(
         "Algorithm",
+        back_populates="models"
+    )
+
+    factory = relationship(
+        "Factory",
         back_populates="models"
     )
 

@@ -256,6 +256,31 @@ export const ResourceMetricsInput: React.FC<ResourceMetricsInputProps> = ({
                                                 placeholder="Unit"
                                                 value={item.unit}
                                                 onChange={(e) => handleChange(index, "unit", e.target.value)}
+                                                SelectProps={{
+                                                    MenuProps: {
+                                                        PaperProps: {
+                                                            sx: {
+                                                                bgcolor: theme.paper,
+                                                                border: `1px solid ${theme.border}`,
+                                                                backgroundImage: 'none',
+                                                                "& .MuiMenuItem-root": {
+                                                                    color: theme.textMain,
+                                                                    fontWeight: 600,
+                                                                    "&:hover": {
+                                                                        bgcolor: alpha(theme.primary, 0.08),
+                                                                    },
+                                                                    "&.Mui-selected": {
+                                                                        bgcolor: alpha(theme.primary, 0.15),
+                                                                        color: theme.primary,
+                                                                        "&:hover": {
+                                                                            bgcolor: alpha(theme.primary, 0.2),
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }}
                                                 sx={{
                                                     "& .MuiOutlinedInput-root": {
                                                         borderRadius: "10px",
@@ -269,7 +294,7 @@ export const ResourceMetricsInput: React.FC<ResourceMetricsInputProps> = ({
                                                 }}
                                             >
                                                 {!isCustomUnit && availableUnits.map((u) => (
-                                                    <MenuItem key={u} value={u} sx={{ fontWeight: 600, color: theme.textMain }}>
+                                                    <MenuItem key={u} value={u}>
                                                         {u}
                                                     </MenuItem>
                                                 ))}

@@ -44,7 +44,7 @@ export default function ExperimentCreate() {
       setError("");
 
       await axios.post(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments`,
+        `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/experiments`,
         {
           name,
           description,
@@ -52,7 +52,7 @@ export default function ExperimentCreate() {
       );
 
       navigate(
-        `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments`
+        `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/experiments`
       );
     } catch (err) {
       console.error(err);
@@ -72,7 +72,7 @@ export default function ExperimentCreate() {
           startIcon={<ArrowBackIcon />}
           onClick={() =>
             navigate(
-              `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments`
+              `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/experiments`
             )
           }
           sx={{ mr: 2 }}
@@ -136,7 +136,7 @@ export default function ExperimentCreate() {
               variant="outlined"
               onClick={() =>
                 navigate(
-                  `/factories/${factoryId}/algorithms/${algorithmId}/models/${modelId}/experiments`
+                  `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/experiments`
                 )
               }
               disabled={loading}

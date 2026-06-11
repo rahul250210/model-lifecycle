@@ -59,11 +59,17 @@ export const useBackgroundUploader = () => {
 export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { theme } = useTheme();
     const [tasks, setTasks] = useState<UploadTask[]>([]);
-    const processingRef = useRef<boolean>(false);
+    const tasksRef = useRef<UploadTask[]>([]);
+    const activeTaskIds = useRef<Set<string>>(new Set());
     const cancelledVersionsRef = useRef<Set<number>>(new Set());
 
-    // Chunk size for batched uploads (increased for performance)
-    const CHUNK_SIZE = 250;
+    // Chunk size for batched uploads (optimized for browser main-thread responsiveness)
+    const CHUNK_SIZE = 100;
+
+    // Keep tasksRef up to date with latest tasks state
+    useEffect(() => {
+        tasksRef.current = tasks;
+    }, [tasks]);
 
     const queueUpload = (
         factoryId: number,
@@ -149,42 +155,19 @@ export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }>
 
     // Worker effect
     useEffect(() => {
-        const processQueue = async () => {
-            if (processingRef.current) return;
-
-            // Find next pending task - IGNORE dismissed status for processing (files should still upload)
-            const nextTaskIdx = tasks.findIndex(t => t.status === 'pending');
-            if (nextTaskIdx === -1) return;
-
-            const task = tasks[nextTaskIdx];
-
+        const runTaskUpload = async (task: UploadTask) => {
             // Check if pre-cancelled (only for version uploads)
             if (task.context === 'version' && task.versionId && cancelledVersionsRef.current.has(task.versionId)) {
-                setTasks(prev => {
-                    const newTasks = [...prev];
-                    newTasks[nextTaskIdx] = {
-                        ...newTasks[nextTaskIdx],
-                        status: 'error',
-                        error: "Upload cancelled: Version deleted"
-                    };
-                    return newTasks;
-                });
+                setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'error', error: "Upload cancelled: Version deleted" } : t));
+                activeTaskIds.current.delete(task.id);
                 return;
             }
 
-            processingRef.current = true;
-
-            // Update status to uploading
-            setTasks(prev => {
-                const newTasks = [...prev];
-                newTasks[nextTaskIdx] = { ...newTasks[nextTaskIdx], status: 'uploading' };
-                return newTasks;
-            });
+            // Update status to uploading in state
+            setTasks(prev => prev.map(t => t.id === task.id ? { ...t, status: 'uploading' } : t));
 
             try {
                 // Process in chunks
-                // Process in chunks with concurrency
-                // ADAPTIVE CHUNKING: Split by count (250) OR Size (50MB) to prevent browser freeze
                 const totalFiles = task.files.length;
                 let uploadedCount = 0;
 
@@ -207,8 +190,8 @@ export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }>
                     chunks.push(currentChunk);
                 }
 
-                // Concurrency control: process up to 4 chunks in parallel
-                const CONCURRENCY_LIMIT = 4;
+                // Concurrency control: process up to 2 chunks in parallel to prevent CPU/network choke
+                const CONCURRENCY_LIMIT = 2;
                 let currentChunkIdx = 0;
                 const activeRequests = new Set<Promise<void>>();
 
@@ -228,7 +211,7 @@ export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }>
                             const formData = new FormData();
 
                             if (task.context === 'version') {
-                                url = `/factories/${task.factoryId}/algorithms/${task.algorithmId}/models/${task.modelId}/versions/${task.versionId}/upload_chunk`;
+                                url = `/algorithms/${task.algorithmId}/factories/${task.factoryId}/models/${task.modelId}/versions/${task.versionId}/upload_chunk`;
                                 formData.append("artifact_type", task.type);
                             } else {
                                 url = `/kb/algorithms/${task.algorithmId}/files`;
@@ -243,17 +226,16 @@ export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }>
 
                             // Update shared state safely
                             uploadedCount += chunk.length;
-                            setTasks(prev => {
-                                const idx = prev.findIndex(t => t.id === task.id);
-                                if (idx === -1) return prev;
-                                const updated = [...prev];
-                                updated[idx] = {
-                                    ...updated[idx],
-                                    uploadedCount,
-                                    progress: Math.min(100, Math.round((uploadedCount / totalFiles) * 100))
-                                };
-                                return updated;
-                            });
+                            setTasks(prev => prev.map(t => {
+                                if (t.id === task.id) {
+                                    return {
+                                        ...t,
+                                        uploadedCount,
+                                        progress: Math.min(100, Math.round((uploadedCount / totalFiles) * 100))
+                                    };
+                                }
+                                return t;
+                            }));
                         })();
 
                         activeRequests.add(uploadPromise);
@@ -268,19 +250,11 @@ export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }>
 
                 // Complete
                 setTasks(prev => {
-                    const idx = prev.findIndex(t => t.id === task.id);
-                    if (idx === -1) return prev;
-
                     // Double check cancellation before marking complete (race condition)
                     if (task.context === 'version' && task.versionId && cancelledVersionsRef.current.has(task.versionId)) {
-                        const updated = [...prev];
-                        updated[idx] = { ...updated[idx], status: 'error', error: "Upload cancelled: Version deleted" };
-                        return updated;
+                        return prev.map(t => t.id === task.id ? { ...t, status: 'error', error: "Upload cancelled: Version deleted" } : t);
                     }
-
-                    const updated = [...prev];
-                    updated[idx] = { ...updated[idx], status: 'completed', progress: 100 };
-                    return updated;
+                    return prev.map(t => t.id === task.id ? { ...t, status: 'completed', progress: 100 } : t);
                 });
 
             } catch (err: any) {
@@ -291,28 +265,39 @@ export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }>
                     (task.context === 'version' && task.versionId && cancelledVersionsRef.current.has(task.versionId)) ||
                     isNotFound;
 
-                setTasks(prev => {
-                    const idx = prev.findIndex(t => t.id === task.id);
-                    if (idx === -1) return prev;
-                    const updated = [...prev];
-                    updated[idx] = {
-                        ...updated[idx],
-                        status: 'error',
-                        error: isCancelled ? "Upload cancelled: Version deleted" : (err.response?.data?.detail || err.message)
-                    };
-                    return updated;
-                });
+                setTasks(prev => prev.map(t => {
+                    if (t.id === task.id) {
+                        return {
+                            ...t,
+                            status: 'error',
+                            error: isCancelled ? "Upload cancelled: Version deleted" : (err.response?.data?.detail || err.message)
+                        };
+                    }
+                    return t;
+                }));
             } finally {
-                processingRef.current = false;
-                // Cleanup ref after some time to prevent unbounded growth?
-                // For now, we trust IDs won't be reused immediately. 
-                // We can't delete immediately because loop might still be checking.
+                activeTaskIds.current.delete(task.id);
+            }
+        };
+
+        const processQueue = async () => {
+            // Find all pending tasks in the current queue snapshot
+            const pendingTasks = tasksRef.current.filter(t => t.status === 'pending');
+            
+            for (const task of pendingTasks) {
+                if (activeTaskIds.current.has(task.id)) continue;
+
+                // Add to active set immediately to prevent duplicate runs
+                activeTaskIds.current.add(task.id);
+
+                // Run task in background (non-blocking parallel execution)
+                runTaskUpload(task);
             }
         };
 
         const interval = setInterval(processQueue, 1000); // Check queue every second
         return () => clearInterval(interval);
-    }, [tasks]);
+    }, []);
 
     // Prevent accidental reload during uploads
     useEffect(() => {
@@ -339,7 +324,7 @@ export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }>
                     sx={{
                         position: 'fixed',
                         bottom: 24,
-                        right: 24,
+                        left: 24,
                         zIndex: 2000,
                         width: 'auto',
                         maxWidth: 420

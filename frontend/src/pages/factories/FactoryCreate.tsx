@@ -17,14 +17,18 @@ import {
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import FactoryIcon from "@mui/icons-material/Factory";
 import DescriptionIcon from "@mui/icons-material/Description";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import axios from "../../api/axios";
 
 import { useTheme } from "../../theme/ThemeContext";
 
 export default function FactoryCreate() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const algorithmId = location.state?.algorithmId;
   const { theme } = useTheme();
+  const { t } = useTranslation();
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -33,7 +37,7 @@ export default function FactoryCreate() {
 
   const handleSubmit = async () => {
     if (!name.trim()) {
-      setError("Factory name is required");
+      setError(t("factoryCreate.nameRequired"));
       return;
     }
 
@@ -44,12 +48,17 @@ export default function FactoryCreate() {
       await axios.post("/factories", {
         name,
         description,
+        created_by_algorithm_id: algorithmId ? parseInt(algorithmId) : null,
       });
 
-      navigate("/factories");
+      if (algorithmId) {
+        navigate(`/algorithms/${algorithmId}/factories`);
+      } else {
+        navigate("/factories");
+      }
     } catch (err) {
       console.error(err);
-      setError("Failed to create factory. Please try again.");
+      setError(t("factoryCreate.failedCreate"));
     } finally {
       setLoading(false);
     }
@@ -72,10 +81,10 @@ export default function FactoryCreate() {
         </IconButton>
         <Box>
           <Typography variant="h5" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em" }}>
-            Create New Factory
+            {t("factoryCreate.title")}
           </Typography>
           <Typography variant="body2" sx={{ color: theme.textMuted, fontWeight: 500 }}>
-            Establish a new production environment for your models.
+            {t("factoryCreate.subtitle")}
           </Typography>
         </Box>
       </Box>
@@ -116,7 +125,7 @@ export default function FactoryCreate() {
             >
               <FactoryIcon sx={{ color: theme.primary, fontSize: 20 }} />
               <Typography variant="subtitle2" fontWeight={700} sx={{ color: theme.primary, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Configuration Details
+                {t("factoryCreate.sectionHeader")}
               </Typography>
             </Box>
 
@@ -126,12 +135,12 @@ export default function FactoryCreate() {
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
-                      Factory Name
+                      {t("factoryCreate.nameLabel")}
                     </Typography>
                     <Typography variant="caption" sx={{ color: "#EF4444" }}>*</Typography>
                   </Box>
                   <TextField
-                    placeholder="e.g. Neural Hub East, Silicon Valley Cluster"
+                    placeholder={t("factoryCreate.namePlaceholder")}
                     fullWidth
                     value={name}
                     onChange={(e) => {
@@ -157,12 +166,12 @@ export default function FactoryCreate() {
                 <Box>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
-                      Description
+                      {t("factoryCreate.descLabel")}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: theme.textMuted }}>(Optional)</Typography>
+                    <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("factoryCreate.descOptional")}</Typography>
                   </Box>
                   <TextField
-                    placeholder="Briefly explain the purpose of this production facility..."
+                    placeholder={t("factoryCreate.descPlaceholder")}
                     fullWidth
                     multiline
                     rows={4}
@@ -205,7 +214,13 @@ export default function FactoryCreate() {
                 <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 2, pt: 2 }}>
                   <Button
                     variant="text"
-                    onClick={() => navigate("/factories")}
+                    onClick={() => {
+                      if (algorithmId) {
+                        navigate(`/algorithms/${algorithmId}/factories`);
+                      } else {
+                        navigate("/factories");
+                      }
+                    }}
                     disabled={loading}
                     sx={{
                       px: 3,
@@ -216,7 +231,7 @@ export default function FactoryCreate() {
                       "&:hover": { bgcolor: alpha(theme.textMuted, 0.05) }
                     }}
                   >
-                    Cancel
+                    {t("factoryCreate.cancel")}
                   </Button>
 
                   <Button
@@ -246,7 +261,7 @@ export default function FactoryCreate() {
                     {loading ? (
                       <CircularProgress size={20} color="inherit" />
                     ) : (
-                      "Create Factory"
+                      t("factoryCreate.create")
                     )}
                   </Button>
                 </Box>
@@ -270,7 +285,7 @@ export default function FactoryCreate() {
             >
               <DescriptionIcon sx={{ fontSize: 14, color: theme.textMuted }} />
               <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 500 }}>
-                Factories act as root containers for your specific MLOps workflows.
+                {t("factoryCreate.tipText")}
               </Typography>
             </Paper>
           </Box>

@@ -18,6 +18,7 @@ import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 import CloseIcon from "@mui/icons-material/Close";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
 import { useTheme } from "../theme/ThemeContext";
+import { useTranslation } from "react-i18next";
 
 interface FileUploadDialogProps {
     open: boolean;
@@ -37,6 +38,7 @@ export default function FileUploadDialog({
     allowDirectory = true,
 }: FileUploadDialogProps) {
     const { theme } = useTheme();
+    const { t } = useTranslation();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
     const [stagedFiles, setStagedFiles] = useState<File[]>([]);
@@ -147,8 +149,10 @@ export default function FileUploadDialog({
                 );
             }
             setStagedFiles((prev) => {
-                const newFiles = files.filter(f => !prev.some(p => ((p as any).webkitRelativePath || p.name) === ((f as any).webkitRelativePath || f.name) && p.size === f.size));
-                return [...prev, ...newFiles];
+                // Optimization: Use Set for O(1) lookups to avoid O(N^2) freeze on large folder selection
+                const existingKeys = new Set(prev.map(p => `${(p as any).webkitRelativePath || p.name}-${p.size}`));
+                const uniqueNewFiles = files.filter(f => !existingKeys.has(`${(f as any).webkitRelativePath || f.name}-${f.size}`));
+                return [...prev, ...uniqueNewFiles];
             });
         }
     };
@@ -202,7 +206,7 @@ export default function FileUploadDialog({
 
             <DialogContent sx={{ px: 3, pb: 2 }}>
                 <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3 }}>
-                    Drag and drop folders/files here to avoid security popups, or use the buttons below.
+                    {t("fileUploadDialog.dragDropHelp", "Drag and drop folders/files here to avoid security popups, or use the buttons below.")}
                 </Typography>
 
                 <Paper
@@ -242,10 +246,10 @@ export default function FileUploadDialog({
                     </Box>
                     <Box sx={{ textAlign: "center" }}>
                         <Typography variant="body2" fontWeight={800} sx={{ color: theme.textMain }}>
-                            Drag & Drop Folder or Files
+                            {t("fileUploadDialog.dragDropTitle", "Drag & Drop Folder or Files")}
                         </Typography>
                         <Typography variant="caption" sx={{ color: theme.textMuted }}>
-                            Quickly stage multiple artifacts at once
+                            {t("fileUploadDialog.dragDropSubtitle", "Quickly stage multiple artifacts at once")}
                         </Typography>
                     </Box>
                 </Paper>
@@ -265,7 +269,7 @@ export default function FileUploadDialog({
                             "&:hover": { borderColor: theme.primary, bgcolor: alpha(theme.primary, 0.04) },
                         }}
                     >
-                        Select Files
+                        {t("fileUploadDialog.selectFiles", "Select Files")}
                     </Button>
                     {allowDirectory && (
                         <Button
@@ -282,7 +286,7 @@ export default function FileUploadDialog({
                                 "&:hover": { borderColor: theme.primary, bgcolor: alpha(theme.primary, 0.04) },
                             }}
                         >
-                            Select Folder
+                            {t("fileUploadDialog.selectFolder", "Select Folder")}
                         </Button>
                     )}
                 </Stack>
@@ -305,7 +309,7 @@ export default function FileUploadDialog({
                 {stagedFiles.length > 0 && (
                     <Box sx={{ mt: 2 }}>
                         <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMuted, mb: 1, display: 'block' }}>
-                            STAGED FOR UPLOAD ({stagedFiles.length})
+                            {t("fileUploadDialog.stagedForUpload", { count: stagedFiles.length, defaultValue: `STAGED FOR UPLOAD (${stagedFiles.length})` })}
                         </Typography>
                         <Paper
                             elevation={0}
@@ -360,7 +364,7 @@ export default function FileUploadDialog({
                                 {stagedFiles.length > 50 && (
                                     <Box sx={{ p: 1.5, textAlign: 'center', bgcolor: alpha(theme.background, 0.3), borderRadius: '8px' }}>
                                         <Typography variant="caption" sx={{ color: theme.textMuted, fontStyle: 'italic', fontWeight: 600 }}>
-                                            ...and {stagedFiles.length - 50} more files
+                                            {t("fileUploadDialog.moreFiles", { count: stagedFiles.length - 50, defaultValue: `...and ${stagedFiles.length - 50} more files` })}
                                         </Typography>
                                     </Box>
                                 )}
@@ -382,7 +386,7 @@ export default function FileUploadDialog({
                         borderRadius: "12px",
                     }}
                 >
-                    Cancel
+                    {t("fileUploadDialog.cancel", "Cancel")}
                 </Button>
                 <Button
                     variant="contained"
@@ -403,7 +407,7 @@ export default function FileUploadDialog({
                         }
                     }}
                 >
-                    Confirm Staging
+                    {t("fileUploadDialog.confirmStaging", "Confirm Staging")}
                 </Button>
             </DialogActions>
         </Dialog>

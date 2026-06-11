@@ -20,13 +20,13 @@ router = APIRouter()
 # CREATE EXPERIMENT
 # ======================================================
 @router.post(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/experiments",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/experiments",
     response_model=ExperimentOut,
     status_code=status.HTTP_201_CREATED,
 )
 def create_experiment(
-    factory_id: int,
     algorithm_id: int,
+    factory_id: int,
     model_id: int,
     experiment: ExperimentCreate,
     db: Session = Depends(get_db),
@@ -37,6 +37,7 @@ def create_experiment(
         .filter(
             Model.id == model_id,
             Model.algorithm_id == algorithm_id,
+            Model.factory_id == factory_id,
         )
         .first()
     )
@@ -59,13 +60,28 @@ def create_experiment(
 # LIST EXPERIMENTS (WITH RUN COUNT + BEST METRIC)
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/experiments",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/experiments",
     response_model=list[ExperimentOut],
 )
 def list_experiments(
+    algorithm_id: int,
+    factory_id: int,
     model_id: int,
     db: Session = Depends(get_db),
 ):
+    # Verify model exists
+    model = (
+        db.query(Model)
+        .filter(
+            Model.id == model_id,
+            Model.algorithm_id == algorithm_id,
+            Model.factory_id == factory_id,
+        )
+        .first()
+    )
+    if not model:
+        raise HTTPException(404, "Model not found")
+
     experiments = (
         db.query(
             Experiment,
@@ -90,13 +106,13 @@ def list_experiments(
 # CREATE RUN (MLFLOW CORE)
 # ======================================================
 @router.post(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/experiments/{experiment_id}/runs",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/experiments/{experiment_id}/runs",
     response_model=RunOut,
     status_code=status.HTTP_201_CREATED,
 )
 def create_run(
-    factory_id: int,
     algorithm_id: int,
+    factory_id: int,
     model_id: int,
     experiment_id: int,
     run: RunCreate,
@@ -145,10 +161,14 @@ def create_run(
 # FINISH / UPDATE RUN
 # ======================================================
 @router.put(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/experiments/{experiment_id}/runs/{run_id}",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/experiments/{experiment_id}/runs/{run_id}",
     response_model=RunOut,
 )
 def update_run(
+    algorithm_id: int,
+    factory_id: int,
+    model_id: int,
+    experiment_id: int,
     run_id: int,
     run: RunCreate,
     db: Session = Depends(get_db),
@@ -171,10 +191,14 @@ def update_run(
 # GET RUN DETAILS
 # ======================================================
 @router.get(
-    "/{factory_id}/algorithms/{algorithm_id}/models/{model_id}/experiments/{experiment_id}/runs/{run_id}",
+    "/{algorithm_id}/factories/{factory_id}/models/{model_id}/experiments/{experiment_id}/runs/{run_id}",
     response_model=RunOut,
 )
 def get_run(
+    algorithm_id: int,
+    factory_id: int,
+    model_id: int,
+    experiment_id: int,
     run_id: int,
     db: Session = Depends(get_db),
 ):
