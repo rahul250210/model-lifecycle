@@ -15,3 +15,11 @@ backend/storage/cache/**
 *.onnx
 *.engine
 *.bin
+
+# Large binary / build artifacts (not needed in repo)
+backend/dependencies/
+backend/dependencies.zip
+backend/deps_part1.zip
+backend/deps_part2.zip
+backend/logs/
+frontend/dist.zip
