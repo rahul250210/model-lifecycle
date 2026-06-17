@@ -59,6 +59,11 @@ interface Message {
         entity_id: number;
         download_url?: string;
     }[];
+    response_type?: string;
+    show_compare?: boolean;
+    comparison_title?: string;
+    entities?: string[];
+    metrics?: { name: string; entity1?: number | null; entity2?: number | null }[];
     timestamp: Date;
 }
 
@@ -465,6 +470,144 @@ function ComparisonButton({ versions, onClick }: { versions: any[], onClick: () 
                 </Typography>
             </Stack>
             <ExpandIcon sx={{ fontSize: 14, color: theme.primary, opacity: 0.7 }} />
+        </Box>
+    );
+}
+
+// ─── Inline Comparison Chart (shown in chat bubble for comparing models/versions) ───
+interface ChatComparisonChartProps {
+    comparison_title?: string;
+    entities: string[];
+    metrics: { name: string; entity1?: number | null; entity2?: number | null }[];
+    theme: any;
+    mode: 'dark' | 'light';
+}
+
+function ChatComparisonChart({ comparison_title, entities, metrics, theme, mode }: ChatComparisonChartProps) {
+    if (!entities || entities.length < 2 || !metrics || metrics.length === 0) return null;
+
+    const e1 = entities[0];
+    const e2 = entities[1];
+
+    const colors = [
+        theme.primary,
+        theme.secondary ?? theme.info ?? '#00B0FF',
+    ];
+
+    const isPercentageMetricName = (name: string) => {
+        return ['accuracy', 'precision', 'recall', 'f1_score', 'cpu_utilization', 'gpu_utilization'].includes(name.toLowerCase());
+    };
+
+    const getHumanName = (name: string) => {
+        switch (name.toLowerCase()) {
+            case 'accuracy': return 'Accuracy';
+            case 'precision': return 'Precision';
+            case 'recall': return 'Recall';
+            case 'f1_score': return 'F1 Score';
+            case 'cpu_utilization': return 'CPU Util (%)';
+            case 'gpu_utilization': return 'GPU Util (%)';
+            case 'inference_time': return 'Inference (ms)';
+            case 'cpu_memory_usage': return 'CPU Mem (MB)';
+            case 'gpu_memory_usage': return 'GPU Mem (MB)';
+            default: return name;
+        }
+    };
+
+    const scaleValue = (val: any, name: string) => {
+        if (val === null || val === undefined) return 0;
+        const lowerName = name.toLowerCase();
+        const isPerf = ['accuracy', 'precision', 'recall', 'f1_score'].includes(lowerName);
+        if (isPerf && val <= 1.0) {
+            return Math.round(val * 1000) / 10;
+        }
+        return val;
+    };
+
+    const percentageMetrics = metrics.filter(m => isPercentageMetricName(m.name));
+    const absoluteMetrics = metrics.filter(m => !isPercentageMetricName(m.name));
+
+    const percentageData = percentageMetrics.map(m => ({
+        name: getHumanName(m.name),
+        [e1]: scaleValue(m.entity1, m.name),
+        [e2]: scaleValue(m.entity2, m.name),
+    }));
+
+    const absoluteData = absoluteMetrics.map(m => ({
+        name: getHumanName(m.name),
+        [e1]: scaleValue(m.entity1, m.name),
+        [e2]: scaleValue(m.entity2, m.name),
+    }));
+
+    const tooltipStyle = {
+        borderRadius: 12,
+        background: mode === 'dark' ? '#1e293b' : '#fff',
+        border: `1px solid ${alpha(theme.border, 0.35)}`,
+        fontSize: 11, fontWeight: 700,
+        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+        color: theme.textMain,
+    };
+
+    return (
+        <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
+            {comparison_title && (
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: theme.primary, letterSpacing: '0.02em', mb: 0.5 }}>
+                    📊 {comparison_title}
+                </Typography>
+            )}
+            
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ width: '100%' }}>
+                {percentageData.length > 0 && (
+                    <Box sx={{
+                        flex: 1, p: 2, borderRadius: '14px',
+                        bgcolor: mode === 'dark' ? 'rgba(15, 23, 42, 0.3)' : 'rgba(255, 255, 255, 0.6)',
+                        border: `1px solid ${alpha(theme.border, 0.25)}`,
+                        minWidth: 0,
+                    }}>
+                        <Typography variant="caption" sx={{ display: 'block', fontWeight: 800, color: theme.textSecondary, mb: 1.5, letterSpacing: 0.5 }}>
+                            PERFORMANCE & UTILIZATION (%)
+                        </Typography>
+                        <Box sx={{ height: 200, width: '100%' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={percentageData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }} barGap={4}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.textMain, 0.06)} />
+                                    <XAxis dataKey="name" tick={{ fill: theme.textSecondary, fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
+                                    <YAxis domain={[0, 100]} tick={{ fill: theme.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
+                                    <RechartsTooltip contentStyle={tooltipStyle} />
+                                    <Legend wrapperStyle={{ fontSize: 10, fontWeight: 700, paddingTop: 8 }} iconType="circle" iconSize={7} />
+                                    <Bar dataKey={e1} fill={colors[0]} radius={[4, 4, 0, 0]} maxBarSize={20} />
+                                    <Bar dataKey={e2} fill={colors[1]} radius={[4, 4, 0, 0]} maxBarSize={20} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </Box>
+                    </Box>
+                )}
+
+                {absoluteData.length > 0 && (
+                    <Box sx={{
+                        flex: 1, p: 2, borderRadius: '14px',
+                        bgcolor: mode === 'dark' ? 'rgba(15, 23, 42, 0.3)' : 'rgba(255, 255, 255, 0.6)',
+                        border: `1px solid ${alpha(theme.border, 0.25)}`,
+                        minWidth: 0,
+                    }}>
+                        <Typography variant="caption" sx={{ display: 'block', fontWeight: 800, color: theme.textSecondary, mb: 1.5, letterSpacing: 0.5 }}>
+                            LATENCY & RESOURCE USAGE
+                        </Typography>
+                        <Box sx={{ height: 200, width: '100%' }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={absoluteData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }} barGap={4}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.textMain, 0.06)} />
+                                    <XAxis dataKey="name" tick={{ fill: theme.textSecondary, fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
+                                    <YAxis tick={{ fill: theme.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
+                                    <RechartsTooltip contentStyle={tooltipStyle} />
+                                    <Legend wrapperStyle={{ fontSize: 10, fontWeight: 700, paddingTop: 8 }} iconType="circle" iconSize={7} />
+                                    <Bar dataKey={e1} fill={colors[0]} radius={[4, 4, 0, 0]} maxBarSize={20} />
+                                    <Bar dataKey={e2} fill={colors[1]} radius={[4, 4, 0, 0]} maxBarSize={20} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </Box>
+                    </Box>
+                )}
+            </Stack>
         </Box>
     );
 }
@@ -1223,6 +1366,17 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick }: Message
                             />
                         )}
 
+                        {/* Inline Comparison Chart */}
+                        {msg.show_compare && msg.entities && msg.metrics && (
+                            <ChatComparisonChart
+                                comparison_title={msg.comparison_title}
+                                entities={msg.entities}
+                                metrics={msg.metrics}
+                                theme={theme}
+                                mode={mode}
+                            />
+                        )}
+
                         {/* Download report button */}
                         {msg.type === 'download' && msg.report_type && (
                             <DownloadReportButton
@@ -1323,6 +1477,11 @@ export default function Chatbot() {
                 model_name: data.model_name,
                 version_number: data.version_number,
                 actions: data.actions || [],
+                response_type: data.response_type,
+                show_compare: data.show_compare,
+                comparison_title: data.comparison_title,
+                entities: data.entities,
+                metrics: data.metrics,
                 timestamp: new Date(),
             }]);
         } catch (err: any) {

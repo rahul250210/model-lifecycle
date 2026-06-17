@@ -342,6 +342,154 @@ def generate_dynamic_actions(
 
     return actions
 
+def generate_comparison_payload(
+    user_question: str,
+    query_results: Dict[str, Any],
+    db_session: Session
+) -> Optional[Dict[str, Any]]:
+    """
+    Dynamically generates comparison payload for charts when comparison intent is present.
+    """
+    q = user_question.lower()
+    comparison_keywords = ["compare", "versus", "vs", "better than", "difference between"]
+    if not any(kw in q for kw in comparison_keywords):
+        return None
+
+    rows = query_results.get("rows", [])
+    
+    # Fallback lookup if no rows are present (e.g. LLM offline or query execution failed)
+    if not rows:
+        # Let's search the query for model names, sorted by length DESC to match longest first
+        all_models = db_session.execute(text("SELECT id, name FROM models ORDER BY length(name) DESC")).fetchall()
+        matched_model_ids = []
+        matched_model_names = []
+        temp_q = q
+        for m_id, m_name in all_models:
+            name_lower = m_name.lower()
+            if name_lower in temp_q:
+                matched_model_ids.append(m_id)
+                matched_model_names.append(m_name)
+                temp_q = temp_q.replace(name_lower, "")
+                
+        # If only one model was matched, check if we matched multiple version numbers (version vs version)
+        if len(matched_model_ids) == 1:
+            import re
+            m_id = matched_model_ids[0]
+            ver_nums = []
+            for m in re.finditer(r"\bversion\s*(\d+)\b|\bv\s*(\d+)\b", q):
+                val = m.group(1) or m.group(2)
+                if val:
+                    ver_nums.append(int(val))
+                    
+            if len(ver_nums) >= 2:
+                fallback_rows = []
+                for v_num in ver_nums[:2]:
+                    res = db_session.execute(
+                        text("""
+                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                            FROM model_versions mv
+                            JOIN models m ON m.id = mv.model_id
+                            LEFT JOIN factories f ON f.id = m.factory_id
+                            LEFT JOIN algorithms a ON a.id = m.algorithm_id
+                            WHERE mv.model_id = :model_id AND mv.version_number = :v_num
+                            LIMIT 1
+                        """),
+                        {"model_id": m_id, "v_num": v_num}
+                    ).fetchone()
+                    if res:
+                        fallback_rows.append(dict(res._mapping))
+                if len(fallback_rows) >= 2:
+                    rows = fallback_rows
+        elif len(matched_model_ids) >= 2:
+            # Fetch the active or latest version for each model (model vs model)
+            fallback_rows = []
+            for m_id in matched_model_ids[:2]:
+                res = db_session.execute(
+                    text("""
+                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                        FROM model_versions mv
+                        JOIN models m ON m.id = mv.model_id
+                        LEFT JOIN factories f ON f.id = m.factory_id
+                        LEFT JOIN algorithms a ON a.id = m.algorithm_id
+                        WHERE mv.model_id = :model_id AND mv.is_active = true
+                        LIMIT 1
+                    """),
+                    {"model_id": m_id}
+                ).fetchone()
+                if not res:
+                    res = db_session.execute(
+                        text("""
+                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                            FROM model_versions mv
+                            JOIN models m ON m.id = mv.model_id
+                            LEFT JOIN factories f ON f.id = m.factory_id
+                            LEFT JOIN algorithms a ON a.id = m.algorithm_id
+                            WHERE mv.model_id = :model_id
+                            ORDER BY mv.version_number DESC
+                            LIMIT 1
+                        """),
+                        {"model_id": m_id}
+                    ).fetchone()
+                if res:
+                    fallback_rows.append(dict(res._mapping))
+            if len(fallback_rows) >= 2:
+                rows = fallback_rows
+
+    if len(rows) < 2:
+        return None
+
+    # Extract entity names from rows
+    entities = []
+    for i, r in enumerate(rows[:2]):
+        e_name = r.get("model_name") or r.get("factory_name") or r.get("algorithm_name") or r.get("name")
+        v_num = r.get("version_number")
+        if e_name and v_num is not None:
+            name = f"{e_name} v{v_num}"
+        elif e_name:
+            name = str(e_name)
+        elif v_num is not None:
+            name = f"Version {v_num}"
+        else:
+            name = f"Entity {i+1}"
+        entities.append(name)
+
+    # Extract metrics
+    metrics_definition = [
+        ("accuracy", "accuracy"),
+        ("precision", "precision"),
+        ("recall", "recall"),
+        ("f1_score", "f1_score"),
+        ("inference_time", "inference_time"),
+        ("cpu_utilization", "cpu_utilization"),
+        ("gpu_utilization", "gpu_utilization"),
+        ("cpu_memory_usage", "cpu_memory_usage"),
+        ("gpu_memory_usage", "gpu_memory_usage")
+    ]
+
+    metrics = []
+    for display_name, col in metrics_definition:
+        val1 = rows[0].get(col)
+        val2 = rows[1].get(col)
+        if val1 is not None or val2 is not None:
+            metrics.append({
+                "name": display_name,
+                "entity1": float(val1) if val1 is not None else None,
+                "entity2": float(val2) if val2 is not None else None
+            })
+
+    if not metrics:
+        return None
+
+    title = f"{entities[0]} vs {entities[1]}"
+
+    return {
+        "response_type": "comparison",
+        "show_compare": True,
+        "comparison_title": title,
+        "entities": entities,
+        "metrics": metrics
+    }
+
 def run_chat_pipeline(
     user_question: str,
     db_session: Session,
@@ -440,13 +588,22 @@ def run_chat_pipeline(
     actions = generate_dynamic_actions(resolved_question, query_results, db_session)
     print(f"[ChatPipeline] Generated dynamic actions: {actions}")
     
+    # 8. Dynamic Comparison Generation
+    comp_payload = generate_comparison_payload(resolved_question, query_results, db_session)
+    if comp_payload:
+        print(f"[ChatPipeline] Generated comparison payload: {comp_payload}")
+    
     duration_ms = int((time.time() - start_time) * 1000)
     print(f"[ChatPipeline] Completed pipeline in {duration_ms}ms")
     
-    return {
+    response_payload = {
         "response": final_answer,
         "answer": final_answer,
         "actions": actions,
         "type": "text",
         "confidence": 1.0
     }
+    if comp_payload:
+        response_payload.update(comp_payload)
+        
+    return response_payload
