@@ -464,6 +464,32 @@ def run_chat_pipeline(
     print(f"[ChatPipeline] User question: {user_question}")
     print(f"[ChatPipeline] Resolved question: {resolved_question}")
     
+    # 1.5 Query Routing Interceptor
+    from app.services.query_router import route_query, handle_knowledge_query, handle_hybrid_query
+    routing = route_query(resolved_question)
+    q_type = routing.get("query_type", "DATABASE_QUERY")
+    print(f"[ChatPipeline] Routed query type: {q_type} (Reason: {routing.get('explanation')})")
+    
+    if q_type == "KNOWLEDGE_QUERY":
+        answer = handle_knowledge_query(resolved_question)
+        return {
+            "response": answer,
+            "answer": answer,
+            "actions": [],
+            "type": "text",
+            "confidence": 1.0
+        }
+        
+    if q_type == "HYBRID_QUERY":
+        answer = handle_hybrid_query(resolved_question, db_session)
+        return {
+            "response": answer,
+            "answer": answer,
+            "actions": [],
+            "type": "text",
+            "confidence": 1.0
+        }
+    
     # 2. Schema Provider
     schema_provider = SchemaProvider.from_session(db_session)
     schema_desc = schema_provider.get_detailed_schema()
