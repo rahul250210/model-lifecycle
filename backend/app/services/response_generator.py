@@ -1,72 +1,64 @@
 import json
-import datetime
-from decimal import Decimal
-from typing import Any, Dict, List, Optional
-from app.services.planner_llm import QueryPlan
+from typing import Any, Dict, List, Union
+from app.services.llm_service import call_llm
 
-class CustomEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Decimal):
-            return float(obj)
-        if isinstance(obj, (datetime.datetime, datetime.date)):
-            return obj.isoformat()
-        return super().default(obj)
-
-def generate_response_llm(
-    query_plan: QueryPlan,
-    sql_results: List[Dict[str, Any]],
-    question: str
-) -> Optional[str]:
+def generate_response(
+    user_question: str,
+    generated_sql: str,
+    query_results: Union[List[Dict[str, Any]], Dict[str, Any]],
+    temperature: float = 0.3
+) -> str:
     """
-    Transforms verified database results into a user-friendly markdown explanation using the LLM.
-    If the LLM is offline or fails, returns None to allow falling back to structured formatters.
-    """
-    if not sql_results:
-        return None
-
-    # Format query plan details for prompt readability
-    tasks_info = []
-    for t in query_plan.tasks:
-        tasks_info.append({
-            "type": t.type,
-            "entity_types": t.entity_types,
-            "entity_names": t.entity_names,
-            "metric": t.metric,
-            "operation": t.operation,
-            "filters": t.filters
-        })
+    Generates a natural language response explaining database query results.
     
-    plan_json = json.dumps(tasks_info, indent=2)
-    results_json = json.dumps(sql_results, cls=CustomEncoder, indent=2)
+    Responsibilities:
+    1. Explain results in natural language.
+    2. Summarize large result sets.
+    3. Produce markdown tables when appropriate.
+    4. Never expose internal schema unless requested.
+    5. Never expose stack traces.
+    
+    Args:
+        user_question: The original user question.
+        generated_sql: The SQL query that was generated and executed.
+        query_results: Raw query execution output (either a list of rows or execution dictionary).
+        temperature: Model sampling temperature.
+        
+    Returns:
+        The final markdown-formatted chatbot response string.
+    """
+    # Normalize results input
+    if isinstance(query_results, dict):
+        rows = query_results.get("rows", [])
+    elif isinstance(query_results, list):
+        rows = query_results
+    else:
+        rows = [query_results]
+        
+    # Serialize to JSON for prompt injection
+    results_json = json.dumps(rows, default=str)
+    
+    prompt = f"""You are MIRA, an intelligent AI assistant for the MARS MLOps platform.
+Your task is to answer the user's question by explaining the database query results in natural, friendly, and professional language.
 
-    prompt = f"""You are MIRA, a professional AI assistant for the MARS MLOps platform.
-Your task is to transform the verified database query results into a clear, user-friendly markdown explanation.
+USER QUESTION:
+{user_question}
 
-User Question: "{question}"
-Query Plan Tasks:
-{plan_json}
+GENERATED SQL QUERY:
+{generated_sql}
 
-SQL Query Results:
+QUERY RESULTS (JSON):
 {results_json}
 
-Rules:
-1. Provide a professional, natural, and helpful explanation of the results.
-2. Ground your explanation STRICTLY in the SQL Query Results.
-3. NEVER invent or hallucinate metrics, version numbers, factories, or algorithm names that are not explicitly present in the SQL Query Results.
-4. If a value is missing, None, or empty in the results, report it as "Not Available".
-5. Use markdown tables, lists, and bold text where appropriate to structure the information and make it highly readable.
-6. Do NOT mention any internal system details like the query plan, SQL queries, database schema, tables, or technical jargon.
-7. Return ONLY the markdown response itself. Do not include any prefix, suffix, or extra comments.
+INSTRUCTIONS:
+1. Explain the query results clearly in natural language relative to the user's question.
+2. If the result set is large, summarize the key findings, trends, or top entries rather than printing every row.
+3. Produce markdown tables when appropriate (e.g., listing multiple entities, comparing versions, or comparing metrics across models).
+4. Do NOT mention internal database schema details (such as database table names, column names, join conditions, schema keys) unless the user explicitly asked for them. Translate them into user-friendly business terms (e.g. instead of 'model_versions table', use 'model versions').
+5. NEVER expose any database stack traces, raw SQL execution errors, or internal technical code details.
+6. Provide a concise, professional answer.
 
-Markdown Response:"""
+Response:"""
 
-    try:
-        # Dynamic import to prevent circular dependency
-        from app.services.llm_service import call_llm
-        response_str = call_llm(prompt, temperature=0.2)
-        if response_str == "__LLM_OFFLINE__" or not response_str.strip():
-            return None
-        return response_str.strip()
-    except Exception as e:
-        print(f"[ResponseGenerator] LLM response generation failed: {e}")
-        return None
+    response = call_llm(prompt, temperature=temperature)
+    return response.strip()
