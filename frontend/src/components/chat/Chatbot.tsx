@@ -51,6 +51,14 @@ interface Message {
     components?: string[];
     model_name?: string;
     version_number?: number;
+    actions?: {
+        type: 'download';
+        label: string;
+        download_type: string;
+        entity_type: string;
+        entity_id: number;
+        download_url?: string;
+    }[];
     timestamp: Date;
 }
 
@@ -654,6 +662,113 @@ function DownloadZipButton({ downloadUrl, modelName, versionNumber, components }
     );
 }
 
+// ─── Action Button (renders dynamic actions) ──────────────────────────────────
+function ActionButton({ action }: { action: { type: string; label: string; download_type: string; entity_type: string; entity_id: number; download_url?: string } }) {
+    const { theme } = useTheme();
+    const [downloading, setDownloading] = useState(false);
+
+    const handleDownload = async () => {
+        setDownloading(true);
+        try {
+            let url = action.download_url;
+            if (!url) {
+                if (action.download_type === 'report') {
+                    const params = new URLSearchParams({ report_type: action.entity_type });
+                    if (action.entity_type === 'model') {
+                        params.append('model_id', String(action.entity_id));
+                    } else if (action.entity_type === 'factory') {
+                        params.append('factory_id', String(action.entity_id));
+                    } else if (action.entity_type === 'algorithm') {
+                        params.append('algorithm_id', String(action.entity_id));
+                    }
+                    url = `/chatbot/download-report?${params.toString()}`;
+                } else if (action.download_type === 'artifact') {
+                    url = `/artifacts/${action.entity_id}/download`;
+                }
+            }
+
+            if (!url) {
+                console.error('No download URL available for action:', action);
+                return;
+            }
+
+            const finalUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+            const res = await fetch(finalUrl);
+            if (!res.ok) {
+                throw new Error(`Failed to download: ${res.statusText}`);
+            }
+            const blob = await res.blob();
+            const disposition = res.headers.get('Content-Disposition') ?? '';
+
+            let filename = '';
+            const rfcMatch = disposition.match(/filename\*=(?:UTF-8'')?([^\s;]+)/i);
+            const plainMatch = disposition.match(/filename="([^"]+)"/);
+            if (rfcMatch) {
+                filename = decodeURIComponent(rfcMatch[1]);
+            } else if (plainMatch) {
+                filename = plainMatch[1];
+            }
+
+            if (!filename) {
+                filename = action.label.replace(/\s+/g, '_') + (action.download_type === 'report' ? '.csv' : '.zip');
+            }
+
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(blobUrl);
+        } catch (e) {
+            console.error('Action download failed:', e);
+        } finally {
+            setDownloading(false);
+        }
+    };
+
+    const isReport = action.download_type === 'report';
+
+    return (
+        <Box
+            onClick={downloading ? undefined : handleDownload}
+            sx={{
+                mt: 1.5, cursor: downloading ? 'default' : 'pointer',
+                borderRadius: '14px',
+                background: downloading
+                    ? alpha(theme.textMain, 0.04)
+                    : `linear-gradient(135deg, ${alpha(theme.success, 0.1)}, ${alpha(theme.primary, 0.08)})`,
+                border: `1px solid ${alpha(downloading ? theme.border : theme.success, 0.3)}`,
+                px: 2, py: 1.5,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                transition: 'all 0.2s ease',
+                '&:hover': downloading ? {} : {
+                    background: `linear-gradient(135deg, ${alpha(theme.success, 0.16)}, ${alpha(theme.primary, 0.12)})`,
+                    border: `1px solid ${alpha(theme.success, 0.5)}`,
+                    transform: 'translateY(-1px)',
+                    boxShadow: `0 6px 20px ${alpha(theme.success, 0.2)}`,
+                },
+            }}
+        >
+            <Stack direction="row" spacing={1} alignItems="center">
+                {downloading
+                    ? <CircularProgress size={14} sx={{ color: theme.primary }} />
+                    : <DownloadIcon sx={{ fontSize: 16, color: theme.success }} />}
+                <Box>
+                    <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMain, fontSize: '0.72rem', display: 'block', lineHeight: 1.2 }}>
+                        {downloading ? 'Preparing download…' : action.label}
+                    </Typography>
+                    {!downloading && (
+                        <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem' }}>
+                            {isReport ? 'CSV · All fields included' : 'Export Bundle · ZIP'}
+                        </Typography>
+                    )}
+                </Box>
+            </Stack>
+            {!downloading && <DownloadIcon sx={{ fontSize: 14, color: theme.success, opacity: 0.6 }} />}
+        </Box>
+    );
+}
+
 // ─── Entity list view ───────────────────────────────────────────────────────
 function EntityList({ data, type }: { data: any[], type: 'factories' | 'algorithms' | 'models' | 'versions' }) {
     const { theme, mode } = useTheme();
@@ -1130,6 +1245,11 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick }: Message
                                 components={msg.components || []}
                             />
                         )}
+
+                        {/* Dynamic Actions */}
+                        {msg.actions && msg.actions.length > 0 && msg.actions.map((act, index) => (
+                            <ActionButton key={index} action={act} />
+                        ))}
                     </Paper>
 
                     {/* Timestamp */}
@@ -1190,7 +1310,7 @@ export default function Chatbot() {
             });
             setMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(), role: 'bot',
-                content: data.answer, data: data.data, query: data.query,
+                content: data.response || data.answer || '', data: data.data, query: data.query,
                 type: data.type, report_type: data.report_type, report_name: data.report_name,
                 algorithm_id: data.algorithm_id,
                 algorithm_name: data.algorithm_name,
@@ -1202,6 +1322,7 @@ export default function Chatbot() {
                 components: data.components,
                 model_name: data.model_name,
                 version_number: data.version_number,
+                actions: data.actions || [],
                 timestamp: new Date(),
             }]);
         } catch (err: any) {
