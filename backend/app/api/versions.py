@@ -496,6 +496,8 @@ def get_version(
         )
         .first()
     )
+    if not version:
+        version = db.query(ModelVersion).filter(ModelVersion.id == version_id).first()
     
     if not version:
         raise HTTPException(404, "Version not found")
@@ -552,6 +554,8 @@ def get_version_delta(
         .first()
     )
     if not version:
+        version = db.query(ModelVersion).filter(ModelVersion.id == version_id).first()
+    if not version:
         raise HTTPException(404, "Version not found")
 
     # 1. Total counts in this version
@@ -567,7 +571,7 @@ def get_version_delta(
     lineage = (
         db.query(Artifact.checksum, func.min(ModelVersion.version_number))
         .join(ModelVersion, Artifact.version_id == ModelVersion.id)
-        .filter(ModelVersion.model_id == model_id)
+        .filter(ModelVersion.model_id == version.model_id)
         .group_by(Artifact.checksum)
         .all()
     )
@@ -593,7 +597,7 @@ def get_version_delta(
     prev_version = (
         db.query(ModelVersion)
         .filter(
-            ModelVersion.model_id == model_id,
+            ModelVersion.model_id == version.model_id,
             ModelVersion.version_number < version.version_number
         )
         .order_by(ModelVersion.version_number.desc())
@@ -638,7 +642,12 @@ def compare_datasets(
     db: Session = Depends(get_db),
 ):
     v1 = db.query(ModelVersion).filter(ModelVersion.id == v1_id, ModelVersion.model_id == model_id).first()
+    if not v1:
+        v1 = db.query(ModelVersion).filter(ModelVersion.id == v1_id).first()
+        
     v2 = db.query(ModelVersion).filter(ModelVersion.id == v2_id, ModelVersion.model_id == model_id).first()
+    if not v2:
+        v2 = db.query(ModelVersion).filter(ModelVersion.id == v2_id).first()
     
     if not v1 or not v2:
         raise HTTPException(404, "One or both versions not found")

@@ -25,9 +25,6 @@ def call_llm(prompt: str, temperature: float = 0.0) -> str:
             content = resp.generations[0].message.content.strip()
             if content not in ("__LLM_OFFLINE__", "NO_SQL") and content:
                 return content
-            else:
-                print(f"[MIRA] Semcat LLM returned offline/error content: '{content}'. Switching to Gemini fallback.")
-                _SEMCAT_OFFLINE = True
         except Exception as e:
             print(f"[MIRA] Semcat LLM is offline or timed out: {e}. Switching to Gemini fallback.")
             _SEMCAT_OFFLINE = True
@@ -45,13 +42,11 @@ def call_llm(prompt: str, temperature: float = 0.0) -> str:
                 }
             }
             response = req.post(url, json=payload, timeout=20.0)
-            response.raise_for_status()
-            data = response.json()
-            res_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-            return res_text
+            if response.status_code == 200:
+                data = response.json()
+                res_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                return res_text
         except Exception as ex:
             print(f"[MIRA] Gemini fallback failed: {ex}")
-            if 'response' in locals() and response is not None:
-                print(f"[MIRA] Gemini error response text: {response.text}")
             
     return "__LLM_OFFLINE__"

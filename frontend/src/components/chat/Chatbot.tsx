@@ -264,7 +264,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                             )}
                         </span>
                     ))}
-                    {versions.every(v => v.id) && !hasMultipleModels && versions[0].model_id && versions[0].algorithm_id && versions[0].factory_id && (
+                    {versions.every(v => v.id) && versions[0].model_id && versions[0].algorithm_id && versions[0].factory_id && (
                         <Tooltip title="View In-Depth Comparison Page">
                             <IconButton onClick={() => {
                                 onClose();

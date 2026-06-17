@@ -284,6 +284,34 @@ def generate_dynamic_actions(
 
     return actions
 
+def _enrich_version_row(res, db_session: Session) -> Dict[str, Any]:
+    row_dict = dict(res._mapping)
+    # Query artifacts
+    arts = db_session.execute(
+        text("SELECT name, size, type FROM artifacts WHERE version_id = :v_id"),
+        {"v_id": row_dict["id"]}
+    ).fetchall()
+    row_dict["artifacts"] = [{"name": art.name, "size": art.size, "type": art.type} for art in arts]
+    
+    # Ensure parameters is a clean dict
+    import json
+    params_val = row_dict.get("parameters")
+    if isinstance(params_val, str):
+        try:
+            row_dict["parameters"] = json.loads(params_val)
+        except:
+            row_dict["parameters"] = {}
+    elif not isinstance(params_val, dict):
+        row_dict["parameters"] = {}
+        
+    # Format datetimes for JSON serialization
+    if row_dict.get("created_at") and not isinstance(row_dict["created_at"], str):
+        row_dict["created_at"] = row_dict["created_at"].isoformat()
+    if row_dict.get("updated_at") and not isinstance(row_dict["updated_at"], str):
+        row_dict["updated_at"] = row_dict["updated_at"].isoformat()
+        
+    return row_dict
+
 def generate_comparison_payload(
     user_question: str,
     query_results: Dict[str, Any],
@@ -324,33 +352,9 @@ def generate_comparison_payload(
                 {"v_id": v_id}
             ).fetchone()
             if res:
-                row_dict = dict(res._mapping)
-                # Query artifacts
-                arts = db_session.execute(
-                    text("SELECT name, size, type FROM artifacts WHERE version_id = :v_id"),
-                    {"v_id": v_id}
-                ).fetchall()
-                row_dict["artifacts"] = [{"name": art.name, "size": art.size, "type": art.type} for art in arts]
-                
-                # Ensure parameters is a clean dict
-                params_val = row_dict.get("parameters")
-                if isinstance(params_val, str):
-                    try:
-                        row_dict["parameters"] = json.loads(params_val)
-                    except:
-                        row_dict["parameters"] = {}
-                elif not isinstance(params_val, dict):
-                    row_dict["parameters"] = {}
-                    
-                # Format datetimes for JSON serialization
-                if row_dict.get("created_at"):
-                    row_dict["created_at"] = row_dict["created_at"].isoformat()
-                if row_dict.get("updated_at"):
-                    row_dict["updated_at"] = row_dict["updated_at"].isoformat()
-                    
-                full_rows.append(row_dict)
+                full_rows.append(_enrich_version_row(res, db_session))
 
-    # 2. Fallback lookup if we couldn't resolve from query results
+    # 2. Fallback lookup if we couldn't resolve from query results (matching model names)
     if len(full_rows) < 2:
         # Search the query for model names, sorted by length DESC to match longest first
         all_models = db_session.execute(text("SELECT id, name FROM models ORDER BY length(name) DESC")).fetchall()
@@ -389,29 +393,7 @@ def generate_comparison_payload(
                         {"model_id": m_id, "v_num": v_num}
                     ).fetchone()
                     if res:
-                        row_dict = dict(res._mapping)
-                        # Query artifacts
-                        arts = db_session.execute(
-                            text("SELECT name, size, type FROM artifacts WHERE version_id = :v_id"),
-                            {"v_id": row_dict["id"]}
-                        ).fetchall()
-                        row_dict["artifacts"] = [{"name": art.name, "size": art.size, "type": art.type} for art in arts]
-                        
-                        params_val = row_dict.get("parameters")
-                        if isinstance(params_val, str):
-                            try:
-                                row_dict["parameters"] = json.loads(params_val)
-                            except:
-                                row_dict["parameters"] = {}
-                        elif not isinstance(params_val, dict):
-                            row_dict["parameters"] = {}
-                            
-                        if row_dict.get("created_at"):
-                            row_dict["created_at"] = row_dict["created_at"].isoformat()
-                        if row_dict.get("updated_at"):
-                            row_dict["updated_at"] = row_dict["updated_at"].isoformat()
-                            
-                        fallback_rows.append(row_dict)
+                        fallback_rows.append(_enrich_version_row(res, db_session))
         elif len(matched_model_ids) >= 2:
             # Fetch the active or latest version for each model
             for m_id in matched_model_ids[:2]:
@@ -442,31 +424,109 @@ def generate_comparison_payload(
                         {"model_id": m_id}
                     ).fetchone()
                 if res:
-                    row_dict = dict(res._mapping)
-                    # Query artifacts
-                    arts = db_session.execute(
-                        text("SELECT name, size, type FROM artifacts WHERE version_id = :v_id"),
-                        {"v_id": row_dict["id"]}
-                    ).fetchall()
-                    row_dict["artifacts"] = [{"name": art.name, "size": art.size, "type": art.type} for art in arts]
-                    
-                    params_val = row_dict.get("parameters")
-                    if isinstance(params_val, str):
-                        try:
-                            row_dict["parameters"] = json.loads(params_val)
-                        except:
-                            row_dict["parameters"] = {}
-                    elif not isinstance(params_val, dict):
-                        row_dict["parameters"] = {}
-                        
-                    if row_dict.get("created_at"):
-                        row_dict["created_at"] = row_dict["created_at"].isoformat()
-                    if row_dict.get("updated_at"):
-                        row_dict["updated_at"] = row_dict["updated_at"].isoformat()
-                        
-                    fallback_rows.append(row_dict)
+                    fallback_rows.append(_enrich_version_row(res, db_session))
         if len(fallback_rows) >= 2:
             full_rows = fallback_rows
+
+    # 2.1 Factory comparison fallback
+    if len(full_rows) < 2:
+        all_factories = db_session.execute(text("SELECT id, name FROM factories ORDER BY length(name) DESC")).fetchall()
+        matched_factory_ids = []
+        matched_factory_names = []
+        temp_q = q
+        for f_id, f_name in all_factories:
+            name_lower = f_name.lower()
+            if name_lower in temp_q:
+                matched_factory_ids.append(f_id)
+                matched_factory_names.append(f_name)
+                temp_q = temp_q.replace(name_lower, "")
+                
+        if len(matched_factory_ids) >= 2:
+            factory_rows = []
+            for f_id in matched_factory_ids[:2]:
+                # Find active model versions for this factory
+                res = db_session.execute(
+                    text("""
+                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                        FROM model_versions mv
+                        JOIN models m ON m.id = mv.model_id
+                        LEFT JOIN factories f ON f.id = m.factory_id
+                        LEFT JOIN algorithms a ON a.id = m.algorithm_id
+                        WHERE m.factory_id = :factory_id AND mv.is_active = true
+                        ORDER BY mv.version_number DESC
+                        LIMIT 1
+                    """),
+                    {"factory_id": f_id}
+                ).fetchone()
+                if not res:
+                    # Fallback to latest version in this factory
+                    res = db_session.execute(
+                        text("""
+                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                            FROM model_versions mv
+                            JOIN models m ON m.id = mv.model_id
+                            LEFT JOIN factories f ON f.id = m.factory_id
+                            LEFT JOIN algorithms a ON a.id = m.algorithm_id
+                            WHERE m.factory_id = :factory_id
+                            ORDER BY mv.version_number DESC
+                            LIMIT 1
+                        """),
+                        {"factory_id": f_id}
+                    ).fetchone()
+                if res:
+                    factory_rows.append(_enrich_version_row(res, db_session))
+            if len(factory_rows) >= 2:
+                full_rows = factory_rows
+
+    # 2.2 Algorithm comparison fallback
+    if len(full_rows) < 2:
+        all_algorithms = db_session.execute(text("SELECT id, name FROM algorithms ORDER BY length(name) DESC")).fetchall()
+        matched_algo_ids = []
+        matched_algo_names = []
+        temp_q = q
+        for a_id, a_name in all_algorithms:
+            name_lower = a_name.lower()
+            if name_lower in temp_q:
+                matched_algo_ids.append(a_id)
+                matched_algo_names.append(a_name)
+                temp_q = temp_q.replace(name_lower, "")
+                
+        if len(matched_algo_ids) >= 2:
+            algo_rows = []
+            for a_id in matched_algo_ids[:2]:
+                # Find active model versions for this algorithm
+                res = db_session.execute(
+                    text("""
+                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                        FROM model_versions mv
+                        JOIN models m ON m.id = mv.model_id
+                        LEFT JOIN factories f ON f.id = m.factory_id
+                        LEFT JOIN algorithms a ON a.id = m.algorithm_id
+                        WHERE m.algorithm_id = :algorithm_id AND mv.is_active = true
+                        ORDER BY mv.version_number DESC
+                        LIMIT 1
+                    """),
+                    {"algorithm_id": a_id}
+                ).fetchone()
+                if not res:
+                    # Fallback to latest version
+                    res = db_session.execute(
+                        text("""
+                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                            FROM model_versions mv
+                            JOIN models m ON m.id = mv.model_id
+                            LEFT JOIN factories f ON f.id = m.factory_id
+                            LEFT JOIN algorithms a ON a.id = m.algorithm_id
+                            WHERE m.algorithm_id = :algorithm_id
+                            ORDER BY mv.version_number DESC
+                            LIMIT 1
+                        """),
+                        {"algorithm_id": a_id}
+                    ).fetchone()
+                if res:
+                    algo_rows.append(_enrich_version_row(res, db_session))
+            if len(algo_rows) >= 2:
+                full_rows = algo_rows
 
     # 3. Third-level fallback: if we have query rows but couldn't get IDs, search by model names
     if len(full_rows) < 2 and len(rows) >= 2:
@@ -487,28 +547,7 @@ def generate_comparison_payload(
                     {"m_name": f"%{m_name}%", "v_num": int(v_num)}
                 ).fetchone()
                 if res:
-                    row_dict = dict(res._mapping)
-                    arts = db_session.execute(
-                        text("SELECT name, size, type FROM artifacts WHERE version_id = :v_id"),
-                        {"v_id": row_dict["id"]}
-                    ).fetchall()
-                    row_dict["artifacts"] = [{"name": art.name, "size": art.size, "type": art.type} for art in arts]
-                    
-                    params_val = row_dict.get("parameters")
-                    if isinstance(params_val, str):
-                        try:
-                            row_dict["parameters"] = json.loads(params_val)
-                        except:
-                            row_dict["parameters"] = {}
-                    elif not isinstance(params_val, dict):
-                        row_dict["parameters"] = {}
-                        
-                    if row_dict.get("created_at"):
-                        row_dict["created_at"] = row_dict["created_at"].isoformat()
-                    if row_dict.get("updated_at"):
-                        row_dict["updated_at"] = row_dict["updated_at"].isoformat()
-                        
-                    full_rows.append(row_dict)
+                    full_rows.append(_enrich_version_row(res, db_session))
                     if len(full_rows) >= 2:
                         break
 
