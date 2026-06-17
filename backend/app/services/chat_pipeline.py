@@ -88,7 +88,7 @@ def generate_dynamic_actions(
                     "download_type": "report",
                     "entity_type": "factory",
                     "entity_id": int(f_id),
-                    "download_url": f"/chatbot/download-report?report_type=factory&factory_id={f_id}"
+                    "download_url": f"/factories/{f_id}/report"
                 })
                 return actions
                 
@@ -101,74 +101,42 @@ def generate_dynamic_actions(
                     "download_type": "report",
                     "entity_type": "algorithm",
                     "entity_id": int(a_id),
-                    "download_url": f"/chatbot/download-report?report_type=algorithm&algorithm_id={a_id}"
+                    "download_url": f"/algorithms/{a_id}/report"
                 })
                 return actions
                 
-        models = db_session.execute(text("SELECT id, name FROM models")).fetchall()
-        for m_id, m_name in models:
+        models = db_session.execute(text("SELECT id, name, algorithm_id, factory_id FROM models")).fetchall()
+        for m_id, m_name, m_algo_id, m_fact_id in models:
             if m_name.lower() in q:
+                download_url = f"/algorithms/{m_algo_id}/factories/{m_fact_id}/models/{m_id}/report"
                 actions.append({
                     "type": "download",
                     "label": f"Download Model Report: {m_name}",
                     "download_type": "report",
                     "entity_type": "model",
                     "entity_id": int(m_id),
-                    "download_url": f"/chatbot/download-report?report_type=model&model_id={m_id}"
+                    "download_url": download_url
                 })
                 ver_res = db_session.execute(
                     text("""
-                        SELECT mv.id, mv.version_number, m.id as model_id, m.name as model_name,
-                               f.id as factory_id, a.id as algorithm_id
+                        SELECT mv.id, mv.version_number
                         FROM model_versions mv
-                        JOIN models m ON m.id = mv.model_id
-                        LEFT JOIN factories f ON f.id = m.factory_id
-                        LEFT JOIN algorithms a ON a.id = m.algorithm_id
                         WHERE mv.model_id = :model_id AND mv.is_active = true
                         LIMIT 1
                     """),
                     {"model_id": m_id}
                 ).fetchone()
                 if ver_res:
-                    download_url = f"/algorithms/{ver_res.algorithm_id}/factories/{ver_res.factory_id}/models/{ver_res.model_id}/versions/{ver_res.id}/download?dataset=true&labels=true&model=true&code=true"
+                    zip_url = f"/algorithms/{m_algo_id}/factories/{m_fact_id}/models/{m_id}/versions/{ver_res.id}/download?dataset=true&labels=true&model=true&code=true"
                     actions.append({
                         "type": "download",
-                        "label": f"Download ZIP: {ver_res.model_name} v{ver_res.version_number}",
+                        "label": f"Download ZIP: {m_name} v{ver_res.version_number}",
                         "download_type": "zip",
                         "entity_type": "version",
                         "entity_id": int(ver_res.id),
-                        "download_url": download_url
+                        "download_url": zip_url
                     })
                 return actions
-
-        # Fallback 3: General keyword check
-        if "factory" in q:
-            actions.append({
-                "type": "download",
-                "label": "Download Factory Report (All)",
-                "download_type": "report",
-                "entity_type": "factory",
-                "entity_id": 0,
-                "download_url": "/chatbot/download-report?report_type=factory"
-            })
-        elif "algorithm" in q:
-            actions.append({
-                "type": "download",
-                "label": "Download Algorithm Report (All)",
-                "download_type": "report",
-                "entity_type": "algorithm",
-                "entity_id": 0,
-                "download_url": "/chatbot/download-report?report_type=algorithm"
-            })
-        elif "model" in q:
-            actions.append({
-                "type": "download",
-                "label": "Download Model Report (All)",
-                "download_type": "report",
-                "entity_type": "model",
-                "entity_id": 0,
-                "download_url": "/chatbot/download-report?report_type=model"
-            })
         return actions
 
     first_row = rows[0]
@@ -236,39 +204,42 @@ def generate_dynamic_actions(
                 model_name = res[0] if res else f"Model {model_id}"
             
             # Model Report Action
-            actions.append({
-                "type": "download",
-                "label": f"Download Model Report: {model_name}",
-                "download_type": "report",
-                "entity_type": "model",
-                "entity_id": int(model_id),
-                "download_url": f"/chatbot/download-report?report_type=model&model_id={model_id}"
-            })
-            
-            # Offer active version ZIP for the model as well
-            ver_res = db_session.execute(
-                text("""
-                    SELECT mv.id, mv.version_number, m.id as model_id, m.name as model_name,
-                           f.id as factory_id, a.id as algorithm_id
-                    FROM model_versions mv
-                    JOIN models m ON m.id = mv.model_id
-                    LEFT JOIN factories f ON f.id = m.factory_id
-                    LEFT JOIN algorithms a ON a.id = m.algorithm_id
-                    WHERE mv.model_id = :model_id AND mv.is_active = true
-                    LIMIT 1
-                """),
-                {"model_id": model_id}
+            m_res = db_session.execute(
+                text("SELECT algorithm_id, factory_id FROM models WHERE id = :id"),
+                {"id": model_id}
             ).fetchone()
-            if ver_res:
-                download_url = f"/algorithms/{ver_res.algorithm_id}/factories/{ver_res.factory_id}/models/{ver_res.model_id}/versions/{ver_res.id}/download?dataset=true&labels=true&model=true&code=true"
+            if m_res:
+                download_url = f"/algorithms/{m_res.algorithm_id}/factories/{m_res.factory_id}/models/{model_id}/report"
                 actions.append({
                     "type": "download",
-                    "label": f"Download ZIP: {ver_res.model_name} v{ver_res.version_number}",
-                    "download_type": "zip",
-                    "entity_type": "version",
-                    "entity_id": int(ver_res.id),
+                    "label": f"Download Model Report: {model_name}",
+                    "download_type": "report",
+                    "entity_type": "model",
+                    "entity_id": int(model_id),
                     "download_url": download_url
                 })
+            
+            # Offer active version ZIP for the model as well
+            if m_res:
+                ver_res = db_session.execute(
+                    text("""
+                        SELECT mv.id, mv.version_number
+                        FROM model_versions mv
+                        WHERE mv.model_id = :model_id AND mv.is_active = true
+                        LIMIT 1
+                    """),
+                    {"model_id": model_id}
+                ).fetchone()
+                if ver_res:
+                    zip_url = f"/algorithms/{m_res.algorithm_id}/factories/{m_res.factory_id}/models/{model_id}/versions/{ver_res.id}/download?dataset=true&labels=true&model=true&code=true"
+                    actions.append({
+                        "type": "download",
+                        "label": f"Download ZIP: {model_name} v{ver_res.version_number}",
+                        "download_type": "zip",
+                        "entity_type": "version",
+                        "entity_id": int(ver_res.id),
+                        "download_url": zip_url
+                    })
             return actions
 
     # Algorithm check
@@ -287,7 +258,7 @@ def generate_dynamic_actions(
                 "download_type": "report",
                 "entity_type": "algorithm",
                 "entity_id": int(algo_id),
-                "download_url": f"/chatbot/download-report?report_type=algorithm&algorithm_id={algo_id}"
+                "download_url": f"/algorithms/{algo_id}/report"
             })
             return actions
 
@@ -307,38 +278,9 @@ def generate_dynamic_actions(
                 "download_type": "report",
                 "entity_type": "factory",
                 "entity_id": int(factory_id),
-                "download_url": f"/chatbot/download-report?report_type=factory&factory_id={factory_id}"
+                "download_url": f"/factories/{factory_id}/report"
             })
             return actions
-
-    # General fallback
-    if "factory" in q:
-        actions.append({
-            "type": "download",
-            "label": "Download Factory Report (All)",
-            "download_type": "report",
-            "entity_type": "factory",
-            "entity_id": 0,
-            "download_url": "/chatbot/download-report?report_type=factory"
-        })
-    elif "algorithm" in q:
-        actions.append({
-            "type": "download",
-            "label": "Download Algorithm Report (All)",
-            "download_type": "report",
-            "entity_type": "algorithm",
-            "entity_id": 0,
-            "download_url": "/chatbot/download-report?report_type=algorithm"
-        })
-    elif "model" in q:
-        actions.append({
-            "type": "download",
-            "label": "Download Model Report (All)",
-            "download_type": "report",
-            "entity_type": "model",
-            "entity_id": 0,
-            "download_url": "/chatbot/download-report?report_type=model"
-        })
 
     return actions
 

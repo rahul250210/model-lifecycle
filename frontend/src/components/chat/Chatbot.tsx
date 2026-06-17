@@ -815,17 +815,7 @@ function ActionButton({ action }: { action: { type: string; label: string; downl
         try {
             let url = action.download_url;
             if (!url) {
-                if (action.download_type === 'report') {
-                    const params = new URLSearchParams({ report_type: action.entity_type });
-                    if (action.entity_type === 'model') {
-                        params.append('model_id', String(action.entity_id));
-                    } else if (action.entity_type === 'factory') {
-                        params.append('factory_id', String(action.entity_id));
-                    } else if (action.entity_type === 'algorithm') {
-                        params.append('algorithm_id', String(action.entity_id));
-                    }
-                    url = `/chatbot/download-report?${params.toString()}`;
-                } else if (action.download_type === 'artifact') {
+                if (action.download_type === 'artifact') {
                     url = `/artifacts/${action.entity_id}/download`;
                 }
             }
@@ -835,13 +825,9 @@ function ActionButton({ action }: { action: { type: string; label: string; downl
                 return;
             }
 
-            const finalUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
-            const res = await fetch(finalUrl);
-            if (!res.ok) {
-                throw new Error(`Failed to download: ${res.statusText}`);
-            }
-            const blob = await res.blob();
-            const disposition = res.headers.get('Content-Disposition') ?? '';
+            const res = await axios.get(url, { responseType: 'blob' });
+            const blob = res.data;
+            const disposition = res.headers['content-disposition'] ?? '';
 
             let filename = '';
             const rfcMatch = disposition.match(/filename\*=(?:UTF-8'')?([^\s;]+)/i);
