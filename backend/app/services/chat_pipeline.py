@@ -650,6 +650,8 @@ def run_chat_pipeline(
     
     if q_type == "KNOWLEDGE_QUERY":
         answer = handle_knowledge_query(resolved_question)
+        if answer == "__LLM_OFFLINE__":
+            answer = "⚠️ The AI service is currently rate-limited or offline. Please wait a few seconds and try again."
         return {
             "response": answer,
             "answer": answer,
@@ -660,6 +662,8 @@ def run_chat_pipeline(
         
     if q_type == "HYBRID_QUERY":
         answer = handle_hybrid_query(resolved_question, db_session)
+        if answer == "__LLM_OFFLINE__":
+            answer = "⚠️ The AI service is currently rate-limited or offline. Please wait a few seconds and try again."
         return {
             "response": answer,
             "answer": answer,
@@ -729,6 +733,8 @@ def run_chat_pipeline(
         generated_sql=validated_sql or generated_sql,
         query_results=query_results
     )
+    if final_answer == "__LLM_OFFLINE__":
+        final_answer = "⚠️ The AI service is currently rate-limited or offline. Please wait a few seconds and try again."
     
     # 7. Dynamic Actions Generation
     actions = generate_dynamic_actions(resolved_question, query_results, db_session)

@@ -46,6 +46,10 @@ def call_llm(prompt: str, temperature: float = 0.0) -> str:
                 data = response.json()
                 res_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
                 return res_text
+            elif response.status_code == 429:
+                print(f"[MIRA] Gemini rate limit exceeded (429): {response.text}")
+            else:
+                print(f"[MIRA] Gemini API returned status {response.status_code}: {response.text}")
         except Exception as ex:
             print(f"[MIRA] Gemini fallback failed: {ex}")
             
