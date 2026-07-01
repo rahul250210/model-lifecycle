@@ -53,10 +53,17 @@ QUERY RESULTS (JSON):
 INSTRUCTIONS:
 1. Explain the query results clearly in natural language relative to the user's question.
 2. If the result set is large, summarize the key findings, trends, or top entries rather than printing every row.
-3. Produce markdown tables when appropriate (e.g., listing multiple entities, comparing versions, or comparing metrics across models).
-4. Do NOT mention internal database schema details (such as database table names, column names, join conditions, schema keys) unless the user explicitly asked for them. Translate them into user-friendly business terms (e.g. instead of 'model_versions table', use 'model versions').
-5. NEVER expose any database stack traces, raw SQL execution errors, or internal technical code details.
-6. Provide a concise, professional answer.
+3. When listing multiple factories, algorithms, or models, do NOT use tables. Use bulleted lists instead.
+4. For each factory, algorithm, or model in the list, format its name as a Markdown hyperlink to its overview page. Use these exact URL structures:
+   - Factory: `/factories/{{id}}`
+   - Algorithm: `/algorithms/{{id}}`
+   - Model: `/algorithms/{{algorithm_id}}/factories/{{factory_id}}/models/{{id}}`
+   (Note: Use the actual numeric IDs from the JSON results in the URLs, e.g., `/factories/1`).
+5. NEVER display database IDs in the visible text of the response. IDs should ONLY be used behind the scenes inside the Markdown URLs.
+6. Produce markdown tables ONLY for comparisons (e.g., comparing metrics across models or versions).
+7. Do NOT mention internal database schema details (such as database table names, column names, join conditions, schema keys) unless the user explicitly asked for them. Translate them into user-friendly business terms (e.g. instead of 'model_versions table', use 'model versions').
+8. NEVER expose any database stack traces, raw SQL execution errors, or internal technical code details.
+9. Provide a concise, professional answer.
 
 Response:"""
 

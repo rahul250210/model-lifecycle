@@ -6,14 +6,31 @@ from sqlalchemy import text
 from difflib import SequenceMatcher
 
 from app.services.llm_service import call_llm
-from app.services.sql_agent import AliasCache
 
-def route_query(user_question: str) -> Dict[str, Any]:
+# Centralized routing check keywords as O(1) sets
+ACTION_KEYWORDS = {"download", "export", "report", "csv", "zip", "bundle", "weights", "compare", "versus", "vs", "better than", "difference between"}
+DIRECT_METRIC_KEYWORDS = {"accuracy", "precision", "recall", "f1", "f1_score", "inference", "latency", "cpu", "gpu", "memory", "utilization"}
+CONCEPT_KEYWORDS = {"explain", "how does", "why is", "define", "definition", "tutorial", "architecture", "concept", "theory", "mlops", "difference between"}
+DB_KEYWORDS = {"accuracy", "precision", "recall", "f1", "f1_score", "inference", "latency", "cpu", "gpu", "memory", "utilization", "version", "versions", "count", "average", "mean", "min", "max", "list", "show", "rank", "top", "best"}
+
+def route_query(user_question: str, db_session: Session, context: List[Dict[str, Any]] = []) -> Dict[str, Any]:
     """
     Classifies the user query into one of the four supported query types:
     DATABASE_QUERY, KNOWLEDGE_QUERY, HYBRID_QUERY, ACTION_QUERY.
     """
+    history_str = ""
+    if context:
+        formatted = []
+        for msg in context:
+            role = "User" if msg.get("role") == "user" else "Assistant"
+            content = msg.get("content", "")
+            if content:
+                formatted.append(f"{role}: {content}")
+        if formatted:
+            history_str = "\nCONVERSATION HISTORY:\n" + "\n".join(formatted) + "\n"
+
     prompt = f"""You are a query routing assistant for MARS, an MLOps platform repository.
+{history_str}
 Your task is to classify the user's question into one of the four query types:
 
 1. DATABASE_QUERY:
@@ -65,31 +82,43 @@ User Question: {user_question}"""
     q = user_question.lower()
     
     # Action keywords
-    action_keywords = ["download", "export", "report", "csv", "zip", "bundle", "weights", "compare", "versus", "vs", "better than", "difference between"]
-    if any(kw in q for kw in action_keywords):
+    if any(kw in q for kw in ACTION_KEYWORDS):
         return {"query_type": "ACTION_QUERY", "explanation": "Rule fallback: contains action keywords"}
         
-    # Model names/indicators in database
-    model_indicators = ["yolov11", "r2+1d", "resnet", "cnn", "testing", "yolo"]
-    has_model = any(ind in q for ind in model_indicators)
+    # Check if any database entities exist in the query using dynamic database checks
+    try:
+        has_model = db_session.execute(
+            text("SELECT EXISTS (SELECT 1 FROM models WHERE :q LIKE '%' || lower(name) || '%')"),
+            {"q": q}
+        ).scalar()
+        has_algo = db_session.execute(
+            text("SELECT EXISTS (SELECT 1 FROM algorithms WHERE :q LIKE '%' || lower(name) || '%')"),
+            {"q": q}
+        ).scalar()
+        has_factory = db_session.execute(
+            text("SELECT EXISTS (SELECT 1 FROM factories WHERE :q LIKE '%' || lower(name) || '%')"),
+            {"q": q}
+        ).scalar()
+        has_db_entity = bool(has_model or has_algo or has_factory)
+    except Exception as e:
+        print(f"[QueryRouter] Fallback dynamic DB check failed: {e}")
+        has_db_entity = False
     
     # Direct database metric queries (e.g. "what is the accuracy of YOLOv11")
-    is_direct_metric = any(kw in q for kw in ["accuracy", "precision", "recall", "f1", "f1_score", "inference", "latency", "cpu", "gpu", "memory", "utilization"])
+    is_direct_metric = any(kw in q for kw in DIRECT_METRIC_KEYWORDS)
     
     # If it asks for metrics directly and doesn't contain conceptual verbs, it is DATABASE_QUERY
-    if is_direct_metric and not any(kw in q for kw in ["explain", "how does", "why"]):
+    if is_direct_metric and not any(kw in q for kw in {"explain", "how does", "why"}):
         return {"query_type": "DATABASE_QUERY", "explanation": "Rule fallback: contains database metrics/keywords"}
         
     # Conceptual/Explanation keywords
-    concept_keywords = ["explain", "how does", "why is", "define", "definition", "tutorial", "architecture", "concept", "theory", "mlops", "difference between"]
-    if any(kw in q for kw in concept_keywords) or (q.startswith("what is ") and not is_direct_metric):
-        if has_model:
-            return {"query_type": "HYBRID_QUERY", "explanation": "Rule fallback: conceptual query with repository model"}
+    if any(kw in q for kw in CONCEPT_KEYWORDS) or (q.startswith("what is ") and not is_direct_metric):
+        if has_db_entity:
+            return {"query_type": "HYBRID_QUERY", "explanation": "Rule fallback: conceptual query with repository entity"}
         return {"query_type": "KNOWLEDGE_QUERY", "explanation": "Rule fallback: conceptual query"}
         
     # Check for direct database metrics or versions
-    db_keywords = ["accuracy", "precision", "recall", "f1", "f1_score", "inference", "latency", "cpu", "gpu", "memory", "utilization", "version", "versions", "count", "average", "mean", "min", "max", "list", "show", "rank", "top", "best"]
-    if any(kw in q for kw in db_keywords):
+    if any(kw in q for kw in DB_KEYWORDS):
         return {"query_type": "DATABASE_QUERY", "explanation": "Rule fallback: database metrics/keywords"}
         
     # Default to KNOWLEDGE if it starts with "what is" and doesn't match database keywords
@@ -114,9 +143,6 @@ User Question: {user_question}"""
 def get_database_context(user_question: str, db_session: Session) -> str:
     """Searches the database for entities matching terms in the query and returns formatted context."""
     q = user_question.lower()
-    
-    # Initialize AliasCache to load database aliases
-    AliasCache.initialize(db_session)
     
     # Fetch all models, factories, and algorithms
     models = db_session.execute(text("SELECT id, name, description, algorithm_id, factory_id FROM models")).fetchall()

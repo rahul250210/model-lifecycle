@@ -17,9 +17,9 @@ if env_path.exists():
 
 sys.path.append("c:/Users/Rahul/Desktop/model_lifecycle/backend")
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
-from app.services.sql_agent import run_sql_agent
+from app.services.query_dispatcher import run_sql_agent
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
@@ -28,26 +28,9 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 class TestMIRA(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
-        
-        # Mock CacheProvider to use an in-memory dictionary for unit tests
-        from unittest.mock import patch
-        from app.services.sql_agent import CacheProvider
-        
-        class InMemoryMockCache(CacheProvider):
-            def __init__(self):
-                self.store = {}
-            def get(self, key):
-                return self.store.get(key)
-            def set(self, key, value, ttl=600):
-                self.store[key] = value
-
-        self.mock_cache = InMemoryMockCache()
-        self.cache_patcher = patch('app.services.sql_agent.get_cache_provider', return_value=self.mock_cache)
-        self.cache_patcher.start()
 
     def tearDown(self):
         self.db.close()
-        self.cache_patcher.stop()
 
     def test_sql_injection_rejection(self):
         """Test 1: SQL Injection inputs must be rejected or bound safely."""
@@ -75,17 +58,7 @@ class TestMIRA(unittest.TestCase):
         # Ensure there are no hallucinations of numeric metrics
         self.assertNotIn("95 ms", answer)
 
-    def test_latency_performance(self):
-        """Test 3: Verify fast-path query registry (cache hit) completes in <50ms."""
-        query = "Tell me about model R2+1D"
-        # Warm-up call to ensure TTL cache is populated (first call may invoke LLM or DB)
-        run_sql_agent(query, self.db)
-        # Second call must be a fast cache hit
-        start = time.time()
-        res = run_sql_agent(query, self.db)
-        elapsed_ms = (time.time() - start) * 1000
-        print(f"\n[Test Latency] R2+1D metadata request resolved in {elapsed_ms:.1f}ms")
-        self.assertLess(elapsed_ms, 50.0)
+    # Caching is disabled in the new LLM-driven architecture, so latency performance caching tests are not applicable.
 
     def test_context_pronoun_resolution(self):
         """Test 4: Verify pronoun references are resolved correctly using context memory."""
@@ -257,44 +230,7 @@ class TestMIRA(unittest.TestCase):
             self.db.execute(text("DELETE FROM algorithms WHERE id = 996"))
             self.db.commit()
 
-    def test_query_planner(self):
-        """Test 10: Verify the Query Planner analyzes queries and populates QueryPlan flags correctly."""
-        from app.services.sql_agent import EntityExtractor
-        from app.services.planner_llm import (
-            generate_query_plan,
-            requires_db, requires_knowledge, requires_analytics,
-            requires_explanation, requires_download, get_steps
-        )
-        
-        extractor = EntityExtractor(self.db)
-        
-        # Scenario A: Conceptual
-        q_conceptual = "What is accuracy?"
-        entities = extractor.extract(q_conceptual)
-        plan = generate_query_plan(q_conceptual, entities)
-        self.assertTrue(requires_knowledge(plan))
-        self.assertFalse(requires_db(plan))
-        self.assertFalse(requires_analytics(plan))
-        self.assertIn("Format response and present to user", get_steps(plan))
-        
-        # Scenario B: Analytics Database Query
-        q_analytics = "Which model has highest precision?"
-        entities = extractor.extract(q_analytics)
-        plan = generate_query_plan(q_analytics, entities)
-        self.assertTrue(requires_db(plan))
-        self.assertTrue(requires_analytics(plan))
-        self.assertFalse(requires_knowledge(plan))
-        self.assertFalse(requires_explanation(plan))
-        
-        # Scenario C: Hybrid Query
-        q_hybrid = "Which model has highest precision and explain precision?"
-        entities = extractor.extract(q_hybrid)
-        plan = generate_query_plan(q_hybrid, entities)
-        self.assertTrue(requires_db(plan))
-        self.assertTrue(requires_knowledge(plan))
-        self.assertTrue(requires_explanation(plan))
-        self.assertTrue(requires_analytics(plan))
-        self.assertFalse(requires_download(plan))
+    # The rule-based query planner (planner_llm) is replaced by the new semantic routing architecture (query_router.py).
 
     def test_hybrid_query_execution(self):
         """Test 11: Verify that Hybrid Query Execution successfully merges database and knowledge responses."""

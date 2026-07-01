@@ -66,11 +66,42 @@ class SchemaProvider:
             }
         return schema_desc
 
-    def generate_prompt_description(self) -> str:
+    def get_pruned_schema(self, user_query: str) -> Dict[str, Any]:
         """
-        Generates a text description of the schema, suitable for injecting into LLM system prompts.
+        Prunes the schema to return only relevant tables for the given query to save context tokens.
         """
         schema_desc = self.get_detailed_schema()
+        if not user_query:
+            return schema_desc
+            
+        q = user_query.lower()
+        # Core tables that are almost always referenced in database queries
+        keep_tables = {"models", "model_versions", "factories", "algorithms"}
+        
+        # Optional tables that we only include if keywords are present in the query
+        optional_tables = {
+            "artifacts": ["artifact", "artifacts", "checksum", "file", "files", "zip", "dataset", "weights", "code", "label", "labels"],
+            "experiments": ["experiment", "experiments", "hyperparameters", "run", "runs"],
+            "algorithm_knowledge": ["knowledge", "explain", "concept", "tutorial", "theory"],
+            "algorithm_knowledge_files": ["knowledge", "file", "files", "explain", "concept", "tutorial", "theory", "document", "documents"]
+        }
+        
+        for table, keywords in optional_tables.items():
+            if any(kw in q for kw in keywords):
+                keep_tables.add(table)
+                
+        # Filter schema_desc to keep only relevant tables
+        return {tbl: info for tbl, info in schema_desc.items() if tbl in keep_tables}
+
+    def generate_prompt_description(self, user_query: str = None) -> str:
+        """
+        Generates a text description of the schema, suitable for injecting into LLM system prompts.
+        If user_query is provided, prunes the schema first to save context tokens.
+        """
+        if user_query:
+            schema_desc = self.get_pruned_schema(user_query)
+        else:
+            schema_desc = self.get_detailed_schema()
         lines = []
         for table_name, info in schema_desc.items():
             lines.append(f"Table: {table_name}")

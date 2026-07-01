@@ -1,14 +1,31 @@
 import time
+import re
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from app.services.sql_agent import AliasCache, EntityExtractor, ContextMemory, resolve_context_rules
 from app.services.schema_provider import SchemaProvider
 from app.services.text_to_sql import generate_sql, regenerate_sql
 from app.services.sql_validator import validate_sql
 from app.services.query_executor import execute_query
 from app.services.response_generator import generate_response
+
+# Centralized keyword maps for heuristic fallbacks and intent matching
+DOWNLOAD_KEYWORDS = {"download", "export", "report", "csv", "zip", "bundle", "weights", "file", "files", "artifact", "artifacts"}
+COMPARISON_KEYWORDS = {"compare", "versus", "vs", "better than", "difference between"}
+ZIP_KEYWORDS = {"zip", "bundle", "export", "files", "weights"}
+
+METRICS_DEFINITION = (
+    ("accuracy", "accuracy"),
+    ("precision", "precision"),
+    ("recall", "recall"),
+    ("f1_score", "f1_score"),
+    ("inference_time", "inference_time"),
+    ("cpu_utilization", "cpu_utilization"),
+    ("gpu_utilization", "gpu_utilization"),
+    ("cpu_memory_usage", "cpu_memory_usage"),
+    ("gpu_memory_usage", "gpu_memory_usage")
+)
 
 def generate_dynamic_actions(
     user_question: str,
@@ -22,79 +39,60 @@ def generate_dynamic_actions(
     q = user_question.lower()
     
     # Check if download/report keywords are present
-    download_keywords = ["download", "export", "report", "csv", "zip", "bundle", "weights", "file", "files", "artifact", "artifacts"]
-    if not any(kw in q for kw in download_keywords):
+    if not any(kw in q for kw in DOWNLOAD_KEYWORDS):
         return actions
         
     rows = query_results.get("rows", [])
     if not rows:
-        # Fallback 1: Check if the query asks for a ZIP / version bundle, we search for model/version in database
-        is_zip_request = any(kw in q for kw in ["zip", "bundle", "weights", "export", "files"])
-        if is_zip_request or "version" in q:
-            models = db_session.execute(text("SELECT id, name FROM models")).fetchall()
-            for m_id, m_name in models:
-                if m_name.lower() in q:
-                    import re
-                    ver_num_match = re.search(r"\bversion\s*(\d+)\b|\bv\s*(\d+)\b", q)
-                    if ver_num_match:
-                        ver_num = int(ver_num_match.group(1) or ver_num_match.group(2))
-                        res = db_session.execute(
-                            text("""
-                                SELECT mv.id, mv.version_number, m.id as model_id, m.name as model_name,
-                                       f.id as factory_id, a.id as algorithm_id
-                                FROM model_versions mv
-                                JOIN models m ON m.id = mv.model_id
-                                LEFT JOIN factories f ON f.id = m.factory_id
-                                LEFT JOIN algorithms a ON a.id = m.algorithm_id
-                                WHERE mv.model_id = :model_id AND mv.version_number = :ver_num
-                                LIMIT 1
-                            """),
-                            {"model_id": m_id, "ver_num": ver_num}
-                        ).fetchone()
-                    else:
-                        res = db_session.execute(
-                            text("""
-                                SELECT mv.id, mv.version_number, m.id as model_id, m.name as model_name,
-                                       f.id as factory_id, a.id as algorithm_id
-                                FROM model_versions mv
-                                JOIN models m ON m.id = mv.model_id
-                                LEFT JOIN factories f ON f.id = m.factory_id
-                                LEFT JOIN algorithms a ON a.id = m.algorithm_id
-                                WHERE mv.model_id = :model_id AND mv.is_active = true
-                                LIMIT 1
-                            """),
-                            {"model_id": m_id}
-                        ).fetchone()
-                        
-                    if res:
-                        download_url = f"/algorithms/{res.algorithm_id}/factories/{res.factory_id}/models/{res.model_id}/versions/{res.id}/download?dataset=true&labels=true&model=true&code=true"
-                        actions.append({
-                            "type": "download",
-                            "label": f"Download ZIP: {res.model_name} v{res.version_number}",
-                            "download_type": "zip",
-                            "entity_type": "version",
-                            "entity_id": int(res.id),
-                            "download_url": download_url
-                        })
-                        return actions
-
         # Fallback 2: Check for specific entities by name in the query for report download
-        factories = db_session.execute(text("SELECT id, name FROM factories")).fetchall()
-        for f_id, f_name in factories:
-            if f_name.lower() in q:
-                actions.append({
-                    "type": "download",
-                    "label": f"Download Factory Report: {f_name}",
-                    "download_type": "report",
-                    "entity_type": "factory",
-                    "entity_id": int(f_id),
-                    "download_url": f"/factories/{f_id}/report"
-                })
-                return actions
-                
-        algos = db_session.execute(text("SELECT id, name FROM algorithms")).fetchall()
+        # Check models first (most specific entity type)
+        models = db_session.execute(
+            text("SELECT id, name, algorithm_id, factory_id FROM models WHERE :q LIKE '%' || lower(name) || '%'"),
+            {"q": q}
+        ).fetchall()
+        matching_models = []
+        for m_id, m_name, m_algo_id, m_fact_id in models:
+            if re.search(r'\b' + re.escape(m_name.lower()) + r'\b', q):
+                matching_models.append((m_id, m_name, m_algo_id, m_fact_id))
+        
+        if matching_models:
+            best_match = matching_models[0]
+            if len(matching_models) > 1:
+                # Disambiguate by checking if their algorithm or factory name is in the query
+                algos = {r[0]: r[1].lower() for r in db_session.execute(
+                    text("SELECT id, name FROM algorithms WHERE :q LIKE '%' || lower(name) || '%'"),
+                    {"q": q}
+                ).fetchall()}
+                facts = {r[0]: r[1].lower() for r in db_session.execute(
+                    text("SELECT id, name FROM factories WHERE :q LIKE '%' || lower(name) || '%'"),
+                    {"q": q}
+                ).fetchall()}
+                for m_id, m_name, m_algo_id, m_fact_id in matching_models:
+                    algo_name = algos.get(m_algo_id, "")
+                    fact_name = facts.get(m_fact_id, "")
+                    if (algo_name and re.search(r'\b' + re.escape(algo_name) + r'\b', q)) or (fact_name and re.search(r'\b' + re.escape(fact_name) + r'\b', q)):
+                        best_match = (m_id, m_name, m_algo_id, m_fact_id)
+                        break
+            
+            m_id, m_name, m_algo_id, m_fact_id = best_match
+            download_url = f"/algorithms/{m_algo_id}/factories/{m_fact_id}/models/{m_id}/report"
+            actions.append({
+                "type": "download",
+                "label": f"Download Model Report: {m_name}",
+                "download_type": "report",
+                "entity_type": "model",
+                "entity_id": int(m_id),
+                "download_url": download_url
+            })
+            return actions
+ 
+        # Check algorithms second
+        algos = db_session.execute(
+            text("SELECT id, name FROM algorithms WHERE :q LIKE '%' || lower(name) || '%'"),
+            {"q": q}
+        ).fetchall()
         for a_id, a_name in algos:
-            if a_name.lower() in q:
+            if re.search(r'\b' + re.escape(a_name.lower()) + r'\b', q):
                 actions.append({
                     "type": "download",
                     "label": f"Download Algorithm Report: {a_name}",
@@ -104,38 +102,22 @@ def generate_dynamic_actions(
                     "download_url": f"/algorithms/{a_id}/report"
                 })
                 return actions
-                
-        models = db_session.execute(text("SELECT id, name, algorithm_id, factory_id FROM models")).fetchall()
-        for m_id, m_name, m_algo_id, m_fact_id in models:
-            if m_name.lower() in q:
-                download_url = f"/algorithms/{m_algo_id}/factories/{m_fact_id}/models/{m_id}/report"
+ 
+        # Check factories third
+        factories = db_session.execute(
+            text("SELECT id, name FROM factories WHERE :q LIKE '%' || lower(name) || '%'"),
+            {"q": q}
+        ).fetchall()
+        for f_id, f_name in factories:
+            if re.search(r'\b' + re.escape(f_name.lower()) + r'\b', q):
                 actions.append({
                     "type": "download",
-                    "label": f"Download Model Report: {m_name}",
+                    "label": f"Download Factory Report: {f_name}",
                     "download_type": "report",
-                    "entity_type": "model",
-                    "entity_id": int(m_id),
-                    "download_url": download_url
+                    "entity_type": "factory",
+                    "entity_id": int(f_id),
+                    "download_url": f"/factories/{f_id}/report"
                 })
-                ver_res = db_session.execute(
-                    text("""
-                        SELECT mv.id, mv.version_number
-                        FROM model_versions mv
-                        WHERE mv.model_id = :model_id AND mv.is_active = true
-                        LIMIT 1
-                    """),
-                    {"model_id": m_id}
-                ).fetchone()
-                if ver_res:
-                    zip_url = f"/algorithms/{m_algo_id}/factories/{m_fact_id}/models/{m_id}/versions/{ver_res.id}/download?dataset=true&labels=true&model=true&code=true"
-                    actions.append({
-                        "type": "download",
-                        "label": f"Download ZIP: {m_name} v{ver_res.version_number}",
-                        "download_type": "zip",
-                        "entity_type": "version",
-                        "entity_id": int(ver_res.id),
-                        "download_url": zip_url
-                    })
                 return actions
         return actions
 
@@ -321,8 +303,7 @@ def generate_comparison_payload(
     Dynamically generates comparison payload for charts and modals when comparison intent is present.
     """
     q = user_question.lower()
-    comparison_keywords = ["compare", "versus", "vs", "better than", "difference between"]
-    if not any(kw in q for kw in comparison_keywords):
+    if not any(kw in q for kw in COMPARISON_KEYWORDS):
         return None
 
     rows = query_results.get("rows", [])
@@ -357,7 +338,10 @@ def generate_comparison_payload(
     # 2. Fallback lookup if we couldn't resolve from query results (matching model names)
     if len(full_rows) < 2:
         # Search the query for model names, sorted by length DESC to match longest first
-        all_models = db_session.execute(text("SELECT id, name FROM models ORDER BY length(name) DESC")).fetchall()
+        all_models = db_session.execute(
+            text("SELECT id, name FROM models WHERE :q LIKE '%' || lower(name) || '%' ORDER BY length(name) DESC"),
+            {"q": q}
+        ).fetchall()
         matched_model_ids = []
         matched_model_names = []
         temp_q = q
@@ -430,7 +414,10 @@ def generate_comparison_payload(
 
     # 2.1 Factory comparison fallback
     if len(full_rows) < 2:
-        all_factories = db_session.execute(text("SELECT id, name FROM factories ORDER BY length(name) DESC")).fetchall()
+        all_factories = db_session.execute(
+            text("SELECT id, name FROM factories WHERE :q LIKE '%' || lower(name) || '%' ORDER BY length(name) DESC"),
+            {"q": q}
+        ).fetchall()
         matched_factory_ids = []
         matched_factory_names = []
         temp_q = q
@@ -480,7 +467,10 @@ def generate_comparison_payload(
 
     # 2.2 Algorithm comparison fallback
     if len(full_rows) < 2:
-        all_algorithms = db_session.execute(text("SELECT id, name FROM algorithms ORDER BY length(name) DESC")).fetchall()
+        all_algorithms = db_session.execute(
+            text("SELECT id, name FROM algorithms WHERE :q LIKE '%' || lower(name) || '%' ORDER BY length(name) DESC"),
+            {"q": q}
+        ).fetchall()
         matched_algo_ids = []
         matched_algo_names = []
         temp_q = q
@@ -571,21 +561,8 @@ def generate_comparison_payload(
             name = f"Entity {i+1}"
         entities.append(name)
 
-    # Extract metrics
-    metrics_definition = [
-        ("accuracy", "accuracy"),
-        ("precision", "precision"),
-        ("recall", "recall"),
-        ("f1_score", "f1_score"),
-        ("inference_time", "inference_time"),
-        ("cpu_utilization", "cpu_utilization"),
-        ("gpu_utilization", "gpu_utilization"),
-        ("cpu_memory_usage", "cpu_memory_usage"),
-        ("gpu_memory_usage", "gpu_memory_usage")
-    ]
-
     metrics = []
-    for display_name, col in metrics_definition:
+    for display_name, col in METRICS_DEFINITION:
         val1 = rows[0].get(col)
         val2 = rows[1].get(col)
         if val1 is not None or val2 is not None:
@@ -610,6 +587,226 @@ def generate_comparison_payload(
         "type": "comparison"
     }
 
+def handle_download_interactive(q: str, context: Optional[List[Dict[str, Any]]], db_session: Session) -> Optional[Dict[str, Any]]:
+    import re
+    q = q.lower()
+    
+    last_bot_msg = None
+    if context:
+        for msg in reversed(context):
+            if msg.get("role") == "bot":
+                last_bot_msg = msg.get("content", "")
+                break
+
+    if last_bot_msg:
+        match = re.search(r"<!-- DOWNLOAD_PROMPT: model_id=(\d+), version_id=(\d+), available=\{(.*?)\} -->", last_bot_msg)
+        if match:
+            model_id = int(match.group(1))
+            version_id = int(match.group(2))
+            available_str = match.group(3)
+            available_types = {}
+            if available_str.strip():
+                for item in available_str.split(","):
+                    if ":" in item:
+                        k, v = item.split(":")
+                        available_types[k.strip().replace("'", "").replace('"', '')] = int(v.strip())
+
+            model_row = db_session.execute(
+                text("SELECT id, name, algorithm_id, factory_id FROM models WHERE id = :id"),
+                {"id": model_id}
+            ).fetchone()
+            version_row = db_session.execute(
+                text("SELECT id, version_number FROM model_versions WHERE id = :id"),
+                {"id": version_id}
+            ).fetchone()
+
+            if model_row and version_row:
+                download_all = any(w in q for w in ["all", "everything", "whole", "complete", "both"])
+                dataset_selected = download_all or any(w in q for w in ["dataset", "image", "images", "data"])
+                labels_selected = download_all or any(w in q for w in ["label", "labels", "annotation", "annotations"])
+                model_selected = download_all or any(w in q for w in ["model", "weights", "parameter", "parameters", "pt", "pth", "onnx", "engine"])
+                code_selected = download_all or any(w in q for w in ["code", "script", "scripts", "py", "python", "src"])
+
+                if not (dataset_selected or labels_selected or model_selected or code_selected):
+                    dataset_selected = labels_selected = model_selected = code_selected = True
+
+                selected_types_display = []
+                params = {}
+
+                if dataset_selected and "dataset" in available_types:
+                    params["dataset"] = "true"
+                    selected_types_display.append("Dataset")
+                if labels_selected and "label" in available_types:
+                    params["labels"] = "true"
+                    selected_types_display.append("Labels")
+                if model_selected and "model" in available_types:
+                    params["model"] = "true"
+                    selected_types_display.append("Model weights")
+                if code_selected and "code" in available_types:
+                    params["code"] = "true"
+                    selected_types_display.append("Code")
+
+                if not params:
+                    if "dataset" in available_types:
+                        params["dataset"] = "true"
+                        selected_types_display.append("Dataset")
+                    if "label" in available_types:
+                        params["labels"] = "true"
+                        selected_types_display.append("Labels")
+                    if "model" in available_types:
+                        params["model"] = "true"
+                        selected_types_display.append("Model weights")
+                    if "code" in available_types:
+                        params["code"] = "true"
+                        selected_types_display.append("Code")
+
+                query_str = "&".join(f"{k}={v}" for k, v in params.items())
+                download_url = f"/algorithms/{model_row.algorithm_id}/factories/{model_row.factory_id}/models/{model_row.id}/versions/{version_row.id}/download?{query_str}"
+
+                components_str = ", ".join(selected_types_display)
+                return {
+                    "response": f"Here is the zip file export bundle for **{model_row.name}** (v{version_row.version_number}) containing the selected components: **{components_str}**.",
+                    "answer": f"Here is the zip file export bundle for **{model_row.name}** (v{version_row.version_number}) containing the selected components: **{components_str}**.",
+                    "actions": [{
+                        "type": "download",
+                        "label": f"Download ZIP: {model_row.name} v{version_row.version_number}",
+                        "download_type": "zip",
+                        "entity_type": "version",
+                        "entity_id": int(version_row.id),
+                        "download_url": download_url
+                    }],
+                    "download_url": download_url,
+                    "model_name": model_row.name,
+                    "version_number": version_row.version_number,
+                    "type": "zip_download",
+                    "confidence": 1.0
+                }
+
+    is_zip_request = any(w in q for w in ZIP_KEYWORDS)
+    if is_zip_request and not ("report" in q):
+        models = db_session.execute(
+            text("SELECT id, name, algorithm_id, factory_id FROM models WHERE :q LIKE '%' || lower(name) || '%'"),
+            {"q": q}
+        ).fetchall()
+        model_row = None
+        for m in models:
+            if re.search(r'\b' + re.escape(m.name.lower()) + r'\b', q):
+                model_row = m
+                break
+                
+        if model_row:
+            version_row = None
+            ver_num_match = re.search(r"\bversion\s*(\d+)\b|\bv\s*(\d+)\b", q)
+            if ver_num_match:
+                ver_num = int(ver_num_match.group(1) or ver_num_match.group(2))
+                version_row = db_session.execute(
+                    text("SELECT id, version_number FROM model_versions WHERE model_id = :model_id AND version_number = :version_number"),
+                    {"model_id": model_row.id, "version_number": ver_num}
+                ).fetchone()
+            else:
+                version_row = db_session.execute(
+                    text("SELECT id, version_number FROM model_versions WHERE model_id = :model_id AND is_active = true"),
+                    {"model_id": model_row.id}
+                ).fetchone()
+                if not version_row:
+                    version_row = db_session.execute(
+                        text("SELECT id, version_number FROM model_versions WHERE model_id = :model_id ORDER BY version_number DESC LIMIT 1"),
+                        {"model_id": model_row.id}
+                    ).fetchone()
+
+            if not version_row:
+                ver_str = f" v{ver_num}" if ver_num_match else ""
+                return {
+                    "response": f"I couldn't find version{ver_str} for model **{model_row.name}** in the repository.",
+                    "answer": f"I couldn't find version{ver_str} for model **{model_row.name}** in the repository.",
+                    "actions": [],
+                    "type": "text",
+                    "confidence": 1.0
+                }
+
+            artifacts_res = db_session.execute(
+                text("SELECT type, COUNT(*) FROM artifacts WHERE version_id = :version_id GROUP BY type"),
+                {"version_id": version_row.id}
+            ).fetchall()
+
+            available_types = {row[0]: row[1] for row in artifacts_res}
+
+            if not available_types:
+                return {
+                    "response": f"There are no artifacts or files uploaded for **{model_row.name}** (v{version_row.version_number}) yet.",
+                    "answer": f"There are no artifacts or files uploaded for **{model_row.name}** (v{version_row.version_number}) yet.",
+                    "actions": [],
+                    "type": "text",
+                    "confidence": 1.0
+                }
+
+            summary_lines = []
+            display_map = {
+                "dataset": "Dataset",
+                "label": "Labels",
+                "model": "Model weights",
+                "code": "Code"
+            }
+
+            for t, count in available_types.items():
+                disp = display_map.get(t, t.capitalize())
+                unit = "file" if count == 1 else "files"
+                if t == "dataset":
+                    unit = "image" if count == 1 else "images"
+                summary_lines.append(f"- **{disp}**: {count} {unit}")
+
+            summary_str = "\n".join(summary_lines)
+            state_dict_str = ",".join(f"'{k}':{v}" for k, v in available_types.items())
+            state_comment = f"<!-- DOWNLOAD_PROMPT: model_id={model_row.id}, version_id={version_row.id}, available={{{state_dict_str}}} -->"
+
+            ans = (
+                f"I found the following files uploaded for **{model_row.name}** (Version {version_row.version_number}):\n"
+                f"{summary_str}\n\n"
+                f"What components would you like to download? (e.g., 'dataset', 'weights', or 'all')\n"
+                f"{state_comment}"
+            )
+            
+            follow_ups = ["Download All Components"]
+            for t in available_types:
+                if t == "dataset":
+                    follow_ups.append("Dataset only")
+                elif t == "label":
+                    follow_ups.append("Labels only")
+                elif t == "model":
+                    follow_ups.append("Weights only")
+                elif t == "code":
+                    follow_ups.append("Code only")
+
+            return {
+                "response": ans,
+                "answer": ans,
+                "actions": [],
+                "follow_ups": follow_ups,
+                "type": "text",
+                "confidence": 1.0
+            }
+            
+    return None
+
+def generate_default_follow_ups(user_question: str) -> List[str]:
+    all_suggestions = [
+        "List all models",
+        "List active versions",
+        "Compare YOLOv11 and R2+1D",
+        "Show top 5 models by accuracy",
+        "What is precision and recall?",
+        "List all factories",
+        "List all algorithms"
+    ]
+    q = user_question.lower()
+    words = [w for w in re.split(r'\W+', q) if len(w) > 3]
+    filtered = []
+    for sug in all_suggestions:
+        sug_lower = sug.lower()
+        if not any(w in sug_lower for w in words):
+            filtered.append(sug)
+    return filtered[:3]
+
 def run_chat_pipeline(
     user_question: str,
     db_session: Session,
@@ -633,18 +830,20 @@ def run_chat_pipeline(
     """
     start_time = time.time()
     
-    # 1. Initialize AliasCache and resolve context pronouns/entities
-    AliasCache.initialize(db_session)
-    extractor = EntityExtractor(db_session)
-    context_memory = ContextMemory.build_from_context(context or [], extractor)
-    resolved_question, _ = resolve_context_rules(user_question, context_memory)
+    # Context and pronoun resolution is handled natively by the LLM prompts
+    resolved_question = user_question
     
     print(f"[ChatPipeline] User question: {user_question}")
     print(f"[ChatPipeline] Resolved question: {resolved_question}")
     
+    # Check for interactive zip download prompts first
+    interactive_response = handle_download_interactive(resolved_question, context, db_session)
+    if interactive_response:
+        return interactive_response
+    
     # 1.5 Query Routing Interceptor
     from app.services.query_router import route_query, handle_knowledge_query, handle_hybrid_query
-    routing = route_query(resolved_question)
+    routing = route_query(resolved_question, db_session, context=context)
     q_type = routing.get("query_type", "DATABASE_QUERY")
     print(f"[ChatPipeline] Routed query type: {q_type} (Reason: {routing.get('explanation')})")
     
@@ -674,10 +873,10 @@ def run_chat_pipeline(
     
     # 2. Schema Provider
     schema_provider = SchemaProvider.from_session(db_session)
-    schema_desc = schema_provider.get_detailed_schema()
+    schema_desc = schema_provider.get_pruned_schema(resolved_question)
     
     # 3. Text-to-SQL translation with self-correcting retry loop
-    translation = generate_sql(resolved_question, schema_desc)
+    translation = generate_sql(resolved_question, schema_desc, context=context)
     generated_sql = translation.get("sql", "").strip()
     reasoning = translation.get("reasoning", "")
     
@@ -701,7 +900,8 @@ def run_chat_pipeline(
             user_query=resolved_question,
             schema_description=schema_desc,
             failed_sql=generated_sql,
-            validation_errors=validation["errors"]
+            validation_errors=validation["errors"],
+            context=context
         )
         generated_sql = translation.get("sql", "").strip()
         reasoning = translation.get("reasoning", "")
@@ -740,6 +940,12 @@ def run_chat_pipeline(
     actions = generate_dynamic_actions(resolved_question, query_results, db_session)
     print(f"[ChatPipeline] Generated dynamic actions: {actions}")
     
+    # Suggest zip download if we generated a model report action
+    has_model_report = any(a.get("download_type") == "report" and a.get("entity_type") == "model" for a in actions)
+    has_zip = any(a.get("download_type") == "zip" for a in actions)
+    if has_model_report and not has_zip:
+        final_answer += "\n\n*(If you would also like to download the source files like weights or dataset for this model, just ask to download the ZIP file!)*"
+    
     # 8. Dynamic Comparison Generation
     comp_payload = generate_comparison_payload(resolved_question, query_results, db_session)
     if comp_payload:
@@ -748,13 +954,40 @@ def run_chat_pipeline(
     duration_ms = int((time.time() - start_time) * 1000)
     print(f"[ChatPipeline] Completed pipeline in {duration_ms}ms")
     
+    # 7.5 Check if we should elevate to a direct download response
+    report_action = None
+    if actions:
+        for a in actions:
+            if a.get("download_type") == "report":
+                report_action = a
+                break
+                
     response_payload = {
         "response": final_answer,
         "answer": final_answer,
         "actions": actions,
-        "type": "text",
+        "follow_ups": generate_default_follow_ups(resolved_question),
+        "type": "download" if report_action else "text",
         "confidence": 1.0
     }
+    if report_action:
+        response_payload.update({
+            "report_type": report_action.get("entity_type"),
+            "report_name": report_action.get("label").split(": ")[-1] if report_action.get("label") else "",
+            "download_url": report_action.get("download_url")
+        })
+        if report_action.get("entity_type") == "model":
+            m_id = report_action.get("entity_id")
+            response_payload["model_id"] = m_id
+            res_m = db_session.execute(text("SELECT algorithm_id, factory_id FROM models WHERE id = :id"), {"id": m_id}).fetchone()
+            if res_m:
+                response_payload["algorithm_id"] = res_m[0]
+                response_payload["factory_id"] = res_m[1]
+        elif report_action.get("entity_type") == "algorithm":
+            response_payload["algorithm_id"] = report_action.get("entity_id")
+        elif report_action.get("entity_type") == "factory":
+            response_payload["factory_id"] = report_action.get("entity_id")
+            
     if comp_payload:
         response_payload.update(comp_payload)
         

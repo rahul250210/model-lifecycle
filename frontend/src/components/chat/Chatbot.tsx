@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from '
 import {
     Box, IconButton, Typography, Paper, TextField, Stack, Avatar,
     alpha, CircularProgress, Fab, Zoom, Chip, Tooltip,
-    Dialog, DialogContent,
+    Dialog, DialogContent, DialogTitle, DialogActions, Button
 } from '@mui/material';
 import {
     Close as CloseIcon, Send as SendIcon,
@@ -554,7 +554,7 @@ function ChatComparisonChart({ comparison_title, entities, metrics, theme, mode 
                     📊 {comparison_title}
                 </Typography>
             )}
-            
+
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ width: '100%' }}>
                 {percentageData.length > 0 && (
                     <Box sx={{
@@ -909,7 +909,7 @@ function EntityList({ data, type }: { data: any[], type: 'factories' | 'algorith
                 const id = item.id;
                 const name = item.name || (type === 'versions' ? `Version ${item.version_number}` : `Item ${index + 1}`);
                 const description = item.description || item.note;
-                const formattedDate = item.created_at 
+                const formattedDate = item.created_at
                     ? new Date(item.created_at).toLocaleDateString(undefined, {
                         year: 'numeric',
                         month: 'short',
@@ -965,8 +965,8 @@ function EntityList({ data, type }: { data: any[], type: 'factories' | 'algorith
                         sx={{
                             p: 2,
                             borderRadius: '16px',
-                            background: mode === 'dark' 
-                                ? 'rgba(30, 41, 59, 0.65)' 
+                            background: mode === 'dark'
+                                ? 'rgba(30, 41, 59, 0.65)'
                                 : 'rgba(255, 255, 255, 0.9)',
                             border: `1px solid ${alpha(color, 0.12)}`,
                             boxShadow: `0 4px 12px ${alpha('#000', 0.03)}`,
@@ -1016,9 +1016,9 @@ function EntityList({ data, type }: { data: any[], type: 'factories' | 'algorith
                                 {name}
                             </Typography>
                             {description && (
-                                <Typography variant="caption" sx={{ 
-                                    color: theme.textMuted, 
-                                    fontSize: '0.74rem', 
+                                <Typography variant="caption" sx={{
+                                    color: theme.textMuted,
+                                    fontSize: '0.74rem',
                                     display: '-webkit-box',
                                     WebkitLineClamp: 2,
                                     WebkitBoxOrient: 'vertical',
@@ -1051,12 +1051,12 @@ function EntityList({ data, type }: { data: any[], type: 'factories' | 'algorith
 
                         {/* Right side: navigate arrow */}
                         {path && (
-                            <IconButton 
+                            <IconButton
                                 className="launch-icon"
-                                size="small" 
-                                sx={{ 
-                                    color: color, 
-                                    opacity: 0.5, 
+                                size="small"
+                                sx={{
+                                    color: color,
+                                    opacity: 0.5,
                                     transform: 'translateX(-4px)',
                                     transition: 'all 0.2s ease',
                                     bgcolor: alpha(color, 0.04),
@@ -1194,7 +1194,7 @@ const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode }: Bot
                 </Box>
             );
         },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [theme.primary, theme.secondary, theme.textMain, theme.textMuted, theme.textSecondary, theme.border, theme.success, theme.error, theme.warning, mode, msgType]);
 
     return (
@@ -1418,6 +1418,8 @@ export default function Chatbot() {
         content: "Hi, I'm **MIRA** — your **MARS Intelligent Repository Assistant**! 🤖\n\nI can help you explore your models, factories, versions, and performance metrics — just ask me anything.",
     }]);
     const [isLoading, setIsLoading] = useState(false);
+    const [clearWarningOpen, setClearWarningOpen] = useState(false);
+    const abortControllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -1439,6 +1441,7 @@ export default function Chatbot() {
         setInput('');
         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: msg, timestamp: new Date() }]);
         setIsLoading(true);
+        abortControllerRef.current = new AbortController();
         try {
             const historyContext = messages.map(m => ({
                 role: m.role,
@@ -1447,6 +1450,8 @@ export default function Chatbot() {
             const { data } = await axios.post(`${API_BASE_URL}/chatbot/ask`, {
                 message: msg,
                 context: historyContext
+            }, {
+                signal: abortControllerRef.current.signal
             });
             setMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(), role: 'bot',
@@ -1471,6 +1476,9 @@ export default function Chatbot() {
                 timestamp: new Date(),
             }]);
         } catch (err: any) {
+            if (axios.isCancel(err) || err.name === 'CanceledError') {
+                return; // Suppress error for aborted requests
+            }
             setMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(), role: 'bot', type: 'error',
                 content: `Connection error: ${err.response?.data?.detail || err.message || 'Unknown error'}`,
@@ -1478,14 +1486,29 @@ export default function Chatbot() {
             }]);
         } finally {
             setIsLoading(false);
+            abortControllerRef.current = null;
         }
     };
 
     const handleClearChat = () => {
+        if (isLoading) {
+            setClearWarningOpen(true);
+            return;
+        }
+        performClear();
+    };
+
+    const performClear = () => {
+        if (isLoading && abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            setIsLoading(false);
+            abortControllerRef.current = null;
+        }
         setMessages([{
             id: '1', role: 'bot', type: 'text', timestamp: new Date(),
             content: "Chat history cleared. How can I help you explore MARS today? 🤖",
         }]);
+        setClearWarningOpen(false);
     };
 
     const showSuggestions = messages.length === 1 && !isLoading;
@@ -1746,6 +1769,42 @@ export default function Chatbot() {
                 open={comparisonModal.open}
                 onClose={() => setComparisonModal({ open: false, data: [] })}
             />
+
+            {/* ── Clear Warning Dialog ── */}
+            <Dialog
+                open={clearWarningOpen}
+                onClose={() => setClearWarningOpen(false)}
+                PaperProps={{
+                    sx: {
+                        borderRadius: '16px',
+                        bgcolor: mode === 'dark' ? '#12121f' : '#fff',
+                        border: `1px solid ${alpha(theme.border, 0.3)}`
+                    }
+                }}
+            >
+                <DialogTitle sx={{ fontWeight: 800, color: theme.textMain }}>Clear Conversation?</DialogTitle>
+                <DialogContent>
+                    <Typography sx={{ color: theme.textSecondary, fontSize: '0.9rem' }}>
+                        The chatbot is still generating a response. Do you still want to clear the history and stop the response?
+                    </Typography>
+                </DialogContent>
+                <DialogActions sx={{ px: 3, pb: 2 }}>
+                    <Button
+                        onClick={() => setClearWarningOpen(false)}
+                        sx={{ color: theme.textMain, fontWeight: 700 }}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        color="error"
+                        variant="contained"
+                        onClick={performClear}
+                        sx={{ fontWeight: 700, borderRadius: '8px' }}
+                    >
+                        Yes, Clear
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </Box>
     );
 }

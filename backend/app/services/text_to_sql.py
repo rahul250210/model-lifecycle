@@ -3,7 +3,22 @@ import re
 from typing import Any, Dict, List, Union
 from app.services.llm_service import call_llm
 
-def generate_sql(user_query: str, schema_description: Union[str, Dict[str, Any]]) -> Dict[str, str]:
+def _format_context(context: List[Dict[str, Any]]) -> str:
+    if not context:
+        return ""
+    formatted = []
+    for msg in context:
+        role = "User" if msg.get("role") == "user" else "Assistant"
+        content = msg.get("content", "")
+        if content:
+            formatted.append(f"{role}: {content}")
+    return "\n".join(formatted)
+
+def generate_sql(
+    user_query: str,
+    schema_description: Union[str, Dict[str, Any]],
+    context: List[Dict[str, Any]] = []
+) -> Dict[str, str]:
     """
     Generates a PostgreSQL query from a user query under strict schema constraints
     and safety rules using the LLM service.
@@ -41,7 +56,11 @@ def generate_sql(user_query: str, schema_description: Union[str, Dict[str, Any]]
         schema_str = str(schema_description)
 
     # 2. Build the system/instruction prompt
+    history_str = _format_context(context)
+    history_section = f"\nCONVERSATION HISTORY:\n{history_str}\n" if history_str else ""
+
     prompt = f"""You are a database-connected AI assistant translating a user question into a PostgreSQL query.
+{history_section}
 
 DATABASE SCHEMA DESCRIPTION:
 {schema_str}
@@ -109,7 +128,8 @@ def regenerate_sql(
     user_query: str,
     schema_description: Union[str, Dict[str, Any]],
     failed_sql: str,
-    validation_errors: List[str]
+    validation_errors: List[str],
+    context: List[Dict[str, Any]] = []
 ) -> Dict[str, str]:
     """
     Asks the LLM to correct/regenerate a SQL query that failed validation.
@@ -145,7 +165,11 @@ def regenerate_sql(
         schema_str = str(schema_description)
 
     # 2. Build correction prompt
+    history_str = _format_context(context)
+    history_section = f"\nCONVERSATION HISTORY:\n{history_str}\n" if history_str else ""
+
     prompt = f"""You are a database-connected AI assistant translating a user question into a PostgreSQL query.
+{history_section}
 Your previous generated SQL query failed validation checks. You must correct the SQL query to resolve the validation errors.
 
 DATABASE SCHEMA DESCRIPTION:
