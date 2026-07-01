@@ -10,10 +10,7 @@ from app.services.sql_validator import validate_sql
 from app.services.query_executor import execute_query
 from app.services.response_generator import generate_response
 
-# Centralized keyword maps for heuristic fallbacks and intent matching
-DOWNLOAD_KEYWORDS = {"download", "export", "report", "csv", "zip", "bundle", "weights", "file", "files", "artifact", "artifacts"}
-COMPARISON_KEYWORDS = {"compare", "versus", "vs", "better than", "difference between"}
-ZIP_KEYWORDS = {"zip", "bundle", "export", "files", "weights"}
+# Relying 100% on LLM queries
 
 METRICS_DEFINITION = (
     ("accuracy", "accuracy"),
@@ -38,87 +35,8 @@ def generate_dynamic_actions(
     actions = []
     q = user_question.lower()
     
-    # Check if download/report keywords are present
-    if not any(kw in q for kw in DOWNLOAD_KEYWORDS):
-        return actions
-        
     rows = query_results.get("rows", [])
     if not rows:
-        # Fallback 2: Check for specific entities by name in the query for report download
-        # Check models first (most specific entity type)
-        models = db_session.execute(
-            text("SELECT id, name, algorithm_id, factory_id FROM models WHERE :q LIKE '%' || lower(name) || '%'"),
-            {"q": q}
-        ).fetchall()
-        matching_models = []
-        for m_id, m_name, m_algo_id, m_fact_id in models:
-            if re.search(r'\b' + re.escape(m_name.lower()) + r'\b', q):
-                matching_models.append((m_id, m_name, m_algo_id, m_fact_id))
-        
-        if matching_models:
-            best_match = matching_models[0]
-            if len(matching_models) > 1:
-                # Disambiguate by checking if their algorithm or factory name is in the query
-                algos = {r[0]: r[1].lower() for r in db_session.execute(
-                    text("SELECT id, name FROM algorithms WHERE :q LIKE '%' || lower(name) || '%'"),
-                    {"q": q}
-                ).fetchall()}
-                facts = {r[0]: r[1].lower() for r in db_session.execute(
-                    text("SELECT id, name FROM factories WHERE :q LIKE '%' || lower(name) || '%'"),
-                    {"q": q}
-                ).fetchall()}
-                for m_id, m_name, m_algo_id, m_fact_id in matching_models:
-                    algo_name = algos.get(m_algo_id, "")
-                    fact_name = facts.get(m_fact_id, "")
-                    if (algo_name and re.search(r'\b' + re.escape(algo_name) + r'\b', q)) or (fact_name and re.search(r'\b' + re.escape(fact_name) + r'\b', q)):
-                        best_match = (m_id, m_name, m_algo_id, m_fact_id)
-                        break
-            
-            m_id, m_name, m_algo_id, m_fact_id = best_match
-            download_url = f"/algorithms/{m_algo_id}/factories/{m_fact_id}/models/{m_id}/report"
-            actions.append({
-                "type": "download",
-                "label": f"Download Model Report: {m_name}",
-                "download_type": "report",
-                "entity_type": "model",
-                "entity_id": int(m_id),
-                "download_url": download_url
-            })
-            return actions
- 
-        # Check algorithms second
-        algos = db_session.execute(
-            text("SELECT id, name FROM algorithms WHERE :q LIKE '%' || lower(name) || '%'"),
-            {"q": q}
-        ).fetchall()
-        for a_id, a_name in algos:
-            if re.search(r'\b' + re.escape(a_name.lower()) + r'\b', q):
-                actions.append({
-                    "type": "download",
-                    "label": f"Download Algorithm Report: {a_name}",
-                    "download_type": "report",
-                    "entity_type": "algorithm",
-                    "entity_id": int(a_id),
-                    "download_url": f"/algorithms/{a_id}/report"
-                })
-                return actions
- 
-        # Check factories third
-        factories = db_session.execute(
-            text("SELECT id, name FROM factories WHERE :q LIKE '%' || lower(name) || '%'"),
-            {"q": q}
-        ).fetchall()
-        for f_id, f_name in factories:
-            if re.search(r'\b' + re.escape(f_name.lower()) + r'\b', q):
-                actions.append({
-                    "type": "download",
-                    "label": f"Download Factory Report: {f_name}",
-                    "download_type": "report",
-                    "entity_type": "factory",
-                    "entity_id": int(f_id),
-                    "download_url": f"/factories/{f_id}/report"
-                })
-                return actions
         return actions
 
     first_row = rows[0]
@@ -303,9 +221,6 @@ def generate_comparison_payload(
     Dynamically generates comparison payload for charts and modals when comparison intent is present.
     """
     q = user_question.lower()
-    if not any(kw in q for kw in COMPARISON_KEYWORDS):
-        return None
-
     rows = query_results.get("rows", [])
     full_rows = []
     
@@ -682,7 +597,8 @@ def handle_download_interactive(q: str, context: Optional[List[Dict[str, Any]]],
                     "confidence": 1.0
                 }
 
-    is_zip_request = any(w in q for w in ZIP_KEYWORDS)
+    zip_kws = {"zip", "bundle", "export", "files", "weights"}
+    is_zip_request = any(w in q for w in zip_kws)
     if is_zip_request and not ("report" in q):
         models = db_session.execute(
             text("SELECT id, name, algorithm_id, factory_id FROM models WHERE :q LIKE '%' || lower(name) || '%'"),

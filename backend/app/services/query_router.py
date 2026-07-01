@@ -7,11 +7,7 @@ from difflib import SequenceMatcher
 
 from app.services.llm_service import call_llm
 
-# Centralized routing check keywords as O(1) sets
-ACTION_KEYWORDS = {"download", "export", "report", "csv", "zip", "bundle", "weights", "compare", "versus", "vs", "better than", "difference between"}
-DIRECT_METRIC_KEYWORDS = {"accuracy", "precision", "recall", "f1", "f1_score", "inference", "latency", "cpu", "gpu", "memory", "utilization"}
-CONCEPT_KEYWORDS = {"explain", "how does", "why is", "define", "definition", "tutorial", "architecture", "concept", "theory", "mlops", "difference between"}
-DB_KEYWORDS = {"accuracy", "precision", "recall", "f1", "f1_score", "inference", "latency", "cpu", "gpu", "memory", "utilization", "version", "versions", "count", "average", "mean", "min", "max", "list", "show", "rank", "top", "best"}
+# Relying 100% on LLM routing
 
 def route_query(user_question: str, db_session: Session, context: List[Dict[str, Any]] = []) -> Dict[str, Any]:
     """
@@ -78,54 +74,8 @@ User Question: {user_question}"""
     except Exception as e:
         print(f"[QueryRouter] Failed to parse router response: {raw_response}. Error: {e}")
         
-    # Rule-based fallback if LLM is offline or JSON parsing fails
-    q = user_question.lower()
-    
-    # Action keywords
-    if any(kw in q for kw in ACTION_KEYWORDS):
-        return {"query_type": "ACTION_QUERY", "explanation": "Rule fallback: contains action keywords"}
-        
-    # Check if any database entities exist in the query using dynamic database checks
-    try:
-        has_model = db_session.execute(
-            text("SELECT EXISTS (SELECT 1 FROM models WHERE :q LIKE '%' || lower(name) || '%')"),
-            {"q": q}
-        ).scalar()
-        has_algo = db_session.execute(
-            text("SELECT EXISTS (SELECT 1 FROM algorithms WHERE :q LIKE '%' || lower(name) || '%')"),
-            {"q": q}
-        ).scalar()
-        has_factory = db_session.execute(
-            text("SELECT EXISTS (SELECT 1 FROM factories WHERE :q LIKE '%' || lower(name) || '%')"),
-            {"q": q}
-        ).scalar()
-        has_db_entity = bool(has_model or has_algo or has_factory)
-    except Exception as e:
-        print(f"[QueryRouter] Fallback dynamic DB check failed: {e}")
-        has_db_entity = False
-    
-    # Direct database metric queries (e.g. "what is the accuracy of YOLOv11")
-    is_direct_metric = any(kw in q for kw in DIRECT_METRIC_KEYWORDS)
-    
-    # If it asks for metrics directly and doesn't contain conceptual verbs, it is DATABASE_QUERY
-    if is_direct_metric and not any(kw in q for kw in {"explain", "how does", "why"}):
-        return {"query_type": "DATABASE_QUERY", "explanation": "Rule fallback: contains database metrics/keywords"}
-        
-    # Conceptual/Explanation keywords
-    if any(kw in q for kw in CONCEPT_KEYWORDS) or (q.startswith("what is ") and not is_direct_metric):
-        if has_db_entity:
-            return {"query_type": "HYBRID_QUERY", "explanation": "Rule fallback: conceptual query with repository entity"}
-        return {"query_type": "KNOWLEDGE_QUERY", "explanation": "Rule fallback: conceptual query"}
-        
-    # Check for direct database metrics or versions
-    if any(kw in q for kw in DB_KEYWORDS):
-        return {"query_type": "DATABASE_QUERY", "explanation": "Rule fallback: database metrics/keywords"}
-        
-    # Default to KNOWLEDGE if it starts with "what is" and doesn't match database keywords
-    if q.startswith("what is ") or q.startswith("explain "):
-        return {"query_type": "KNOWLEDGE_QUERY", "explanation": "Rule fallback: conceptual question"}
-        
-    return {"query_type": "DATABASE_QUERY", "explanation": "Default rule fallback"}
+    # Simple default fallback if LLM is offline or JSON parsing fails
+    return {"query_type": "DATABASE_QUERY", "explanation": "LLM offline/rate-limited fallback"}
 
 def handle_knowledge_query(user_question: str) -> str:
     """Answers a pure knowledge/conceptual question using the LLM directly."""

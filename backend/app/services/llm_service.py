@@ -8,7 +8,28 @@ load_dotenv()
 
 _SEMCAT_OFFLINE = False
 
+import json
+
+CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "llm_cache.json")
+
 _LLM_CACHE = {}
+if os.path.exists(CACHE_FILE):
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            raw_cache = json.load(f)
+            for k_str, val in raw_cache.items():
+                k_tuple = tuple(json.loads(k_str))
+                _LLM_CACHE[k_tuple] = val
+    except Exception as e:
+        print(f"[LLMService] Failed to load cache file: {e}")
+
+def save_cache():
+    try:
+        serializable_cache = {json.dumps(k): v for k, v in _LLM_CACHE.items()}
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(serializable_cache, f, indent=2)
+    except Exception as e:
+        print(f"[LLMService] Failed to save cache file: {e}")
 
 def call_llm(prompt: str, temperature: float = 0.0) -> str:
     """Invoke Semcat LLM first; if offline, fall back directly to Gemini API."""
@@ -68,5 +89,6 @@ def call_llm(prompt: str, temperature: float = 0.0) -> str:
     # Cache result if it is valid
     if result != "__LLM_OFFLINE__":
         _LLM_CACHE[cache_key] = result
+        save_cache()
         
     return result
