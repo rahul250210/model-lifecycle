@@ -26,7 +26,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import axios, { API_BASE_URL } from '../../api/axios';
+import axios, { API_BASE_URL, isCancel } from '../../api/axios';
 import { useTheme } from '../../theme/ThemeContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1476,7 +1476,7 @@ export default function Chatbot() {
                 timestamp: new Date(),
             }]);
         } catch (err: any) {
-            if (axios.isCancel(err) || err.name === 'CanceledError') {
+            if (isCancel(err) || err.name === 'CanceledError') {
                 return; // Suppress error for aborted requests
             }
             setMessages(prev => [...prev, {
