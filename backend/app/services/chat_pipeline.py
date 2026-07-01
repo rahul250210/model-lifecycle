@@ -12,17 +12,7 @@ from app.services.response_generator import generate_response
 
 # Relying 100% on LLM queries
 
-METRICS_DEFINITION = (
-    ("accuracy", "accuracy"),
-    ("precision", "precision"),
-    ("recall", "recall"),
-    ("f1_score", "f1_score"),
-    ("inference_time", "inference_time"),
-    ("cpu_utilization", "cpu_utilization"),
-    ("gpu_utilization", "gpu_utilization"),
-    ("cpu_memory_usage", "cpu_memory_usage"),
-    ("gpu_memory_usage", "gpu_memory_usage")
-)
+# Dynamic metric extraction
 
 def generate_dynamic_actions(
     user_question: str,
@@ -476,15 +466,54 @@ def generate_comparison_payload(
             name = f"Entity {i+1}"
         entities.append(name)
 
+    exclude_keys = {
+        "id", "version_id", "model_id", "factory_id", "algorithm_id", 
+        "version_number", "is_active", "created_at", "updated_at", 
+        "note", "description", "name", "model_name", "factory_name", 
+        "algorithm_name", "framework"
+    }
+
     metrics = []
-    for display_name, col in METRICS_DEFINITION:
+    # Collect all unique columns present in the row dictionaries
+    all_keys = set(rows[0].keys())
+    if len(rows) > 1:
+        all_keys.update(rows[1].keys())
+
+    for col in sorted(all_keys):
+        if col in exclude_keys:
+            continue
+            
         val1 = rows[0].get(col)
-        val2 = rows[1].get(col)
-        if val1 is not None or val2 is not None:
+        val2 = rows[1].get(col) if len(rows) > 1 else None
+
+        # Determine if values are numeric
+        def is_numeric(v):
+            if v is None:
+                return False
+            try:
+                float(v)
+                return True
+            except (ValueError, TypeError):
+                return False
+
+        if is_numeric(val1) or is_numeric(val2):
+            display_name = col.replace("_", " ").title()
+            # Handle acronym casing
+            if display_name == "Cpu Utilization":
+                display_name = "CPU Utilization"
+            elif display_name == "Gpu Utilization":
+                display_name = "GPU Utilization"
+            elif display_name == "Cpu Memory Usage":
+                display_name = "CPU Memory Usage"
+            elif display_name == "Gpu Memory Usage":
+                display_name = "GPU Memory Usage"
+            elif display_name == "F1 Score":
+                display_name = "F1 Score"
+
             metrics.append({
                 "name": display_name,
-                "entity1": float(val1) if val1 is not None else None,
-                "entity2": float(val2) if val2 is not None else None
+                "entity1": float(val1) if is_numeric(val1) else None,
+                "entity2": float(val2) if is_numeric(val2) else None
             })
 
     if not metrics:
