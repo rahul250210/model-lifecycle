@@ -1168,11 +1168,29 @@ const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode }: Bot
         ),
         table: ({ node, ...props }: any) => (
             <Box sx={{
-                overflowX: 'auto', my: 1.5, borderRadius: '14px',
+                overflowX: 'auto',
+                overflowY: 'auto',
+                maxHeight: '320px',
+                my: 1.5,
+                borderRadius: '14px',
                 border: `1px solid ${alpha(theme.primary, 0.15)}`,
                 boxShadow: `0 4px 20px -4px ${alpha(theme.primary, 0.08)}`,
                 bgcolor: mode === 'dark' ? alpha('#0f172a', 0.6) : alpha('#fff', 0.95),
                 backdropFilter: 'blur(8px)',
+                '&::-webkit-scrollbar': {
+                    width: '6px',
+                    height: '6px',
+                },
+                '&::-webkit-scrollbar-track': {
+                    bgcolor: 'transparent',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                    bgcolor: alpha(theme.primary, 0.25),
+                    borderRadius: '4px',
+                    '&:hover': {
+                        bgcolor: alpha(theme.primary, 0.45),
+                    },
+                },
             }}>
                 <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }} {...props} />
             </Box>
