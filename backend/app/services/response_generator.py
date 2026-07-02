@@ -64,6 +64,7 @@ INSTRUCTIONS:
 7. Do NOT mention internal database schema details (such as database table names, column names, join conditions, schema keys) unless the user explicitly asked for them. Translate them into user-friendly business terms (e.g. instead of 'model_versions table', use 'model versions').
 8. NEVER expose any database stack traces, raw SQL execution errors, or internal technical code details.
 9. Provide a concise, professional answer.
+10. Do NOT mention or explain SQL limits, query restrictions, or technical pagination details (e.g., 'limited to the first 100 entries', 'query limits') in the conversational response. Keep the explanation user-friendly and business-focused.
 
 Response:"""
 
