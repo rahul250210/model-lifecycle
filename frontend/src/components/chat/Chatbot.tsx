@@ -1092,6 +1092,45 @@ const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode }: Bot
         return cleaned.trim();
     }, [content]);
     const mdComponents = useMemo(() => ({
+        a: ({ node, href, children, ...props }: any) => {
+            const navigate = useNavigate();
+            const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+                if (href) {
+                    const isAppRoute = href.startsWith('/') || href.startsWith('file:///') || href.includes(window.location.host);
+                    if (isAppRoute) {
+                        e.preventDefault();
+                        let path = href;
+                        if (href.startsWith('file:///')) {
+                            path = href.substring(8).replace(/^[a-zA-Z]:/, '');
+                            if (!path.startsWith('/')) {
+                                path = '/' + path;
+                            }
+                        } else if (href.includes(window.location.host)) {
+                            const urlObj = new URL(href);
+                            path = urlObj.pathname + urlObj.search + urlObj.hash;
+                        }
+                        navigate(path);
+                    }
+                }
+            };
+            return (
+                <Box
+                    component="a"
+                    href={href}
+                    onClick={handleClick}
+                    sx={{
+                        color: theme.primary,
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                        cursor: 'pointer',
+                        '&:hover': { textDecoration: 'underline' }
+                    }}
+                    {...props}
+                >
+                    {children}
+                </Box>
+            );
+        },
         h1: ({ node, ...props }: any) => <Typography variant="h6" fontWeight={850} sx={{ mt: 1.5, mb: 1, color: theme.textMain, fontSize: '1rem' }} {...props} />,
         h2: ({ node, children, ...props }: any) => (
             <Box sx={{

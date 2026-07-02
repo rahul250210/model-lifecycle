@@ -25,6 +25,63 @@ def generate_dynamic_actions(
     actions = []
     q = user_question.lower()
     
+    # Direct Entity Report Download Match from Question
+    if any(kw in q for kw in {"report", "download", "export", "csv"}):
+        # Check models first (most specific)
+        models = db_session.execute(
+            text("SELECT id, name, algorithm_id, factory_id FROM models WHERE :q LIKE '%' || lower(name) || '%'"),
+            {"q": q}
+        ).fetchall()
+        matching_models = []
+        for m_id, m_name, m_algo_id, m_fact_id in models:
+            if re.search(r'\b' + re.escape(m_name.lower()) + r'\b', q):
+                matching_models.append((m_id, m_name, m_algo_id, m_fact_id))
+        if matching_models:
+            m_id, m_name, m_algo_id, m_fact_id = matching_models[0]
+            actions.append({
+                "type": "download",
+                "label": f"Download Model Report: {m_name}",
+                "download_type": "report",
+                "entity_type": "model",
+                "entity_id": int(m_id),
+                "download_url": f"/algorithms/{m_algo_id}/factories/{m_fact_id}/models/{m_id}/report"
+            })
+            return actions
+
+        # Check algorithms second
+        algos = db_session.execute(
+            text("SELECT id, name FROM algorithms WHERE :q LIKE '%' || lower(name) || '%'"),
+            {"q": q}
+        ).fetchall()
+        for a_id, a_name in algos:
+            if re.search(r'\b' + re.escape(a_name.lower()) + r'\b', q):
+                actions.append({
+                    "type": "download",
+                    "label": f"Download Algorithm Report: {a_name}",
+                    "download_type": "report",
+                    "entity_type": "algorithm",
+                    "entity_id": int(a_id),
+                    "download_url": f"/algorithms/{a_id}/report"
+                })
+                return actions
+
+        # Check factories third
+        factories = db_session.execute(
+            text("SELECT id, name FROM factories WHERE :q LIKE '%' || lower(name) || '%'"),
+            {"q": q}
+        ).fetchall()
+        for f_id, f_name in factories:
+            if re.search(r'\b' + re.escape(f_name.lower()) + r'\b', q):
+                actions.append({
+                    "type": "download",
+                    "label": f"Download Factory Report: {f_name}",
+                    "download_type": "report",
+                    "entity_type": "factory",
+                    "entity_id": int(f_id),
+                    "download_url": f"/factories/{f_id}/report"
+                })
+                return actions
+
     rows = query_results.get("rows", [])
     if not rows:
         return actions
@@ -211,6 +268,10 @@ def generate_comparison_payload(
     Dynamically generates comparison payload for charts and modals when comparison intent is present.
     """
     q = user_question.lower()
+    comparison_kws = {"compare", "versus", "vs", "better than", "difference between", "changed between", "change between"}
+    if not any(kw in q for kw in comparison_kws):
+        return None
+        
     rows = query_results.get("rows", [])
     full_rows = []
     
