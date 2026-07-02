@@ -140,6 +140,13 @@ def generate_dynamic_actions(
             return actions
 
     # 3. REPORT DOWNLOAD DETECTION
+    is_report_allowed = (
+        len(rows) == 1 or 
+        any(kw in q for kw in {"report", "download", "export", "csv"})
+    )
+    if not is_report_allowed:
+        return actions
+
     # Model check
     is_model_row = "model_id" in first_row or ("id" in first_row and ("framework" in first_row or "algorithm_id" in first_row or "model_name" in q))
     if is_model_row:
