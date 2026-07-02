@@ -613,7 +613,6 @@ export default function FactoryListForAlgorithm() {
                     border: `1px solid ${theme.border}`,
                     height: "100%",
                     bgcolor: theme.paper,
-                    cursor: "pointer",
                     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                     "&:hover": {
                       borderColor: theme.primary,
@@ -621,7 +620,6 @@ export default function FactoryListForAlgorithm() {
                       "& .arrow-icon": { opacity: 1, transform: "translateX(0)" }
                     }
                   }}
-                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factory.id}/models`)}
                 >
                   <Box sx={{ px: 3, pt: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <Box sx={{ p: 1, bgcolor: alpha(theme.primary, 0.1), borderRadius: "10px", display: 'flex' }}>
@@ -662,6 +660,7 @@ export default function FactoryListForAlgorithm() {
 
                     <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
                       <Box
+                        onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factory.id}/models`)}
                         className="arrow-icon"
                         sx={{
                           display: 'flex',
@@ -673,6 +672,7 @@ export default function FactoryListForAlgorithm() {
                           opacity: 0,
                           transform: "translateX(-10px)",
                           transition: "all 0.3s",
+                          cursor: 'pointer',
                           '&:hover': {
                             bgcolor: alpha(theme.primary, 0.1)
                           }

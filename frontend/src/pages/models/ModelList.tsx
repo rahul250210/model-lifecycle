@@ -292,7 +292,6 @@ export default function ModelList() {
                     bgcolor: theme.paper,
                     border: `1px solid ${theme.border}`,
                     transition: "all 0.3s",
-                    cursor: "pointer",
                     "&:hover": {
                       borderColor: theme.primary,
                       boxShadow: `0 25px 30px -5px ${alpha("#000", 0.08)}`,
@@ -300,7 +299,6 @@ export default function ModelList() {
                     },
                   }}
                   elevation={0}
-                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${model.id}`)}
                 >
                   <CardContent sx={{ p: 3 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
@@ -357,6 +355,7 @@ export default function ModelList() {
                       </Stack>
 
                       <Box
+                        onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${model.id}`)}
                         className="arrow-icon"
                         sx={{
                           opacity: 0,
@@ -368,6 +367,7 @@ export default function ModelList() {
                           gap: 1,
                           p: 1,
                           borderRadius: '8px',
+                          cursor: 'pointer',
                           '&:hover': { bgcolor: alpha(theme.primary, 0.05) }
                         }}
                       >

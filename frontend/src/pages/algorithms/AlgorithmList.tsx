@@ -185,7 +185,6 @@ export default function AlgorithmList() {
                     bgcolor: theme.paper,
                     border: `1px solid ${theme.border}`,
                     transition: "border-color 0.3s",
-                    cursor: "pointer",
                     "&:hover": {
                       borderColor: theme.primary,
                       boxShadow: `0 25px 30px -5px ${alpha("#000", 0.08)}`,
@@ -193,7 +192,6 @@ export default function AlgorithmList() {
                     },
                   }}
                   elevation={0}
-                  onClick={() => navigate(`/algorithms/${algo.id}/factories`)}
                 >
                   <CardContent sx={{ p: 3 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 4 }}>
@@ -247,6 +245,7 @@ export default function AlgorithmList() {
                       </Stack>
 
                       <Box
+                        onClick={() => navigate(`/algorithms/${algo.id}/factories`)}
                         className="arrow-icon"
                         sx={{
                           opacity: 0,
@@ -258,6 +257,7 @@ export default function AlgorithmList() {
                           gap: 1,
                           p: 1,
                           borderRadius: '8px',
+                          cursor: 'pointer',
                           '&:hover': { bgcolor: alpha(theme.primary, 0.05) }
                         }}
                       >
