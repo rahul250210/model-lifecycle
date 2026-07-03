@@ -231,84 +231,95 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
         >
             {/* ── Modal Header ── */}
             <Box sx={{
-                px: 3.5, py: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                px: 3.5, py: 2.2,
+                display: 'flex',
+                flexDirection: { xs: 'column', md: 'row' },
+                alignItems: { xs: 'flex-start', md: 'center' },
+                justifyContent: 'space-between',
+                gap: 2,
                 background: `linear-gradient(135deg, ${alpha(theme.primary, 0.12)} 0%, ${alpha(theme.secondary ?? theme.primary, 0.06)} 100%)`,
                 borderBottom: `1px solid ${alpha(theme.border, 0.2)}`,
             }}>
-                <Stack spacing={0.3}>
-                    <Stack direction="row" spacing={1.5} alignItems="center">
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', sm: 'center' }} sx={{ minWidth: 0, flex: 1, width: '100%' }}>
+                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0 }}>
                         <Box sx={{
                             width: 36, height: 36, borderRadius: '12px',
                             background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary ?? theme.primary})`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             boxShadow: `0 4px 12px ${alpha(theme.primary, 0.4)}`,
+                            flexShrink: 0
                         }}>
                             <BarChartIcon sx={{ color: '#fff', fontSize: 18 }} />
                         </Box>
-                        <Box>
-                            <Typography variant="h6" fontWeight={900} sx={{ color: theme.textMain, letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+                        <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="h6" fontWeight={900} sx={{ color: theme.textMain, letterSpacing: '-0.02em', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 Version Comparison
                             </Typography>
-                            <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 600 }}>
+                            <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {hasMultipleModels ? 'Cross-Model Performance' : model}
                             </Typography>
                         </Box>
                     </Stack>
-                </Stack>
-                <Stack direction="row" spacing={2} alignItems="center" sx={{ flexShrink: 0 }}>
-                    {/* Compared versions chips */}
-                    <Stack direction="row" spacing={1} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' }, mr: 1 }}>
+                    
+                    {/* Compared versions chips with flex wrapping */}
+                    <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: 0.5, 
+                        flexWrap: 'wrap',
+                        minWidth: 0
+                    }}>
                         {versions.map((v, i) => (
-                            <span key={`${v.model_id}-${v.version_number}`} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                            <span key={`${v.model_id}-${v.version_number}`} style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'nowrap' }}>
                                 <StatChip label={getVersionLabel(v)} color={colors[i % colors.length]} />
                                 {i < versions.length - 1 && (
                                     <Typography variant="caption" fontWeight={850} sx={{ color: theme.textMuted, mx: 0.5 }}>VS</Typography>
                                 )}
                             </span>
                         ))}
-                    </Stack>
+                    </Box>
+                </Stack>
 
-                    {/* Action buttons grouped on the right */}
-                    <Stack direction="row" spacing={1} alignItems="center">
-                        {versions.every(v => v.id) && versions[0].model_id && versions[0].algorithm_id && versions[0].factory_id && (
-                            <Button
-                                variant="outlined"
-                                size="small"
-                                startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
-                                onClick={() => {
-                                    onClose();
-                                    const idsStr = versions.map(v => v.id).join(",");
-                                    navigate(`/algorithms/${versions[0].algorithm_id}/factories/${versions[0].factory_id}/models/${versions[0].model_id}/versions/compare?left=${versions[0].id}&right=${versions[versions.length - 1].id}&ids=${idsStr}`);
-                                }}
-                                sx={{
-                                    color: theme.primary,
-                                    borderColor: alpha(theme.primary, 0.4),
-                                    borderRadius: '10px',
-                                    textTransform: 'none',
-                                    fontWeight: 800,
-                                    px: 2,
-                                    py: 0.6,
-                                    fontSize: '0.75rem',
-                                    whiteSpace: 'nowrap',
-                                    '&:hover': {
-                                        bgcolor: theme.primary,
-                                        color: '#fff',
-                                        borderColor: theme.primary
-                                    },
-                                    transition: 'all 0.2s',
-                                }}
-                            >
-                                In-Depth Analysis
-                            </Button>
-                        )}
-                        <IconButton onClick={onClose} size="small" sx={{
-                            color: theme.textMuted,
-                            bgcolor: alpha(theme.textMain, 0.05), borderRadius: '10px',
-                            '&:hover': { bgcolor: alpha(theme.error, 0.1), color: theme.error },
-                        }}>
-                            <CloseIcon fontSize="small" />
-                        </IconButton>
-                    </Stack>
+                {/* Action buttons aligned on the right, prevents shrinking */}
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0, alignSelf: { xs: 'flex-end', md: 'auto' } }}>
+                    {versions.every(v => v.id) && versions[0].model_id && versions[0].algorithm_id && versions[0].factory_id && (
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
+                            onClick={() => {
+                                onClose();
+                                const idsStr = versions.map(v => v.id).join(",");
+                                navigate(`/algorithms/${versions[0].algorithm_id}/factories/${versions[0].factory_id}/models/${versions[0].model_id}/versions/compare?left=${versions[0].id}&right=${versions[versions.length - 1].id}&ids=${idsStr}`);
+                            }}
+                            sx={{
+                                color: theme.primary,
+                                borderColor: alpha(theme.primary, 0.4),
+                                borderRadius: '10px',
+                                textTransform: 'none',
+                                fontWeight: 800,
+                                px: 2,
+                                py: 0.6,
+                                fontSize: '0.75rem',
+                                whiteSpace: 'nowrap',
+                                '&:hover': {
+                                    bgcolor: theme.primary,
+                                    color: '#fff',
+                                    borderColor: theme.primary
+                                },
+                                transition: 'all 0.2s',
+                            }}
+                        >
+                            In-Depth Analysis
+                        </Button>
+                    )}
+                    <IconButton onClick={onClose} size="small" sx={{
+                        color: theme.textMuted,
+                        bgcolor: alpha(theme.textMain, 0.05), borderRadius: '10px',
+                        '&:hover': { bgcolor: alpha(theme.error, 0.1), color: theme.error },
+                    }}>
+                        <CloseIcon fontSize="small" />
+                    </IconButton>
                 </Stack>
             </Box>
 
