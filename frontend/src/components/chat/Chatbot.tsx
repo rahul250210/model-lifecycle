@@ -1649,9 +1649,20 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick }: Message
                         )}
 
                         {/* Dynamic Actions */}
-                        {msg.actions && msg.actions.length > 0 && msg.actions.map((act, index) => (
-                            <ActionButton key={index} action={act} />
-                        ))}
+                        {msg.actions && msg.actions.length > 0 && msg.actions
+                            .filter(act => {
+                                if (msg.type === 'zip_download' && act.download_type === 'zip') {
+                                    return false;
+                                }
+                                if (msg.type === 'download' && act.download_type === 'report') {
+                                    return false;
+                                }
+                                return true;
+                            })
+                            .map((act, index) => (
+                                <ActionButton key={index} action={act} />
+                            ))
+                        }
                     </Paper>
 
                     {/* Timestamp */}
