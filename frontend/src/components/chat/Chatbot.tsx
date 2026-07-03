@@ -180,9 +180,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
         (resourceData[4] as any)[label] = +(v.gpu_memory_usage ?? 0);
     });
 
-    const standardKeys = ['batch_size', 'epochs', 'learning_rate', 'optimizer', 'image_size'];
-    const customKeys = versions.flatMap(v => Object.keys(v.parameters ?? {})).filter(k => !standardKeys.includes(k));
-    const allParamKeys = [...standardKeys, ...Array.from(new Set(customKeys))];
+    const allParamKeys = ['batch_size', 'epochs', 'learning_rate', 'optimizer', 'image_size'];
 
     const artSize = (v: any) => (v.artifacts ?? []).reduce((s: number, a: any) => s + (a.size ?? 0), 0);
     const fmtSize = (b: number) => b > 1024 * 1024
