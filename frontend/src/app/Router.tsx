@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import { Box, CircularProgress, Typography } from "@mui/material";
 
 /* =======================
@@ -67,6 +67,11 @@ const PageLoader = () => (
   </Box>
 );
 
+const AlgorithmRedirect = () => {
+  const { algorithmId } = useParams();
+  return <Navigate to={`/algorithms/${algorithmId}/factories`} replace />;
+};
+
 export default function Router() {
   return (
     <Suspense fallback={<PageLoader />}>
@@ -93,6 +98,7 @@ export default function Router() {
         ======================= */}
         <Route path="/algorithms" element={<AlgorithmList />} />
         <Route path="/algorithms/create" element={<AlgorithmCreate />} />
+        <Route path="/algorithms/:algorithmId" element={<AlgorithmRedirect />} />
         <Route path="/algorithms/:algorithmId/factories" element={<FactoryListForAlgorithm />} />
 
         {/* =======================

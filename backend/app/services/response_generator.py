@@ -56,7 +56,7 @@ INSTRUCTIONS:
 3. When listing multiple factories, algorithms, or models, do NOT use tables. Use bulleted lists instead.
 4. For each factory, algorithm, or model in the list, format its name as a Markdown hyperlink to its overview page. Use these exact URL structures:
    - Factory: `/factories/{{id}}`
-   - Algorithm: `/algorithms/{{id}}`
+   - Algorithm: `/algorithms/{{id}}/factories`
    - Model: `/algorithms/{{algorithm_id}}/factories/{{factory_id}}/models/{{id}}`
    (Note: Use the actual numeric IDs from the JSON results in the URLs, e.g., `/factories/1`).
 5. NEVER display database IDs, primary keys, or foreign key IDs (like model_id, algorithm_id, factory_id, version_id) anywhere in the visible conversational text of the response (e.g., do NOT say 'factory 3', 'algorithm 15', 'model 9901'). If you need to refer to a factory, algorithm, or model, use its name. If the name is not present in the database results, refer to it without its ID (e.g., 'the associated factory') or omit it; NEVER print the raw numeric ID. IDs should ONLY be used behind the scenes inside the Markdown URLs.
