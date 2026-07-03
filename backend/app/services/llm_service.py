@@ -73,18 +73,26 @@ def call_llm(prompt: str, temperature: float = 0.0) -> str:
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json"
                     }
-                    payload = {
-                        "model": "x-ai/grok-2",
-                        "messages": [{"role": "user", "content": prompt}],
-                        "temperature": temperature,
-                    }
-                    response = req.post(url, json=payload, headers=headers, timeout=20.0)
-                    if response.status_code == 200:
-                        data = response.json()
-                        res_text = data["choices"][0]["message"]["content"].strip()
-                        result = res_text
-                    else:
-                        print(f"[MIRA] OpenRouter API returned status {response.status_code}: {response.text}")
+                    models_to_try = ["x-ai/grok-beta", "x-ai/grok-2-1212", "google/gemini-2.5-flash"]
+                    for model_name in models_to_try:
+                        payload = {
+                            "model": model_name,
+                            "messages": [{"role": "user", "content": prompt}],
+                            "temperature": temperature,
+                        }
+                        try:
+                            response = req.post(url, json=payload, headers=headers, timeout=20.0)
+                            if response.status_code == 200:
+                                data = response.json()
+                                res_text = data["choices"][0]["message"]["content"].strip()
+                                result = res_text
+                                break
+                            elif response.status_code == 404:
+                                print(f"[MIRA] OpenRouter: model '{model_name}' not found (404). Retrying with next model...")
+                            else:
+                                print(f"[MIRA] OpenRouter: model '{model_name}' failed with status {response.status_code}: {response.text}")
+                        except Exception as inner_ex:
+                            print(f"[MIRA] OpenRouter model '{model_name}' request failed: {inner_ex}")
                 else:
                     # Google Gemini API
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
