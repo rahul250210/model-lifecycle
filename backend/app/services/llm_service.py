@@ -61,30 +61,51 @@ def call_llm(prompt: str, temperature: float = 0.0) -> str:
             print(f"[MIRA] Semcat LLM is offline or timed out: {e}. Switching to Gemini fallback.")
             _SEMCAT_OFFLINE = True
 
-    # Try Gemini REST API fallback
+    # Try Gemini/OpenRouter REST API fallback
     if result == "__LLM_OFFLINE__":
-        api_key = os.getenv("GEMINI_API_KEY", "")
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
         if api_key and api_key != "your_gemini_api_key_here":
             try:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "temperature": temperature,
-                        "maxOutputTokens": 2048,
+                if api_key.startswith("sk-or-v1-"):
+                    # OpenRouter API (Grok AI)
+                    url = "https://openrouter.ai/api/v1/chat/completions"
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
                     }
-                }
-                response = req.post(url, json=payload, timeout=20.0)
-                if response.status_code == 200:
-                    data = response.json()
-                    res_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    result = res_text
-                elif response.status_code == 429:
-                    print(f"[MIRA] Gemini rate limit exceeded (429): {response.text}")
+                    payload = {
+                        "model": "x-ai/grok-2",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "temperature": temperature,
+                    }
+                    response = req.post(url, json=payload, headers=headers, timeout=20.0)
+                    if response.status_code == 200:
+                        data = response.json()
+                        res_text = data["choices"][0]["message"]["content"].strip()
+                        result = res_text
+                    else:
+                        print(f"[MIRA] OpenRouter API returned status {response.status_code}: {response.text}")
                 else:
-                    print(f"[MIRA] Gemini API returned status {response.status_code}: {response.text}")
+                    # Google Gemini API
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+                    payload = {
+                        "contents": [{"parts": [{"text": prompt}]}],
+                        "generationConfig": {
+                            "temperature": temperature,
+                            "maxOutputTokens": 2048,
+                        }
+                    }
+                    response = req.post(url, json=payload, timeout=20.0)
+                    if response.status_code == 200:
+                        data = response.json()
+                        res_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                        result = res_text
+                    elif response.status_code == 429:
+                        print(f"[MIRA] Gemini rate limit exceeded (429): {response.text}")
+                    else:
+                        print(f"[MIRA] Gemini API returned status {response.status_code}: {response.text}")
             except Exception as ex:
-                print(f"[MIRA] Gemini fallback failed: {ex}")
+                print(f"[MIRA] Fallback API failed: {ex}")
                 
     # Cache result if it is valid
     if result != "__LLM_OFFLINE__":
