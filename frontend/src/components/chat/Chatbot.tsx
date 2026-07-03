@@ -255,53 +255,60 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                         </Box>
                     </Stack>
                 </Stack>
-                <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                    {versions.map((v, i) => (
-                        <span key={`${v.model_id}-${v.version_number}`} style={{ display: 'inline-flex', alignItems: 'center' }}>
-                            <StatChip label={getVersionLabel(v)} color={colors[i % colors.length]} />
-                            {i < versions.length - 1 && (
-                                <Typography variant="caption" fontWeight={850} sx={{ color: theme.textMuted, mx: 0.5 }}>VS</Typography>
-                            )}
-                        </span>
-                    ))}
-                    {versions.every(v => v.id) && versions[0].model_id && versions[0].algorithm_id && versions[0].factory_id && (
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
-                            onClick={() => {
-                                onClose();
-                                const idsStr = versions.map(v => v.id).join(",");
-                                navigate(`/algorithms/${versions[0].algorithm_id}/factories/${versions[0].factory_id}/models/${versions[0].model_id}/versions/compare?left=${versions[0].id}&right=${versions[versions.length - 1].id}&ids=${idsStr}`);
-                            }}
-                            sx={{
-                                color: theme.primary,
-                                borderColor: alpha(theme.primary, 0.4),
-                                borderRadius: '10px',
-                                textTransform: 'none',
-                                fontWeight: 800,
-                                px: 2,
-                                py: 0.5,
-                                fontSize: '0.72rem',
-                                '&:hover': {
-                                    bgcolor: theme.primary,
-                                    color: '#fff',
-                                    borderColor: theme.primary
-                                },
-                                transition: 'all 0.2s',
-                                ml: 0.5,
-                            }}
-                        >
-                            In-Depth Analysis
-                        </Button>
-                    )}
-                    <IconButton onClick={onClose} size="small" sx={{
-                        color: theme.textMuted, ml: 1,
-                        bgcolor: alpha(theme.textMain, 0.05), borderRadius: '10px',
-                        '&:hover': { bgcolor: alpha(theme.error, 0.1), color: theme.error },
-                    }}>
-                        <CloseIcon fontSize="small" />
-                    </IconButton>
+                <Stack direction="row" spacing={2} alignItems="center" sx={{ flexShrink: 0 }}>
+                    {/* Compared versions chips */}
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' }, mr: 1 }}>
+                        {versions.map((v, i) => (
+                            <span key={`${v.model_id}-${v.version_number}`} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                <StatChip label={getVersionLabel(v)} color={colors[i % colors.length]} />
+                                {i < versions.length - 1 && (
+                                    <Typography variant="caption" fontWeight={850} sx={{ color: theme.textMuted, mx: 0.5 }}>VS</Typography>
+                                )}
+                            </span>
+                        ))}
+                    </Stack>
+
+                    {/* Action buttons grouped on the right */}
+                    <Stack direction="row" spacing={1} alignItems="center">
+                        {versions.every(v => v.id) && versions[0].model_id && versions[0].algorithm_id && versions[0].factory_id && (
+                            <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
+                                onClick={() => {
+                                    onClose();
+                                    const idsStr = versions.map(v => v.id).join(",");
+                                    navigate(`/algorithms/${versions[0].algorithm_id}/factories/${versions[0].factory_id}/models/${versions[0].model_id}/versions/compare?left=${versions[0].id}&right=${versions[versions.length - 1].id}&ids=${idsStr}`);
+                                }}
+                                sx={{
+                                    color: theme.primary,
+                                    borderColor: alpha(theme.primary, 0.4),
+                                    borderRadius: '10px',
+                                    textTransform: 'none',
+                                    fontWeight: 800,
+                                    px: 2,
+                                    py: 0.6,
+                                    fontSize: '0.75rem',
+                                    whiteSpace: 'nowrap',
+                                    '&:hover': {
+                                        bgcolor: theme.primary,
+                                        color: '#fff',
+                                        borderColor: theme.primary
+                                    },
+                                    transition: 'all 0.2s',
+                                }}
+                            >
+                                In-Depth Analysis
+                            </Button>
+                        )}
+                        <IconButton onClick={onClose} size="small" sx={{
+                            color: theme.textMuted,
+                            bgcolor: alpha(theme.textMain, 0.05), borderRadius: '10px',
+                            '&:hover': { bgcolor: alpha(theme.error, 0.1), color: theme.error },
+                        }}>
+                            <CloseIcon fontSize="small" />
+                        </IconButton>
+                    </Stack>
                 </Stack>
             </Box>
 
