@@ -305,135 +305,235 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                 </Stack>
             </Box>
 
-            <DialogContent sx={{ p: 3.5, overflowX: 'hidden' }}>
-                {/* ── Performance Metrics ── */}
+            <DialogContent sx={{ p: 3.5, overflowX: 'hidden', bgcolor: theme.mode === 'dark' ? '#0d0d15' : '#f4f6fa' }}>
+                
+                {/* ── Charts Grid (Performance Metrics & Resource Usage side-by-side) ── */}
                 <Box sx={{
-                    mb: 3.5, p: 3, borderRadius: '18px',
-                    bgcolor: alpha(theme.paper, theme.mode === 'dark' ? 0.6 : 0.8),
-                    border: `1px solid ${alpha(theme.border, 0.2)}`,
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                    gap: 3.5,
+                    mb: 3.5
                 }}>
-                    <SectionTitle>📊 Performance Metrics</SectionTitle>
-                    <Box sx={{ height: 240 }}>
-                        <ResponsiveContainer>
-                            <BarChart data={metricData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }} barGap={6}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.textMain, 0.07)} />
-                                <XAxis dataKey="name" tick={{ fill: theme.textSecondary, fontSize: 12, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                                <YAxis domain={[0, 100]} tick={{ fill: theme.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
-                                <RechartsTooltip contentStyle={tooltipStyle} />
-                                <Legend wrapperStyle={{ fontSize: 12, fontWeight: 700, paddingTop: 12 }} iconType="circle" iconSize={9} />
-                                {versions.map((v, index) => {
-                                    const label = getVersionLabel(v);
-                                    return (
-                                        <Bar key={label} dataKey={label} fill={colors[index % colors.length]} radius={[6, 6, 0, 0]} barSize={versions.length > 2 ? 18 : 28} />
-                                    );
-                                })}
-                            </BarChart>
-                        </ResponsiveContainer>
+                    {/* Performance Metrics */}
+                    <Box sx={{
+                        p: 3, borderRadius: '20px',
+                        bgcolor: theme.mode === 'dark' ? 'rgba(30, 30, 46, 0.4)' : 'rgba(255, 255, 255, 0.8)',
+                        border: `1px solid ${alpha(theme.border, 0.2)}`,
+                        boxShadow: theme.mode === 'dark' ? '0 10px 30px rgba(0,0,0,0.2)' : '0 10px 30px rgba(0,0,0,0.03)',
+                        backdropFilter: 'blur(10px)',
+                    }}>
+                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
+                            <Box sx={{
+                                width: 32, height: 32, borderRadius: '10px',
+                                bgcolor: alpha(theme.primary, 0.1), color: theme.primary,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                <BarChartIcon sx={{ fontSize: 16 }} />
+                            </Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 900, color: theme.textMain, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                Performance Metrics
+                            </Typography>
+                        </Stack>
+                        <Box sx={{ height: 240 }}>
+                            <ResponsiveContainer>
+                                <BarChart data={metricData} margin={{ top: 5, right: 10, left: -15, bottom: 5 }} barGap={6}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.textMain, 0.07)} />
+                                    <XAxis dataKey="name" tick={{ fill: theme.textSecondary, fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} />
+                                    <YAxis domain={[0, 100]} tick={{ fill: theme.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
+                                    <RechartsTooltip contentStyle={tooltipStyle} />
+                                    <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700, paddingTop: 12 }} iconType="circle" iconSize={8} />
+                                    {versions.map((v, index) => {
+                                        const label = getVersionLabel(v);
+                                        return (
+                                            <Bar key={label} dataKey={label} fill={colors[index % colors.length]} radius={[6, 6, 0, 0]} barSize={versions.length > 2 ? 14 : 24} />
+                                        );
+                                    })}
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </Box>
+                    </Box>
+
+                    {/* Resource Usage */}
+                    <Box sx={{
+                        p: 3, borderRadius: '20px',
+                        bgcolor: theme.mode === 'dark' ? 'rgba(30, 30, 46, 0.4)' : 'rgba(255, 255, 255, 0.8)',
+                        border: `1px solid ${alpha(theme.border, 0.2)}`,
+                        boxShadow: theme.mode === 'dark' ? '0 10px 30px rgba(0,0,0,0.2)' : '0 10px 30px rgba(0,0,0,0.03)',
+                        backdropFilter: 'blur(10px)',
+                    }}>
+                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
+                            <Box sx={{
+                                width: 32, height: 32, borderRadius: '10px',
+                                bgcolor: alpha(theme.secondary ?? theme.info, 0.1), color: theme.secondary ?? theme.info,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                <VersionIcon sx={{ fontSize: 16 }} />
+                            </Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 900, color: theme.textMain, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                Resource Usage
+                            </Typography>
+                        </Stack>
+                        <Box sx={{ height: 240 }}>
+                            <ResponsiveContainer>
+                                <BarChart data={resourceData} layout="vertical" margin={{ top: 0, right: 10, left: 10, bottom: 0 }} barGap={4}>
+                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={alpha(theme.textMain, 0.07)} />
+                                    <XAxis type="number" tick={{ fill: theme.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
+                                    <YAxis dataKey="name" type="category" width={110} tick={{ fill: theme.textSecondary, fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
+                                    <RechartsTooltip contentStyle={tooltipStyle} />
+                                    <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700, paddingTop: 12 }} iconType="circle" iconSize={8} />
+                                    {versions.map((v, index) => {
+                                        const label = getVersionLabel(v);
+                                        return (
+                                            <Bar key={label} dataKey={label} fill={colors[index % colors.length]} radius={[0, 6, 6, 0]} barSize={versions.length > 2 ? 8 : 14} />
+                                        );
+                                    })}
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </Box>
                     </Box>
                 </Box>
 
-                {/* ── Resource Usage ── */}
-                <Box sx={{
-                    mb: 3.5, p: 3, borderRadius: '18px',
-                    bgcolor: alpha(theme.paper, theme.mode === 'dark' ? 0.6 : 0.8),
-                    border: `1px solid ${alpha(theme.border, 0.2)}`,
-                }}>
-                    <SectionTitle>⚡ Resource Usage</SectionTitle>
-                    <Box sx={{ height: 220 }}>
-                        <ResponsiveContainer>
-                            <BarChart data={resourceData} layout="vertical" margin={{ top: 0, right: 20, left: 10, bottom: 0 }} barGap={4}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={alpha(theme.textMain, 0.07)} />
-                                <XAxis type="number" tick={{ fill: theme.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
-                                <YAxis dataKey="name" type="category" width={130} tick={{ fill: theme.textSecondary, fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                                <RechartsTooltip contentStyle={tooltipStyle} />
-                                <Legend wrapperStyle={{ fontSize: 12, fontWeight: 700, paddingTop: 12 }} iconType="circle" iconSize={9} />
-                                {versions.map((v, index) => {
-                                    const label = getVersionLabel(v);
-                                    return (
-                                        <Bar key={label} dataKey={label} fill={colors[index % colors.length]} radius={[0, 6, 6, 0]} barSize={versions.length > 2 ? 10 : 16} />
-                                    );
-                                })}
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </Box>
-                </Box>
-
-                {/* ── Parameters ── */}
+                {/* ── Parameters (Configuration Shift Highlight) ── */}
                 {allParamKeys.length > 0 && (
                     <Box sx={{
-                        mb: 3.5, p: 3, borderRadius: '18px',
-                        bgcolor: alpha(theme.paper, theme.mode === 'dark' ? 0.6 : 0.8),
+                        p: 3, borderRadius: '20px',
+                        bgcolor: theme.mode === 'dark' ? 'rgba(30, 30, 46, 0.4)' : 'rgba(255, 255, 255, 0.8)',
                         border: `1px solid ${alpha(theme.border, 0.2)}`,
+                        boxShadow: theme.mode === 'dark' ? '0 10px 30px rgba(0,0,0,0.2)' : '0 10px 30px rgba(0,0,0,0.03)',
+                        backdropFilter: 'blur(10px)',
+                        mb: 3.5,
                     }}>
-                        <SectionTitle>🔧 Parameters</SectionTitle>
+                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
+                            <Box sx={{
+                                width: 32, height: 32, borderRadius: '10px',
+                                bgcolor: alpha(theme.primary, 0.1), color: theme.primary,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                <VersionIcon sx={{ fontSize: 16 }} />
+                            </Box>
+                            <Box>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 900, color: theme.textMain, textTransform: 'uppercase', letterSpacing: 0.5, lineHeight: 1.1 }}>
+                                    Configuration Parameters
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 600 }}>
+                                    Highlighted rows indicate shifts across versions
+                                </Typography>
+                            </Box>
+                        </Stack>
+                        
                         <Box sx={{
                             display: 'grid',
                             gridTemplateColumns: `repeat(${versions.length + 1}, 1fr)`,
-                            borderRadius: '12px', overflow: 'hidden',
-                            border: `1px solid ${alpha(theme.border, 0.2)}`,
+                            borderRadius: '16px', overflow: 'hidden',
+                            border: `1px solid ${alpha(theme.border, 0.25)}`,
                         }}>
                             {/* Header row */}
                             {columns.map((h, i) => (
                                 <Box key={h} sx={{
-                                    px: 2, py: 1.2,
-                                    bgcolor: alpha(theme.textMain, 0.04),
-                                    borderRight: i < columns.length - 1 ? `1px solid ${alpha(theme.border, 0.15)}` : 'none',
+                                    px: 2.5, py: 1.8,
+                                    bgcolor: theme.mode === 'dark' ? 'rgba(20, 20, 35, 0.7)' : 'rgba(235, 238, 245, 0.8)',
+                                    borderRight: i < columns.length - 1 ? `1px solid ${alpha(theme.border, 0.2)}` : 'none',
                                 }}>
                                     <Typography variant="caption" fontWeight={900} sx={{
-                                        color: i === 0 ? theme.textMuted : colors[(i - 1) % colors.length],
-                                        letterSpacing: 1, textTransform: 'uppercase', fontSize: '0.62rem',
+                                        color: i === 0 ? theme.textSecondary : colors[(i - 1) % colors.length],
+                                        letterSpacing: 1, textTransform: 'uppercase', fontSize: '0.68rem',
                                     }}>{h}</Typography>
                                 </Box>
                             ))}
                             {/* Data rows */}
-                            {allParamKeys.map((k, ri) => (
-                                [k, ...versions.map(v => String((v.parameters ?? {})[k] ?? '—'))].map((val, ci) => (
+                            {allParamKeys.map((k, ri) => {
+                                const firstVal = (versions[0].parameters ?? {})[k];
+                                const changed = versions.some(v => (v.parameters ?? {})[k] !== firstVal);
+                                return [k, ...versions.map(v => String((v.parameters ?? {})[k] ?? '—'))].map((val, ci) => (
                                     <Box key={`${k}-${ci}`} sx={{
-                                        px: 2, py: 1,
-                                        bgcolor: ri % 2 === 0 ? 'transparent' : alpha(theme.textMain, 0.02),
+                                        px: 2.5, py: 1.5,
+                                        bgcolor: changed 
+                                            ? (theme.mode === 'dark' ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.03)')
+                                            : (ri % 2 === 0 ? 'transparent' : alpha(theme.textMain, 0.015)),
                                         borderRight: ci < columns.length - 1 ? `1px solid ${alpha(theme.border, 0.15)}` : 'none',
                                         borderTop: `1px solid ${alpha(theme.border, 0.15)}`,
+                                        borderLeft: ci === 0 && changed ? `4px solid ${theme.warning ?? '#F59E0B'}` : 'none',
+                                        display: 'flex',
+                                        alignItems: 'center',
                                     }}>
                                         <Typography variant="body2" sx={{
-                                            fontSize: '0.78rem', fontWeight: ci === 0 ? 700 : 500,
-                                            color: ci === 0 ? theme.textSecondary : theme.textMain,
+                                            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                                            fontSize: '0.74rem',
+                                            fontWeight: ci === 0 ? 800 : 500,
+                                            color: ci === 0 
+                                                ? (changed ? (theme.warning ?? '#F59E0B') : theme.textSecondary)
+                                                : theme.textMain,
                                         }}>{val}</Typography>
                                     </Box>
-                                ))
-                            ))}
+                                ));
+                            })}
                         </Box>
                     </Box>
                 )}
 
-                {/* ── Artifact Sizes ── */}
+                {/* ── Artifact Sizes ( footprint ) ── */}
                 {versions.some(v => artSize(v) > 0) && (
                     <Box sx={{
-                        p: 3, borderRadius: '18px',
-                        bgcolor: alpha(theme.paper, theme.mode === 'dark' ? 0.6 : 0.8),
+                        p: 3, borderRadius: '20px',
+                        bgcolor: theme.mode === 'dark' ? 'rgba(30, 30, 46, 0.4)' : 'rgba(255, 255, 255, 0.8)',
                         border: `1px solid ${alpha(theme.border, 0.2)}`,
+                        boxShadow: theme.mode === 'dark' ? '0 10px 30px rgba(0,0,0,0.2)' : '0 10px 30px rgba(0,0,0,0.03)',
+                        backdropFilter: 'blur(10px)',
                     }}>
-                        <SectionTitle>📦 Artifact Sizes</SectionTitle>
-                        <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap', gap: 2 }}>
+                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
+                            <Box sx={{
+                                width: 32, height: 32, borderRadius: '10px',
+                                bgcolor: alpha(theme.success ?? '#10B981', 0.1), color: theme.success ?? '#10B981',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                                <DownloadIcon sx={{ fontSize: 16 }} />
+                            </Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 900, color: theme.textMain, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                Total Artifact Footprint
+                            </Typography>
+                        </Stack>
+                        
+                        <Box sx={{
+                            display: 'grid',
+                            gridTemplateColumns: `repeat(auto-fit, minmax(200px, 1fr))`,
+                            gap: 2.5
+                        }}>
                             {versions.map((v, index) => {
                                 const label = getVersionLabel(v);
                                 const color = colors[index % colors.length];
                                 return (
                                     <Box key={label} sx={{
-                                        flex: '1 1 200px', p: 2.5, borderRadius: '14px',
-                                        bgcolor: alpha(color, 0.06),
-                                        border: `1px solid ${alpha(color, 0.2)}`,
-                                        textAlign: 'center',
+                                        p: 2.5, borderRadius: '16px',
+                                        bgcolor: alpha(color, 0.05),
+                                        border: `1px solid ${alpha(color, 0.15)}`,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 2,
+                                        transition: 'transform 0.2s, box-shadow 0.2s',
+                                        '&:hover': {
+                                            transform: 'translateY(-2px)',
+                                            boxShadow: `0 8px 20px ${alpha(color, 0.1)}`,
+                                        }
                                     }}>
-                                        <Typography variant="h5" fontWeight={900} sx={{ color }}>
-                                            {fmtSize(artSize(v))}
-                                        </Typography>
-                                        <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted }}>
-                                            {label} total artifacts
-                                        </Typography>
+                                        <Box sx={{
+                                            width: 40, height: 40, borderRadius: '12px',
+                                            bgcolor: alpha(color, 0.1), color,
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                        }}>
+                                            <DownloadIcon sx={{ fontSize: 18 }} />
+                                        </Box>
+                                        <Box>
+                                            <Typography variant="h6" fontWeight={900} sx={{ color, lineHeight: 1.1, mb: 0.3 }}>
+                                                {fmtSize(artSize(v))}
+                                            </Typography>
+                                            <Typography variant="caption" fontWeight={750} sx={{ color: theme.textMuted }}>
+                                                {label}
+                                            </Typography>
+                                        </Box>
                                     </Box>
                                 );
                             })}
-                        </Stack>
+                        </Box>
                     </Box>
                 )}
             </DialogContent>
