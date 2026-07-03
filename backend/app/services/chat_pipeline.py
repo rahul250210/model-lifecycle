@@ -296,7 +296,7 @@ def generate_comparison_payload(
         for v_id in version_ids:
             res = db_session.execute(
                 text("""
-                    SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                    SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
                     FROM model_versions mv
                     JOIN models m ON m.id = mv.model_id
                     LEFT JOIN factories f ON f.id = m.factory_id
@@ -339,7 +339,7 @@ def generate_comparison_payload(
                 for v_num in ver_nums:
                     res = db_session.execute(
                         text("""
-                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
                             FROM model_versions mv
                             JOIN models m ON m.id = mv.model_id
                             LEFT JOIN factories f ON f.id = m.factory_id
@@ -356,7 +356,7 @@ def generate_comparison_payload(
                 # fetch all versions of this model!
                 all_vers = db_session.execute(
                     text("""
-                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
                         FROM model_versions mv
                         JOIN models m ON m.id = mv.model_id
                         LEFT JOIN factories f ON f.id = m.factory_id
@@ -373,7 +373,7 @@ def generate_comparison_payload(
             for m_id in matched_model_ids:
                 res = db_session.execute(
                     text("""
-                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
                         FROM model_versions mv
                         JOIN models m ON m.id = mv.model_id
                         LEFT JOIN factories f ON f.id = m.factory_id
@@ -386,7 +386,7 @@ def generate_comparison_payload(
                 if not res:
                     res = db_session.execute(
                         text("""
-                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
                             FROM model_versions mv
                             JOIN models m ON m.id = mv.model_id
                             LEFT JOIN factories f ON f.id = m.factory_id
@@ -424,7 +424,7 @@ def generate_comparison_payload(
                 # Find active model versions for this factory
                 res = db_session.execute(
                     text("""
-                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
                         FROM model_versions mv
                         JOIN models m ON m.id = mv.model_id
                         LEFT JOIN factories f ON f.id = m.factory_id
@@ -439,7 +439,7 @@ def generate_comparison_payload(
                     # Fallback to latest version in this factory
                     res = db_session.execute(
                         text("""
-                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
                             FROM model_versions mv
                             JOIN models m ON m.id = mv.model_id
                             LEFT JOIN factories f ON f.id = m.factory_id
@@ -477,7 +477,7 @@ def generate_comparison_payload(
                 # Find active model versions for this algorithm
                 res = db_session.execute(
                     text("""
-                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
                         FROM model_versions mv
                         JOIN models m ON m.id = mv.model_id
                         LEFT JOIN factories f ON f.id = m.factory_id
@@ -492,7 +492,7 @@ def generate_comparison_payload(
                     # Fallback to latest version
                     res = db_session.execute(
                         text("""
-                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                            SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
                             FROM model_versions mv
                             JOIN models m ON m.id = mv.model_id
                             LEFT JOIN factories f ON f.id = m.factory_id
@@ -516,7 +516,7 @@ def generate_comparison_payload(
             if m_name and v_num is not None:
                 res = db_session.execute(
                     text("""
-                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
                         FROM model_versions mv
                         JOIN models m ON m.id = mv.model_id
                         LEFT JOIN factories f ON f.id = m.factory_id
