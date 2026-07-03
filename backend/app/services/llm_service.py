@@ -91,6 +91,8 @@ def call_llm(prompt: str, temperature: float = 0.0) -> str:
                                 print(f"[MIRA] OpenRouter: model '{model_name}' not found (404). Retrying with next model...")
                             else:
                                 print(f"[MIRA] OpenRouter: model '{model_name}' failed with status {response.status_code}: {response.text}")
+                        except Exception as inner_ex:
+                            print(f"[MIRA] OpenRouter model '{model_name}' request failed: {inner_ex}")
                 elif api_key.startswith("csk-"):
                     # Cerebras AI API
                     url = "https://api.cerebras.ai/v1/chat/completions"
@@ -98,7 +100,7 @@ def call_llm(prompt: str, temperature: float = 0.0) -> str:
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json"
                     }
-                    models_to_try = ["llama-3.3-70b", "llama3.1-70b", "llama3.1-8b"]
+                    models_to_try = ["gpt-oss-120b", "gemma-4-31b", "zai-glm-4.7"]
                     for model_name in models_to_try:
                         payload = {
                             "model": model_name,
