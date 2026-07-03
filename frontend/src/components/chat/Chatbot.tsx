@@ -509,35 +509,50 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                                 const label = getVersionLabel(v);
                                 const color = colors[index % colors.length];
                                 return (
-                                    <Box key={label} sx={{
-                                        p: 2.5, borderRadius: '16px',
-                                        bgcolor: alpha(color, 0.05),
-                                        border: `1px solid ${alpha(color, 0.15)}`,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 2,
-                                        transition: 'transform 0.2s, box-shadow 0.2s',
-                                        '&:hover': {
-                                            transform: 'translateY(-2px)',
-                                            boxShadow: `0 8px 20px ${alpha(color, 0.1)}`,
-                                        }
-                                    }}>
-                                        <Box sx={{
-                                            width: 40, height: 40, borderRadius: '12px',
-                                            bgcolor: alpha(color, 0.1), color,
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                        }}>
-                                            <DownloadIcon sx={{ fontSize: 18 }} />
+                                    <Tooltip key={label} title={`Download all artifacts for v${v.version_number}`}>
+                                        <Box 
+                                            onClick={() => {
+                                                const algId = v.algorithm_id || versions[0].algorithm_id;
+                                                const facId = v.factory_id || versions[0].factory_id;
+                                                const modId = v.model_id || versions[0].model_id;
+                                                if (algId && facId && modId && v.id) {
+                                                    const downloadUrl = `${API_BASE_URL}/algorithms/${algId}/factories/${facId}/models/${modId}/versions/${v.id}/download?dataset=true&labels=true&model=true&code=true`;
+                                                    window.location.href = downloadUrl;
+                                                }
+                                            }}
+                                            sx={{
+                                                p: 2.5, borderRadius: '16px',
+                                                bgcolor: alpha(color, 0.05),
+                                                border: `1px solid ${alpha(color, 0.15)}`,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 2,
+                                                cursor: 'pointer',
+                                                transition: 'transform 0.2s, box-shadow 0.2s, background-color 0.2s',
+                                                '&:hover': {
+                                                    transform: 'translateY(-2px)',
+                                                    boxShadow: `0 8px 20px ${alpha(color, 0.15)}`,
+                                                    bgcolor: alpha(color, 0.08),
+                                                }
+                                            }}
+                                        >
+                                            <Box sx={{
+                                                width: 40, height: 40, borderRadius: '12px',
+                                                bgcolor: alpha(color, 0.1), color,
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>
+                                                <DownloadIcon sx={{ fontSize: 18 }} />
+                                            </Box>
+                                            <Box>
+                                                <Typography variant="h6" fontWeight={900} sx={{ color, lineHeight: 1.1, mb: 0.3 }}>
+                                                    {fmtSize(artSize(v))}
+                                                </Typography>
+                                                <Typography variant="caption" fontWeight={750} sx={{ color: theme.textMuted }}>
+                                                    {label}
+                                                </Typography>
+                                            </Box>
                                         </Box>
-                                        <Box>
-                                            <Typography variant="h6" fontWeight={900} sx={{ color, lineHeight: 1.1, mb: 0.3 }}>
-                                                {fmtSize(artSize(v))}
-                                            </Typography>
-                                            <Typography variant="caption" fontWeight={750} sx={{ color: theme.textMuted }}>
-                                                {label}
-                                            </Typography>
-                                        </Box>
-                                    </Box>
+                                    </Tooltip>
                                 );
                             })}
                         </Box>
