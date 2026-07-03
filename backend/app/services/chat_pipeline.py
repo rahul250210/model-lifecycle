@@ -293,7 +293,7 @@ def generate_comparison_payload(
                 pass
                 
     if len(version_ids) >= 2:
-        for v_id in version_ids[:2]:
+        for v_id in version_ids:
             res = db_session.execute(
                 text("""
                     SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
@@ -336,7 +336,7 @@ def generate_comparison_payload(
                     ver_nums.append(int(val))
                     
             if len(ver_nums) >= 2:
-                for v_num in ver_nums[:2]:
+                for v_num in ver_nums:
                     res = db_session.execute(
                         text("""
                             SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
@@ -351,9 +351,26 @@ def generate_comparison_payload(
                     ).fetchone()
                     if res:
                         fallback_rows.append(_enrich_version_row(res, db_session))
+            else:
+                # If no specific version numbers matched (e.g. "compare all versions of R2+1D"),
+                # fetch all versions of this model!
+                all_vers = db_session.execute(
+                    text("""
+                        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
+                        FROM model_versions mv
+                        JOIN models m ON m.id = mv.model_id
+                        LEFT JOIN factories f ON f.id = m.factory_id
+                        LEFT JOIN algorithms a ON a.id = m.algorithm_id
+                        WHERE mv.model_id = :model_id
+                        ORDER BY mv.version_number ASC
+                    """),
+                    {"model_id": m_id}
+                ).fetchall()
+                for res in all_vers:
+                    fallback_rows.append(_enrich_version_row(res, db_session))
         elif len(matched_model_ids) >= 2:
             # Fetch the active or latest version for each model
-            for m_id in matched_model_ids[:2]:
+            for m_id in matched_model_ids:
                 res = db_session.execute(
                     text("""
                         SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name
@@ -403,7 +420,7 @@ def generate_comparison_payload(
                 
         if len(matched_factory_ids) >= 2:
             factory_rows = []
-            for f_id in matched_factory_ids[:2]:
+            for f_id in matched_factory_ids:
                 # Find active model versions for this factory
                 res = db_session.execute(
                     text("""
@@ -456,7 +473,7 @@ def generate_comparison_payload(
                 
         if len(matched_algo_ids) >= 2:
             algo_rows = []
-            for a_id in matched_algo_ids[:2]:
+            for a_id in matched_algo_ids:
                 # Find active model versions for this algorithm
                 res = db_session.execute(
                     text("""
@@ -511,8 +528,6 @@ def generate_comparison_payload(
                 ).fetchone()
                 if res:
                     full_rows.append(_enrich_version_row(res, db_session))
-                    if len(full_rows) >= 2:
-                        break
 
     if len(full_rows) < 2:
         return None
@@ -521,7 +536,7 @@ def generate_comparison_payload(
 
     # Extract entity names from rows
     entities = []
-    for i, r in enumerate(rows[:2]):
+    for i, r in enumerate(rows):
         e_name = r.get("model_name") or r.get("factory_name") or r.get("algorithm_name") or r.get("name")
         v_num = r.get("version_number")
         if e_name and v_num is not None:
@@ -543,16 +558,15 @@ def generate_comparison_payload(
 
     metrics = []
     # Collect all unique columns present in the row dictionaries
-    all_keys = set(rows[0].keys())
-    if len(rows) > 1:
-        all_keys.update(rows[1].keys())
+    all_keys = set()
+    for r in rows:
+        all_keys.update(r.keys())
 
     for col in sorted(all_keys):
         if col in exclude_keys:
             continue
             
-        val1 = rows[0].get(col)
-        val2 = rows[1].get(col) if len(rows) > 1 else None
+        vals = [r.get(col) for r in rows]
 
         # Determine if values are numeric
         def is_numeric(v):
@@ -564,7 +578,7 @@ def generate_comparison_payload(
             except (ValueError, TypeError):
                 return False
 
-        if is_numeric(val1) or is_numeric(val2):
+        if any(is_numeric(val) for val in vals):
             display_name = col.replace("_", " ").title()
             # Handle acronym casing
             if display_name == "Cpu Utilization":
@@ -578,16 +592,16 @@ def generate_comparison_payload(
             elif display_name == "F1 Score":
                 display_name = "F1 Score"
 
-            metrics.append({
-                "name": display_name,
-                "entity1": float(val1) if is_numeric(val1) else None,
-                "entity2": float(val2) if is_numeric(val2) else None
-            })
+            metric_entry = {"name": display_name}
+            for idx, val in enumerate(vals):
+                metric_entry[f"entity{idx+1}"] = float(val) if is_numeric(val) else None
+
+            metrics.append(metric_entry)
 
     if not metrics:
         return None
 
-    title = f"{entities[0]} vs {entities[1]}"
+    title = f"Comparison of {len(entities)} Entities" if len(entities) > 2 else f"{entities[0]} vs {entities[1]}"
 
     return {
         "response_type": "comparison",

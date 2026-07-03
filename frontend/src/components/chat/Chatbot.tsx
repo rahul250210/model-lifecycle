@@ -478,7 +478,7 @@ function ComparisonButton({ versions, onClick }: { versions: any[], onClick: () 
 interface ChatComparisonChartProps {
     comparison_title?: string;
     entities: string[];
-    metrics: { name: string; entity1?: number | null; entity2?: number | null }[];
+    metrics: { name: string; [key: string]: any }[];
     theme: any;
     mode: 'dark' | 'light';
 }
@@ -486,12 +486,14 @@ interface ChatComparisonChartProps {
 function ChatComparisonChart({ comparison_title, entities, metrics, theme, mode }: ChatComparisonChartProps) {
     if (!entities || entities.length < 2 || !metrics || metrics.length === 0) return null;
 
-    const e1 = entities[0];
-    const e2 = entities[1];
-
     const colors = [
         theme.primary,
         theme.secondary ?? theme.info ?? '#00B0FF',
+        theme.success ?? '#10B981',
+        theme.warning ?? '#F59E0B',
+        theme.error ?? '#EF4444',
+        '#8B5CF6',
+        '#EC4899',
     ];
 
     const isPercentageMetricName = (name: string) => {
@@ -526,17 +528,21 @@ function ChatComparisonChart({ comparison_title, entities, metrics, theme, mode 
     const percentageMetrics = metrics.filter(m => isPercentageMetricName(m.name));
     const absoluteMetrics = metrics.filter(m => !isPercentageMetricName(m.name));
 
-    const percentageData = percentageMetrics.map(m => ({
-        name: getHumanName(m.name),
-        [e1]: scaleValue(m.entity1, m.name),
-        [e2]: scaleValue(m.entity2, m.name),
-    }));
+    const percentageData = percentageMetrics.map(m => {
+        const item: any = { name: getHumanName(m.name) };
+        entities.forEach((entity, idx) => {
+            item[entity] = scaleValue(m[`entity${idx + 1}`], m.name);
+        });
+        return item;
+    });
 
-    const absoluteData = absoluteMetrics.map(m => ({
-        name: getHumanName(m.name),
-        [e1]: scaleValue(m.entity1, m.name),
-        [e2]: scaleValue(m.entity2, m.name),
-    }));
+    const absoluteData = absoluteMetrics.map(m => {
+        const item: any = { name: getHumanName(m.name) };
+        entities.forEach((entity, idx) => {
+            item[entity] = scaleValue(m[`entity${idx + 1}`], m.name);
+        });
+        return item;
+    });
 
     const tooltipStyle = {
         borderRadius: 12,
@@ -574,8 +580,9 @@ function ChatComparisonChart({ comparison_title, entities, metrics, theme, mode 
                                     <YAxis domain={[0, 100]} tick={{ fill: theme.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
                                     <RechartsTooltip contentStyle={tooltipStyle} />
                                     <Legend wrapperStyle={{ fontSize: 10, fontWeight: 700, paddingTop: 8 }} iconType="circle" iconSize={7} />
-                                    <Bar dataKey={e1} fill={colors[0]} radius={[4, 4, 0, 0]} maxBarSize={20} />
-                                    <Bar dataKey={e2} fill={colors[1]} radius={[4, 4, 0, 0]} maxBarSize={20} />
+                                    {entities.map((entity, idx) => (
+                                        <Bar key={entity} dataKey={entity} fill={colors[idx % colors.length]} radius={[4, 4, 0, 0]} maxBarSize={20} />
+                                    ))}
                                 </BarChart>
                             </ResponsiveContainer>
                         </Box>
@@ -600,8 +607,9 @@ function ChatComparisonChart({ comparison_title, entities, metrics, theme, mode 
                                     <YAxis tick={{ fill: theme.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
                                     <RechartsTooltip contentStyle={tooltipStyle} />
                                     <Legend wrapperStyle={{ fontSize: 10, fontWeight: 700, paddingTop: 8 }} iconType="circle" iconSize={7} />
-                                    <Bar dataKey={e1} fill={colors[0]} radius={[4, 4, 0, 0]} maxBarSize={20} />
-                                    <Bar dataKey={e2} fill={colors[1]} radius={[4, 4, 0, 0]} maxBarSize={20} />
+                                    {entities.map((entity, idx) => (
+                                        <Bar key={entity} dataKey={entity} fill={colors[idx % colors.length]} radius={[4, 4, 0, 0]} maxBarSize={20} />
+                                    ))}
                                 </BarChart>
                             </ResponsiveContainer>
                         </Box>
