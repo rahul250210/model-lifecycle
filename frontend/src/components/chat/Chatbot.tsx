@@ -265,20 +265,35 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                         </span>
                     ))}
                     {versions.every(v => v.id) && versions[0].model_id && versions[0].algorithm_id && versions[0].factory_id && (
-                        <Tooltip title="View In-Depth Comparison Page">
-                            <IconButton onClick={() => {
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
+                            onClick={() => {
                                 onClose();
                                 const idsStr = versions.map(v => v.id).join(",");
                                 navigate(`/algorithms/${versions[0].algorithm_id}/factories/${versions[0].factory_id}/models/${versions[0].model_id}/versions/compare?left=${versions[0].id}&right=${versions[versions.length - 1].id}&ids=${idsStr}`);
-                            }} size="small" sx={{
+                            }}
+                            sx={{
                                 color: theme.primary,
-                                bgcolor: alpha(theme.primary, 0.08), borderRadius: '10px',
-                                '&:hover': { bgcolor: theme.primary, color: '#fff' },
+                                borderColor: alpha(theme.primary, 0.4),
+                                borderRadius: '10px',
+                                textTransform: 'none',
+                                fontWeight: 800,
+                                px: 2,
+                                py: 0.5,
+                                fontSize: '0.72rem',
+                                '&:hover': {
+                                    bgcolor: theme.primary,
+                                    color: '#fff',
+                                    borderColor: theme.primary
+                                },
+                                transition: 'all 0.2s',
                                 ml: 0.5,
-                            }}>
-                                <LaunchIcon fontSize="small" />
-                            </IconButton>
-                        </Tooltip>
+                            }}
+                        >
+                            In-Depth Analysis
+                        </Button>
                     )}
                     <IconButton onClick={onClose} size="small" sx={{
                         color: theme.textMuted, ml: 1,
@@ -1417,16 +1432,7 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick }: Message
                             />
                         )}
 
-                        {/* Inline Comparison Chart */}
-                        {msg.show_compare && msg.entities && msg.metrics && (
-                            <ChatComparisonChart
-                                comparison_title={msg.comparison_title}
-                                entities={msg.entities}
-                                metrics={msg.metrics}
-                                theme={theme}
-                                mode={mode}
-                            />
-                        )}
+
 
                         {/* Download report button */}
                         {msg.type === 'download' && msg.report_type && (
