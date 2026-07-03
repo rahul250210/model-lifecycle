@@ -195,6 +195,42 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
         boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
     };
 
+    const CustomTooltip = ({ active, payload, label }: any) => {
+        if (active && payload && payload.length) {
+            return (
+                <Paper sx={{
+                    p: 1.5,
+                    borderRadius: '12px',
+                    bgcolor: theme.mode === 'dark' ? '#1c1c2b' : '#ffffff',
+                    border: `1px solid ${alpha(theme.border, 0.25)}`,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                    minWidth: 160,
+                    pointerEvents: 'none',
+                }}>
+                    <Typography variant="caption" fontWeight={900} sx={{ display: 'block', mb: 1, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: `1px solid ${alpha(theme.border, 0.1)}`, pb: 0.5 }}>
+                        {label}
+                    </Typography>
+                    <Stack spacing={0.8}>
+                        {payload.map((entry: any) => (
+                            <Stack key={entry.name} direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
+                                <Stack direction="row" spacing={1} alignItems="center">
+                                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: entry.color }} />
+                                    <Typography variant="caption" fontWeight={750} sx={{ color: theme.textSecondary, fontSize: '0.72rem' }}>
+                                        {entry.name}
+                                    </Typography>
+                                </Stack>
+                                <Typography variant="body2" fontWeight={850} sx={{ color: theme.textMain, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.74rem' }}>
+                                    {entry.value}
+                                </Typography>
+                            </Stack>
+                        ))}
+                    </Stack>
+                </Paper>
+            );
+        }
+        return null;
+    };
+
     const SectionTitle = ({ children }: { children: string }) => (
         <Typography variant="overline" sx={{
             display: 'block', fontWeight: 900, letterSpacing: 2,
@@ -325,6 +361,30 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
 
             <DialogContent sx={{ p: 3.5, overflowX: 'hidden', bgcolor: theme.mode === 'dark' ? '#0d0d15' : '#f4f6fa' }}>
                 
+                {/* Shared Chart Legend */}
+                <Box sx={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    gap: 3,
+                    flexWrap: 'wrap',
+                    mb: 3.5,
+                    p: 1.8,
+                    borderRadius: '16px',
+                    bgcolor: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.015)',
+                    border: `1px solid ${alpha(theme.border, 0.1)}`,
+                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                }}>
+                    {versions.map((v, i) => (
+                        <Stack key={v.id} direction="row" spacing={1} alignItems="center">
+                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colors[i % colors.length] }} />
+                            <Typography variant="caption" sx={{ fontWeight: 800, color: theme.textSecondary, fontSize: '0.72rem' }}>
+                                {getVersionLabel(v)}
+                            </Typography>
+                        </Stack>
+                    ))}
+                </Box>
+
                 {/* ── Charts Grid (Performance Metrics & Resource Usage side-by-side) ── */}
                 <Box sx={{
                     display: 'grid',
@@ -358,8 +418,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.textMain, 0.07)} />
                                     <XAxis dataKey="name" tick={{ fill: theme.textSecondary, fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} />
                                     <YAxis domain={[0, 100]} tick={{ fill: theme.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
-                                    <RechartsTooltip contentStyle={tooltipStyle} />
-                                    <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700, paddingTop: 12 }} iconType="circle" iconSize={8} />
+                                    <RechartsTooltip content={<CustomTooltip />} />
                                     {versions.map((v, index) => {
                                         const label = getVersionLabel(v);
                                         return (
@@ -397,8 +456,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={alpha(theme.textMain, 0.07)} />
                                     <XAxis type="number" tick={{ fill: theme.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
                                     <YAxis dataKey="name" type="category" width={110} tick={{ fill: theme.textSecondary, fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                                    <RechartsTooltip contentStyle={tooltipStyle} />
-                                    <Legend wrapperStyle={{ fontSize: 11, fontWeight: 700, paddingTop: 12 }} iconType="circle" iconSize={8} />
+                                    <RechartsTooltip content={<CustomTooltip />} />
                                     {versions.map((v, index) => {
                                         const label = getVersionLabel(v);
                                         return (
