@@ -14,6 +14,43 @@ from app.services.response_generator import generate_response
 
 # Dynamic metric extraction
 
+def extract_all_version_numbers(q: str) -> List[int]:
+    q_lower = q.lower()
+    
+    words_map = {
+        "first": 1, "1st": 1, "one": 1,
+        "second": 2, "2nd": 2, "two": 2,
+        "third": 3, "3rd": 3, "three": 3,
+        "fourth": 4, "4th": 4, "four": 4,
+        "fifth": 5, "5th": 5, "five": 5,
+        "sixth": 6, "6th": 6, "six": 6,
+        "seventh": 7, "7th": 7, "seven": 7,
+        "eighth": 8, "8th": 8, "eight": 8,
+        "ninth": 9, "9th": 9, "nine": 9,
+        "tenth": 10, "10th": 10, "ten": 10
+    }
+    
+    ver_nums = []
+    # 1. Direct digits match
+    for m in re.finditer(r"\bversion\s*(\d+)\b|\bv\s*(\d+)\b", q_lower):
+        val = m.group(1) or m.group(2)
+        if val:
+            ver_nums.append(int(val))
+            
+    # 2. Check for written words/suffixes
+    positions = []
+    for word, num in words_map.items():
+        for match in re.finditer(r"\b" + re.escape(word) + r"\b", q_lower):
+            positions.append((match.start(), num))
+            
+    positions.sort()
+    for pos, num in positions:
+        if num not in ver_nums:
+            ver_nums.append(num)
+            
+    return ver_nums
+
+
 def generate_dynamic_actions(
     user_question: str,
     query_results: Dict[str, Any],
@@ -329,11 +366,7 @@ def generate_comparison_payload(
         if len(matched_model_ids) == 1:
             import re
             m_id = matched_model_ids[0]
-            ver_nums = []
-            for m in re.finditer(r"\bversion\s*(\d+)\b|\bv\s*(\d+)\b", q):
-                val = m.group(1) or m.group(2)
-                if val:
-                    ver_nums.append(int(val))
+            ver_nums = extract_all_version_numbers(q)
                     
             if len(ver_nums) >= 2:
                 for v_num in ver_nums:
@@ -723,9 +756,9 @@ def handle_download_interactive(q: str, context: Optional[List[Dict[str, Any]]],
                 
         if model_row:
             version_row = None
-            ver_num_match = re.search(r"\bversion\s*(\d+)\b|\bv\s*(\d+)\b", q)
-            if ver_num_match:
-                ver_num = int(ver_num_match.group(1) or ver_num_match.group(2))
+            ver_nums = extract_all_version_numbers(q)
+            if ver_nums:
+                ver_num = ver_nums[0]
                 version_row = db_session.execute(
                     text("SELECT id, version_number FROM model_versions WHERE model_id = :model_id AND version_number = :version_number"),
                     {"model_id": model_row.id, "version_number": ver_num}
