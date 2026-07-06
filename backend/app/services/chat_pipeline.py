@@ -15,6 +15,33 @@ from app.services.response_generator import generate_response
 # Dynamic metric extraction
 
 def extract_all_version_numbers(q: str) -> List[int]:
+    # 1. Try to use LLM first for intelligent, scalable translation
+    try:
+        from app.services.llm_service import call_llm
+        prompt = f"""You are a precise version number extractor.
+Given the following user query, extract all version numbers referenced in it.
+Convert any ordinal references or words to their integer representation (e.g., 'first' -> 1, 'second' -> 2, 'eleventh' -> 11).
+If a digit version is found like 'v3' or 'version 4', extract the number itself (e.g. 3, 4).
+If the query asks for 'last', 'latest', 'newest', or 'active', output the word 'latest'.
+Return ONLY a comma-separated list of integers/keywords (e.g., "1, 2" or "latest"). If no version number is referenced, return "None".
+Do NOT output any conversational text, explanations, or quotes.
+
+User Query: "{q}"
+
+Output:"""
+        llm_res = call_llm(prompt, temperature=0.0).strip()
+        if llm_res and llm_res != "__LLM_OFFLINE__" and llm_res.lower() != "none":
+            parsed_nums = []
+            parts = [p.strip() for p in llm_res.split(",")]
+            for p in parts:
+                if p.isdigit():
+                    parsed_nums.append(int(p))
+            if parsed_nums:
+                return parsed_nums
+    except Exception as e:
+        print(f"[ChatPipeline] LLM version extraction failed: {e}. Using regex fallback.")
+
+    # 2. Regex fallback for offline use / local stability
     q_lower = q.lower()
     
     words_map = {
