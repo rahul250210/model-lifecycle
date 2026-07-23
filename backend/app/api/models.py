@@ -12,6 +12,7 @@ from app.models.factory import Factory
 from app.models.version import ModelVersion
 from app.schemas.model import ModelCreate, ModelOut
 from app.utils.logger import logger
+from app.utils.resolver import resolve_algorithm_id, resolve_factory_id, resolve_model_id
 
 router = APIRouter()
 
@@ -24,16 +25,19 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 def create_model(
-    algorithm_id: int,
-    factory_id: int,
+    algorithm_id: str,
+    factory_id: str,
     model: ModelCreate,
     db: Session = Depends(get_db),
 ):
-    algorithm = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
+    algo_id = resolve_algorithm_id(db, algorithm_id)
+    fac_id = resolve_factory_id(db, factory_id)
+
+    algorithm = db.query(Algorithm).filter(Algorithm.id == algo_id).first()
     if not algorithm:
         raise HTTPException(404, "Algorithm not found")
 
-    factory = db.query(Factory).filter(Factory.id == factory_id).first()
+    factory = db.query(Factory).filter(Factory.id == fac_id).first()
     if not factory:
         raise HTTPException(404, "Factory not found")
 
@@ -41,8 +45,8 @@ def create_model(
     existing = (
         db.query(Model)
         .filter(
-            Model.algorithm_id == algorithm_id,
-            Model.factory_id == factory_id,
+            Model.algorithm_id == algo_id,
+            Model.factory_id == fac_id,
             func.lower(Model.name) == model.name.lower(),
         )
         .first()
@@ -56,8 +60,8 @@ def create_model(
     db_model = Model(
         name=model.name,
         description=model.description,
-        algorithm_id=algorithm_id,
-        factory_id=factory_id,
+        algorithm_id=algo_id,
+        factory_id=fac_id,
     )
     db.add(db_model)
     db.commit()
@@ -76,15 +80,18 @@ def create_model(
     response_model=list[ModelOut],
 )
 def list_models(
-    algorithm_id: int,
-    factory_id: int,
+    algorithm_id: str,
+    factory_id: str,
     db: Session = Depends(get_db),
 ):
-    algorithm = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
+    algo_id = resolve_algorithm_id(db, algorithm_id)
+    fac_id = resolve_factory_id(db, factory_id)
+
+    algorithm = db.query(Algorithm).filter(Algorithm.id == algo_id).first()
     if not algorithm:
         raise HTTPException(404, "Algorithm not found")
 
-    factory = db.query(Factory).filter(Factory.id == factory_id).first()
+    factory = db.query(Factory).filter(Factory.id == fac_id).first()
     if not factory:
         raise HTTPException(404, "Factory not found")
 
@@ -94,7 +101,7 @@ def list_models(
             func.count(ModelVersion.id).label("versions_count"),
         )
         .outerjoin(ModelVersion, ModelVersion.model_id == Model.id)
-        .filter(Model.algorithm_id == algorithm_id, Model.factory_id == factory_id)
+        .filter(Model.algorithm_id == algo_id, Model.factory_id == fac_id)
         .group_by(Model.id)
         .order_by(Model.created_at.desc())
         .all()
@@ -116,18 +123,22 @@ def list_models(
     response_model=ModelOut,
 )
 def update_model(
-    algorithm_id: int,
-    factory_id: int,
-    model_id: int,
+    algorithm_id: str,
+    factory_id: str,
+    model_id: str,
     model: ModelCreate,
     db: Session = Depends(get_db),
 ):
+    algo_id = resolve_algorithm_id(db, algorithm_id)
+    fac_id = resolve_factory_id(db, factory_id)
+    mod_id = resolve_model_id(db, model_id, algo_id, fac_id)
+
     db_model = (
         db.query(Model)
         .filter(
-            Model.id == model_id,
-            Model.algorithm_id == algorithm_id,
-            Model.factory_id == factory_id,
+            Model.id == mod_id,
+            Model.algorithm_id == algo_id,
+            Model.factory_id == fac_id,
         )
         .first()
     )
@@ -139,10 +150,10 @@ def update_model(
     existing = (
         db.query(Model)
         .filter(
-            Model.algorithm_id == algorithm_id,
-            Model.factory_id == factory_id,
+            Model.algorithm_id == algo_id,
+            Model.factory_id == fac_id,
             func.lower(Model.name) == model.name.lower(),
-            Model.id != model_id,
+            Model.id != mod_id,
         )
         .first()
     )
@@ -171,17 +182,21 @@ def update_model(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_model(
-    algorithm_id: int,
-    factory_id: int,
-    model_id: int,
+    algorithm_id: str,
+    factory_id: str,
+    model_id: str,
     db: Session = Depends(get_db),
 ):
+    algo_id = resolve_algorithm_id(db, algorithm_id)
+    fac_id = resolve_factory_id(db, factory_id)
+    mod_id = resolve_model_id(db, model_id, algo_id, fac_id)
+
     model = (
         db.query(Model)
         .filter(
-            Model.id == model_id,
-            Model.algorithm_id == algorithm_id,
-            Model.factory_id == factory_id,
+            Model.id == mod_id,
+            Model.algorithm_id == algo_id,
+            Model.factory_id == fac_id,
         )
         .first()
     )
@@ -191,7 +206,7 @@ def delete_model(
 
     # delete versions first
     db.query(ModelVersion).filter(
-        ModelVersion.model_id == model_id
+        ModelVersion.model_id == mod_id
     ).delete()
 
     db.delete(model)
@@ -207,17 +222,21 @@ def delete_model(
     response_model=ModelOut,
 )
 def get_model(
-    algorithm_id: int,
-    factory_id: int,
-    model_id: int,
+    algorithm_id: str,
+    factory_id: str,
+    model_id: str,
     db: Session = Depends(get_db),
 ):
+    algo_id = resolve_algorithm_id(db, algorithm_id)
+    fac_id = resolve_factory_id(db, factory_id)
+    mod_id = resolve_model_id(db, model_id, algo_id, fac_id)
+
     model = (
         db.query(Model)
         .filter(
-            Model.id == model_id,
-            Model.algorithm_id == algorithm_id,
-            Model.factory_id == factory_id,
+            Model.id == mod_id,
+            Model.algorithm_id == algo_id,
+            Model.factory_id == fac_id,
         )
         .first()
     )
@@ -227,10 +246,33 @@ def get_model(
 
     model.versions_count = (
         db.query(func.count(ModelVersion.id))
-        .filter(ModelVersion.model_id == model_id)
+        .filter(ModelVersion.model_id == mod_id)
         .scalar()
     )
 
+    return model
+
+
+# ======================================================
+# GET MODEL BY ID (GLOBAL FALLBACK)
+# ======================================================
+@router.get(
+    "/by-id/{model_id}",
+    response_model=ModelOut,
+)
+def get_model_by_id(
+    model_id: str,
+    db: Session = Depends(get_db),
+):
+    mod_id = resolve_model_id(db, model_id)
+    model = db.query(Model).filter(Model.id == mod_id).first()
+    if not model:
+        raise HTTPException(404, "Model not found")
+    model.versions_count = (
+        db.query(func.count(ModelVersion.id))
+        .filter(ModelVersion.model_id == mod_id)
+        .scalar()
+    )
     return model
 
 
@@ -241,17 +283,21 @@ def get_model(
     "/{algorithm_id}/factories/{factory_id}/models/{model_id}/report",
 )
 def generate_model_report(
-    algorithm_id: int,
-    factory_id: int,
-    model_id: int,
+    algorithm_id: str,
+    factory_id: str,
+    model_id: str,
     db: Session = Depends(get_db),
 ):
+    algo_id = resolve_algorithm_id(db, algorithm_id)
+    fac_id = resolve_factory_id(db, factory_id)
+    mod_id = resolve_model_id(db, model_id, algo_id, fac_id)
+
     model = (
         db.query(Model)
         .filter(
-            Model.id == model_id,
-            Model.algorithm_id == algorithm_id,
-            Model.factory_id == factory_id,
+            Model.id == mod_id,
+            Model.algorithm_id == algo_id,
+            Model.factory_id == fac_id,
         )
         .first()
     )
@@ -261,7 +307,7 @@ def generate_model_report(
 
     versions = (
         db.query(ModelVersion)
-        .filter(ModelVersion.model_id == model_id)
+        .filter(ModelVersion.model_id == mod_id)
         .order_by(ModelVersion.version_number.asc())
         .all()
     )

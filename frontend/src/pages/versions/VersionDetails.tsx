@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -25,6 +25,12 @@ import {
   Tooltip,
   Breadcrumbs,
   Link,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 
 import NavigateNextIcon from "@mui/icons-material/NavigateNext";
@@ -200,6 +206,10 @@ export default function VersionDetails() {
     code: false,
   });
 
+  const [modelName, setModelName] = useState("");
+  const [factoryName, setFactoryName] = useState("");
+  const [algorithmName, setAlgorithmName] = useState("");
+
   const [datasetVisibleCount, setDatasetVisibleCount] = useState(10);
   const [labelsVisibleCount, setLabelsVisibleCount] = useState(10);
 
@@ -254,14 +264,25 @@ export default function VersionDetails() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [versionRes, artifactsRes, deltaRes] = await Promise.all([
+        const [
+          versionRes, artifactsRes, deltaRes,
+          modelRes, factoryRes, algoRes
+        ] = await Promise.allSettled([
           axios.get(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}`),
           axios.get(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}/artifacts`),
           axios.get(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${versionId}/delta`),
+          axios.get(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}`),
+          axios.get(`/factories/${factoryId}`),
+          axios.get(`/algorithms/${algorithmId}`)
         ]);
-        setVersion(versionRes.data);
-        setArtifacts(artifactsRes.data);
-        setDelta(deltaRes.data);
+
+        if (versionRes.status === 'fulfilled') setVersion(versionRes.value.data);
+        if (artifactsRes.status === 'fulfilled') setArtifacts(artifactsRes.value.data);
+        if (deltaRes.status === 'fulfilled') setDelta(deltaRes.value.data);
+        if (modelRes.status === 'fulfilled') setModelName(modelRes.value.data.name || "");
+        if (factoryRes.status === 'fulfilled') setFactoryName(factoryRes.value.data.name || "");
+        if (algoRes.status === 'fulfilled') setAlgorithmName(algoRes.value.data.name || "");
+
       } catch (err) {
         console.error("Failed to load version details", err);
       } finally {
@@ -271,6 +292,45 @@ export default function VersionDetails() {
     fetchData();
   }, [factoryId, algorithmId, modelId, versionId]);
 
+
+  const parsedIni = React.useMemo(() => {
+    if (!version || !(version as any).ini_config) return [];
+    
+    const lines = ((version as any).ini_config as string).split('\n');
+    const result: { section: string; pairs: { key: string, value: string, meaning: string }[] }[] = [];
+    let currentSection = { section: 'Global', pairs: [] as { key: string, value: string, meaning: string }[] };
+    let lastComment = "";
+    
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        lastComment = "";
+        return;
+      }
+      if (trimmed.startsWith(';') || trimmed.startsWith('#')) {
+        lastComment = trimmed.substring(1).trim();
+        return;
+      }
+      
+      if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        if (currentSection.pairs.length > 0) result.push(currentSection);
+        currentSection = { section: trimmed.slice(1, -1), pairs: [] };
+        lastComment = "";
+      } else {
+        const idx = trimmed.indexOf('=');
+        if (idx > 0) {
+          currentSection.pairs.push({
+            key: trimmed.substring(0, idx).trim(),
+            value: trimmed.substring(idx + 1).trim(),
+            meaning: lastComment
+          });
+          lastComment = "";
+        }
+      }
+    });
+    if (currentSection.pairs.length > 0) result.push(currentSection);
+    return result;
+  }, [version]);
 
   if (loading) {
     return (
@@ -303,7 +363,7 @@ export default function VersionDetails() {
 
   const displayedLabels = (() => {
     if (isFirstVersion || showFullDataset) return labelFiles;
-    return labelFiles.slice(0, delta.label.new);
+    return labelFiles.slice(0, delta?.label?.new || 0);
   })();
 
   const metricColor = (v?: number | null) => {
@@ -388,7 +448,7 @@ export default function VersionDetails() {
                 onClick={() => navigate("/algorithms")}
                 sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
               >
-                Algorithms
+                {algorithmName || "Algorithms"}
               </Link>
               <Link
                 underline="hover"
@@ -396,7 +456,7 @@ export default function VersionDetails() {
                 onClick={() => navigate(`/algorithms/${algorithmId}/factories`)}
                 sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
               >
-                Factories
+                {factoryName || "Factories"}
               </Link>
               <Link
                 underline="hover"
@@ -404,7 +464,7 @@ export default function VersionDetails() {
                 onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}`)}
                 sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
               >
-                Model
+                {modelName || "Model"}
               </Link>
               <Link
                 underline="hover"
@@ -502,6 +562,70 @@ export default function VersionDetails() {
                 )}
               </CardContent>
             </Card>
+
+            {/* INI CONFIGURATION */}
+            {parsedIni.length > 0 && (
+              <Paper 
+                elevation={0}
+                sx={{ 
+                  borderRadius: "24px", 
+                  border: `1px solid ${theme.border}`, 
+                  bgcolor: theme.paper, 
+                  overflow: 'hidden',
+                  mb: 4
+                }}
+              >
+                <Box sx={{ p: 4, pb: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <SettingsIcon sx={{ color: theme.primary }} />
+                  <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    INI Configuration
+                  </Typography>
+                </Box>
+                
+                <TableContainer>
+                  <Table sx={{ minWidth: 650 }}>
+                    <TableHead>
+                      <TableRow sx={{ bgcolor: alpha(theme.primary, 0.05) }}>
+                        <TableCell sx={{ fontWeight: 800, color: theme.primary, width: '25%', py: 2.5, borderBottom: `2px solid ${alpha(theme.primary, 0.2)}` }}>PARAMETER</TableCell>
+                        <TableCell sx={{ fontWeight: 800, color: theme.primary, width: '45%', py: 2.5, borderBottom: `2px solid ${alpha(theme.primary, 0.2)}` }}>DESCRIPTION</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 800, color: theme.primary, width: '30%', py: 2.5, borderBottom: `2px solid ${alpha(theme.primary, 0.2)}` }}>VALUE</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {parsedIni.map((sectionObj, sIdx) => (
+                        <React.Fragment key={sIdx}>
+                          {sectionObj.pairs.map((pair, pIdx) => (
+                            <TableRow key={pIdx} sx={{ '&:hover': { bgcolor: alpha(theme.textMain, 0.02) }, transition: 'background-color 0.2s' }}>
+                              <TableCell sx={{ verticalAlign: 'middle', borderBottom: `1px solid ${alpha(theme.border, 0.3)}` }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                  <Box>
+                                    <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
+                                      {pair.key}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                              </TableCell>
+                              
+                              <TableCell sx={{ verticalAlign: 'middle', borderBottom: `1px solid ${alpha(theme.border, 0.3)}` }}>
+                                <Typography variant="body2" sx={{ color: pair.meaning ? theme.textMain : theme.textMuted, fontStyle: pair.meaning ? 'normal' : 'italic' }}>
+                                  {pair.meaning || "No description"}
+                                </Typography>
+                              </TableCell>
+                              
+                              <TableCell align="right" sx={{ verticalAlign: 'middle', borderBottom: `1px solid ${alpha(theme.border, 0.3)}` }}>
+                                <Typography variant="body2" sx={{ display: 'inline-block', color: theme.textMain, fontFamily: 'monospace', fontWeight: 800, bgcolor: alpha(theme.textMain, 0.05), px: 1.5, py: 1, borderRadius: '6px', wordBreak: 'break-all' }}>
+                                  {pair.value}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </React.Fragment>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Paper>
+            )}
 
             {/* EVALUATION DASHBOARD */}
             <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${theme.border}`, bgcolor: theme.paper }}>

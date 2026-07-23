@@ -16,6 +16,7 @@ from app.schemas.algorithm import (
     AlgorithmOut,
 )
 from app.utils.logger import logger
+from app.utils.resolver import resolve_algorithm_id
 
 router = APIRouter()
 
@@ -45,6 +46,7 @@ def create_algorithm(
     db_algorithm = Algorithm(
         name=algorithm.name,
         description=algorithm.description,
+        ini_config=algorithm.ini_config,
     )
 
     db.add(db_algorithm)
@@ -98,16 +100,17 @@ def list_algorithms(
     response_model=AlgorithmOut,
 )
 def get_algorithm(
-    algorithm_id: int,
+    algorithm_id: str,
     db: Session = Depends(get_db),
 ):
+    algo_id = resolve_algorithm_id(db, algorithm_id)
     row = (
         db.query(
             Algorithm,
             func.count(Model.id).label("models_count"),
         )
         .outerjoin(Model, Model.algorithm_id == Algorithm.id)
-        .filter(Algorithm.id == algorithm_id)
+        .filter(Algorithm.id == algo_id)
         .group_by(Algorithm.id)
         .first()
     )
@@ -157,6 +160,9 @@ def update_algorithm(
 
     if payload.description is not None:
         algo.description = payload.description
+
+    if payload.ini_config is not None:
+        algo.ini_config = payload.ini_config
 
     db.commit()
     db.refresh(algo)
@@ -305,6 +311,19 @@ def generate_algorithm_report(
     stream = io.StringIO()
     csv_writer = csv.writer(stream)
     
+    # Write Algorithm Header Information
+    csv_writer.writerow(["Algorithm Details"])
+    csv_writer.writerow(["Name", algo.name])
+    csv_writer.writerow(["Description", algo.description or "N/A"])
+    csv_writer.writerow([])
+
+    if algo.ini_config:
+        csv_writer.writerow(["INI Configuration"])
+        for line in algo.ini_config.splitlines():
+            if line.strip(): # Avoid blank lines
+                csv_writer.writerow([line.strip()])
+        csv_writer.writerow([])
+
     # Header Row
     csv_writer.writerow([
         "Factory Name",

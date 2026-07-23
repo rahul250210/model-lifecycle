@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import {
     Box, IconButton, Typography, Paper, TextField, Stack, Avatar,
-    alpha, CircularProgress, Fab, Zoom, Chip, Tooltip,
+    alpha, Fab, Zoom, Chip, Tooltip,
     Dialog, DialogContent, DialogTitle, DialogActions, Button
 } from '@mui/material';
 import {
@@ -187,13 +187,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
         ? `${(b / 1024 / 1024).toFixed(2)} MB`
         : b > 1024 ? `${(b / 1024).toFixed(1)} KB` : `${b} B`;
 
-    const tooltipStyle = {
-        borderRadius: 12,
-        background: theme.mode === 'dark' ? '#1a1a2e' : '#fff',
-        border: `1px solid ${alpha(theme.border, 0.3)}`,
-        fontSize: 12, fontWeight: 700,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-    };
+
 
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
@@ -231,12 +225,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
         return null;
     };
 
-    const SectionTitle = ({ children }: { children: string }) => (
-        <Typography variant="overline" sx={{
-            display: 'block', fontWeight: 900, letterSpacing: 2,
-            color: theme.textMuted, fontSize: '0.65rem', mb: 2,
-        }}>{children}</Typography>
-    );
+
 
     const StatChip = ({ label, color }: { label: string, color: string }) => (
         <Chip label={label} size="small" sx={{
@@ -254,6 +243,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
             onClose={onClose}
             maxWidth="md"
             fullWidth
+            sx={{ zIndex: 10000 }}
             PaperProps={{
                 sx: {
                     borderRadius: '24px',
@@ -296,12 +286,12 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                             </Typography>
                         </Box>
                     </Stack>
-                    
+
                     {/* Compared versions chips with flex wrapping */}
-                    <Box sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: 0.5, 
+                    <Box sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 0.5,
                         flexWrap: 'wrap',
                         minWidth: 0
                     }}>
@@ -360,7 +350,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
             </Box>
 
             <DialogContent sx={{ p: 3.5, overflowX: 'hidden', bgcolor: theme.mode === 'dark' ? '#0d0d15' : '#f4f6fa' }}>
-                
+
                 {/* Shared Chart Legend */}
                 <Box sx={{
                     display: 'flex',
@@ -496,7 +486,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                                 </Typography>
                             </Box>
                         </Stack>
-                        
+
                         <Box sx={{
                             display: 'grid',
                             gridTemplateColumns: `repeat(${versions.length + 1}, 1fr)`,
@@ -523,7 +513,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                                 return [k, ...versions.map(v => String((v.parameters ?? {})[k] ?? '—'))].map((val, ci) => (
                                     <Box key={`${k}-${ci}`} sx={{
                                         px: 2.5, py: 1.5,
-                                        bgcolor: changed 
+                                        bgcolor: changed
                                             ? (theme.mode === 'dark' ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.03)')
                                             : (ri % 2 === 0 ? 'transparent' : alpha(theme.textMain, 0.015)),
                                         borderRight: ci < columns.length - 1 ? `1px solid ${alpha(theme.border, 0.15)}` : 'none',
@@ -536,7 +526,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                                             fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
                                             fontSize: '0.74rem',
                                             fontWeight: ci === 0 ? 800 : 500,
-                                            color: ci === 0 
+                                            color: ci === 0
                                                 ? (changed ? (theme.warning ?? '#F59E0B') : theme.textSecondary)
                                                 : theme.textMain,
                                         }}>{val}</Typography>
@@ -568,7 +558,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                                 Total Artifact Footprint
                             </Typography>
                         </Stack>
-                        
+
                         <Box sx={{
                             display: 'grid',
                             gridTemplateColumns: `repeat(auto-fit, minmax(200px, 1fr))`,
@@ -579,7 +569,7 @@ function ComparisonModal({ versions, open, onClose }: { versions: any[], open: b
                                 const color = colors[index % colors.length];
                                 return (
                                     <Tooltip key={label} title={`Download all artifacts for v${v.version_number}`}>
-                                        <Box 
+                                        <Box
                                             onClick={() => {
                                                 const algId = v.algorithm_id || versions[0].algorithm_id;
                                                 const facId = v.factory_id || versions[0].factory_id;
@@ -684,12 +674,12 @@ function ComparisonButton({ versions, onClick }: { versions: any[], onClick: () 
 interface ChatComparisonChartProps {
     comparison_title?: string;
     entities: string[];
-    metrics: { name: string; [key: string]: any }[];
+    metrics: { name: string;[key: string]: any }[];
     theme: any;
     mode: 'dark' | 'light';
 }
 
-function ChatComparisonChart({ comparison_title, entities, metrics, theme, mode }: ChatComparisonChartProps) {
+export function ChatComparisonChart({ comparison_title, entities, metrics, theme, mode }: ChatComparisonChartProps) {
     if (!entities || entities.length < 2 || !metrics || metrics.length === 0) return null;
 
     const colors = [
@@ -845,10 +835,8 @@ function DownloadReportButton({
     modelId?: number | null;
 }) {
     const { theme } = useTheme();
-    const [downloading, setDownloading] = useState(false);
 
-    const handleDownload = async () => {
-        setDownloading(true);
+    const handleDownload = () => {
         try {
             const params = new URLSearchParams({ report_type: reportType });
             if (reportName) params.append('name', reportName);
@@ -857,36 +845,11 @@ function DownloadReportButton({
             if (factoryId) params.append('factory_id', String(factoryId));
             if (factoryName) params.append('factory_name', factoryName);
             if (modelId) params.append('model_id', String(modelId));
-            const res = await fetch(`${API_BASE_URL}/chatbot/download-report?${params.toString()}`);
-            const blob = await res.blob();
-            const disposition = res.headers.get('Content-Disposition') ?? '';
 
-            // Try to parse filename from Content-Disposition header (plain or RFC-5987 encoded)
-            let filename = '';
-            const rfcMatch = disposition.match(/filename\*=(?:UTF-8'')?([^\s;]+)/i);
-            const plainMatch = disposition.match(/filename="([^"]+)"/);
-            if (rfcMatch) {
-                filename = decodeURIComponent(rfcMatch[1]);
-            } else if (plainMatch) {
-                filename = plainMatch[1];
-            }
-
-            // Fallback: build a descriptive name from reportType + reportName
-            if (!filename) {
-                const safeName = reportName
-                    ? reportName.replace(/\s+/g, '_')
-                    : 'all';
-                filename = `MARS_${reportType}_report_${safeName}.csv`;
-            }
-
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url; a.download = filename; a.click();
-            URL.revokeObjectURL(url);
+            const url = `${API_BASE_URL}/chatbot/download-report?${params.toString()}`;
+            window.location.href = url;
         } catch (e) {
-            console.error('Download failed:', e);
-        } finally {
-            setDownloading(false);
+            console.error('Download setup failed:', e);
         }
     };
 
@@ -897,18 +860,16 @@ function DownloadReportButton({
 
     return (
         <Box
-            onClick={downloading ? undefined : handleDownload}
+            onClick={handleDownload}
             sx={{
-                mt: 1.5, cursor: downloading ? 'default' : 'pointer',
+                mt: 1.5, cursor: 'pointer',
                 borderRadius: '14px',
-                background: downloading
-                    ? alpha(theme.textMain, 0.04)
-                    : `linear-gradient(135deg, ${alpha(theme.success, 0.1)}, ${alpha(theme.primary, 0.08)})`,
-                border: `1px solid ${alpha(downloading ? theme.border : theme.success, 0.3)}`,
+                background: `linear-gradient(135deg, ${alpha(theme.success, 0.1)}, ${alpha(theme.primary, 0.08)})`,
+                border: `1px solid ${alpha(theme.success, 0.3)}`,
                 px: 2, py: 1.5,
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 transition: 'all 0.2s ease',
-                '&:hover': downloading ? {} : {
+                '&:hover': {
                     background: `linear-gradient(135deg, ${alpha(theme.success, 0.16)}, ${alpha(theme.primary, 0.12)})`,
                     border: `1px solid ${alpha(theme.success, 0.5)}`,
                     transform: 'translateY(-1px)',
@@ -917,21 +878,17 @@ function DownloadReportButton({
             }}
         >
             <Stack direction="row" spacing={1} alignItems="center">
-                {downloading
-                    ? <CircularProgress size={14} sx={{ color: theme.primary }} />
-                    : <DownloadIcon sx={{ fontSize: 16, color: theme.success }} />}
+                <DownloadIcon sx={{ fontSize: 16, color: theme.success }} />
                 <Box>
                     <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMain, fontSize: '0.72rem', display: 'block', lineHeight: 1.2 }}>
-                        {downloading ? 'Preparing CSV…' : `Download ${label} Report${nameStr}`}
+                        {`Download ${label} Report${nameStr}`}
                     </Typography>
-                    {!downloading && (
-                        <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem' }}>
-                            CSV · All fields included
-                        </Typography>
-                    )}
+                    <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem' }}>
+                        CSV · All fields included
+                    </Typography>
                 </Box>
             </Stack>
-            {!downloading && <DownloadIcon sx={{ fontSize: 14, color: theme.success, opacity: 0.6 }} />}
+            <DownloadIcon sx={{ fontSize: 14, color: theme.success, opacity: 0.6 }} />
         </Box>
     );
 }
@@ -939,59 +896,28 @@ function DownloadReportButton({
 // ─── Download Zip Button (shown in chat bubble for model version export bundle) ───
 function DownloadZipButton({ downloadUrl, modelName, versionNumber, components }: { downloadUrl: string, modelName: string, versionNumber: number, components: string[] }) {
     const { theme } = useTheme();
-    const [downloading, setDownloading] = useState(false);
 
-    const handleDownload = async () => {
-        setDownloading(true);
+    const handleDownload = () => {
         try {
             const finalUrl = downloadUrl.startsWith('http') ? downloadUrl : `${API_BASE_URL}${downloadUrl}`;
-            const res = await fetch(finalUrl);
-            if (!res.ok) {
-                throw new Error(`Failed to download: ${res.statusText}`);
-            }
-            const blob = await res.blob();
-            const disposition = res.headers.get('Content-Disposition') ?? '';
-
-            let filename = '';
-            const rfcMatch = disposition.match(/filename\*=(?:UTF-8'')?([^\s;]+)/i);
-            const plainMatch = disposition.match(/filename="([^"]+)"/);
-            if (rfcMatch) {
-                filename = decodeURIComponent(rfcMatch[1]);
-            } else if (plainMatch) {
-                filename = plainMatch[1];
-            }
-
-            if (!filename) {
-                filename = `${modelName}_v${versionNumber}_bundle.zip`;
-            }
-
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
+            window.location.href = finalUrl;
         } catch (e) {
-            console.error('ZIP Download failed:', e);
-        } finally {
-            setDownloading(false);
+            console.error('ZIP Download setup failed:', e);
         }
     };
 
     return (
         <Box
-            onClick={downloading ? undefined : handleDownload}
+            onClick={handleDownload}
             sx={{
-                mt: 1.5, cursor: downloading ? 'default' : 'pointer',
+                mt: 1.5, cursor: 'pointer',
                 borderRadius: '14px',
-                background: downloading
-                    ? alpha(theme.textMain, 0.04)
-                    : `linear-gradient(135deg, ${alpha(theme.success, 0.1)}, ${alpha(theme.primary, 0.08)})`,
-                border: `1px solid ${alpha(downloading ? theme.border : theme.success, 0.3)}`,
+                background: `linear-gradient(135deg, ${alpha(theme.success, 0.1)}, ${alpha(theme.primary, 0.08)})`,
+                border: `1px solid ${alpha(theme.success, 0.3)}`,
                 px: 2, py: 1.5,
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 transition: 'all 0.2s ease',
-                '&:hover': downloading ? {} : {
+                '&:hover': {
                     background: `linear-gradient(135deg, ${alpha(theme.success, 0.16)}, ${alpha(theme.primary, 0.12)})`,
                     border: `1px solid ${alpha(theme.success, 0.5)}`,
                     transform: 'translateY(-1px)',
@@ -1000,21 +926,17 @@ function DownloadZipButton({ downloadUrl, modelName, versionNumber, components }
             }}
         >
             <Stack direction="row" spacing={1} alignItems="center">
-                {downloading
-                    ? <CircularProgress size={14} sx={{ color: theme.primary }} />
-                    : <DownloadIcon sx={{ fontSize: 16, color: theme.success }} />}
+                <DownloadIcon sx={{ fontSize: 16, color: theme.success }} />
                 <Box>
                     <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMain, fontSize: '0.72rem', display: 'block', lineHeight: 1.2 }}>
-                        {downloading ? 'Preparing ZIP…' : `Download ${modelName} v${versionNumber} Export Bundle`}
+                        {`Download ${modelName} v${versionNumber} Export Bundle`}
                     </Typography>
-                    {!downloading && (
-                        <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem' }}>
-                            ZIP · Included: {components.join(', ')}
-                        </Typography>
-                    )}
+                    <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem' }}>
+                        ZIP · Included: {components.join(', ')}
+                    </Typography>
                 </Box>
             </Stack>
-            {!downloading && <DownloadIcon sx={{ fontSize: 14, color: theme.success, opacity: 0.6 }} />}
+            <DownloadIcon sx={{ fontSize: 14, color: theme.success, opacity: 0.6 }} />
         </Box>
     );
 }
@@ -1022,10 +944,8 @@ function DownloadZipButton({ downloadUrl, modelName, versionNumber, components }
 // ─── Action Button (renders dynamic actions) ──────────────────────────────────
 function ActionButton({ action }: { action: { type: string; label: string; download_type: string; entity_type: string; entity_id: number; download_url?: string } }) {
     const { theme } = useTheme();
-    const [downloading, setDownloading] = useState(false);
 
-    const handleDownload = async () => {
-        setDownloading(true);
+    const handleDownload = () => {
         try {
             let url = action.download_url;
             if (!url) {
@@ -1039,33 +959,10 @@ function ActionButton({ action }: { action: { type: string; label: string; downl
                 return;
             }
 
-            const res = await axios.get(url, { responseType: 'blob' });
-            const blob = res.data;
-            const disposition = res.headers['content-disposition'] ?? '';
-
-            let filename = '';
-            const rfcMatch = disposition.match(/filename\*=(?:UTF-8'')?([^\s;]+)/i);
-            const plainMatch = disposition.match(/filename="([^"]+)"/);
-            if (rfcMatch) {
-                filename = decodeURIComponent(rfcMatch[1]);
-            } else if (plainMatch) {
-                filename = plainMatch[1];
-            }
-
-            if (!filename) {
-                filename = action.label.replace(/\s+/g, '_') + (action.download_type === 'report' ? '.csv' : '.zip');
-            }
-
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(blobUrl);
+            const finalUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+            window.location.href = finalUrl;
         } catch (e) {
-            console.error('Action download failed:', e);
-        } finally {
-            setDownloading(false);
+            console.error('Action download setup failed:', e);
         }
     };
 
@@ -1073,18 +970,16 @@ function ActionButton({ action }: { action: { type: string; label: string; downl
 
     return (
         <Box
-            onClick={downloading ? undefined : handleDownload}
+            onClick={handleDownload}
             sx={{
-                mt: 1.5, cursor: downloading ? 'default' : 'pointer',
+                mt: 1.5, cursor: 'pointer',
                 borderRadius: '14px',
-                background: downloading
-                    ? alpha(theme.textMain, 0.04)
-                    : `linear-gradient(135deg, ${alpha(theme.success, 0.1)}, ${alpha(theme.primary, 0.08)})`,
-                border: `1px solid ${alpha(downloading ? theme.border : theme.success, 0.3)}`,
+                background: `linear-gradient(135deg, ${alpha(theme.success, 0.1)}, ${alpha(theme.primary, 0.08)})`,
+                border: `1px solid ${alpha(theme.success, 0.3)}`,
                 px: 2, py: 1.5,
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 transition: 'all 0.2s ease',
-                '&:hover': downloading ? {} : {
+                '&:hover': {
                     background: `linear-gradient(135deg, ${alpha(theme.success, 0.16)}, ${alpha(theme.primary, 0.12)})`,
                     border: `1px solid ${alpha(theme.success, 0.5)}`,
                     transform: 'translateY(-1px)',
@@ -1093,21 +988,17 @@ function ActionButton({ action }: { action: { type: string; label: string; downl
             }}
         >
             <Stack direction="row" spacing={1} alignItems="center">
-                {downloading
-                    ? <CircularProgress size={14} sx={{ color: theme.primary }} />
-                    : <DownloadIcon sx={{ fontSize: 16, color: theme.success }} />}
+                <DownloadIcon sx={{ fontSize: 16, color: theme.success }} />
                 <Box>
                     <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMain, fontSize: '0.72rem', display: 'block', lineHeight: 1.2 }}>
-                        {downloading ? 'Preparing download…' : action.label}
+                        {action.label}
                     </Typography>
-                    {!downloading && (
-                        <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem' }}>
-                            {isReport ? 'CSV · All fields included' : 'Export Bundle · ZIP'}
-                        </Typography>
-                    )}
+                    <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem' }}>
+                        {isReport ? 'CSV · All fields included' : 'Export Bundle · ZIP'}
+                    </Typography>
                 </Box>
             </Stack>
-            {!downloading && <DownloadIcon sx={{ fontSize: 14, color: theme.success, opacity: 0.6 }} />}
+            <DownloadIcon sx={{ fontSize: 14, color: theme.success, opacity: 0.6 }} />
         </Box>
     );
 }
@@ -1245,16 +1136,67 @@ function EntityList({ data, type }: { data: any[], type: 'factories' | 'algorith
                             )}
 
                             {/* Extra metrics for versions */}
-                            {type === 'versions' && (
-                                <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
-                                    {item.accuracy !== undefined && (
-                                        <Chip label={`Acc: ${(Number(item.accuracy) * 100).toFixed(1)}%`} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700 }} />
-                                    )}
-                                    {item.f1_score !== undefined && (
-                                        <Chip label={`F1: ${Number(item.f1_score).toFixed(3)}`} size="small" sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700 }} />
-                                    )}
-                                </Stack>
-                            )}
+                            {type === 'versions' && (() => {
+                                const formatAccuracy = (val: any) => {
+                                    if (val === undefined || val === null) return '';
+                                    const num = Number(val);
+                                    if (isNaN(num)) return String(val);
+                                    if (num <= 1.0) return `${(num * 100).toFixed(1)}%`;
+                                    return `${num.toFixed(1)}%`;
+                                };
+                                const formatF1 = (val: any) => {
+                                    if (val === undefined || val === null) return '';
+                                    const num = Number(val);
+                                    if (isNaN(num)) return String(val);
+                                    return num.toFixed(3);
+                                };
+                                return (
+                                    <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
+                                        {item.accuracy !== undefined && item.accuracy !== null && (
+                                            <Chip
+                                                label={`Acc: ${formatAccuracy(item.accuracy)}`}
+                                                size="small"
+                                                sx={{
+                                                    height: 18,
+                                                    fontSize: '0.62rem',
+                                                    fontWeight: 700,
+                                                    bgcolor: mode === 'dark' ? alpha(theme.success ?? '#10B981', 0.18) : alpha(theme.success ?? '#10B981', 0.1),
+                                                    color: mode === 'dark' ? '#34d399' : theme.success ?? '#10B981',
+                                                    border: `1px solid ${alpha(theme.success ?? '#10B981', 0.3)}`,
+                                                }}
+                                            />
+                                        )}
+                                        {item.f1_score !== undefined && item.f1_score !== null && (
+                                            <Chip
+                                                label={`F1: ${formatF1(item.f1_score)}`}
+                                                size="small"
+                                                sx={{
+                                                    height: 18,
+                                                    fontSize: '0.62rem',
+                                                    fontWeight: 700,
+                                                    bgcolor: mode === 'dark' ? alpha(theme.primary, 0.18) : alpha(theme.primary, 0.1),
+                                                    color: mode === 'dark' ? '#818cf8' : theme.primary,
+                                                    border: `1px solid ${alpha(theme.primary, 0.3)}`,
+                                                }}
+                                            />
+                                        )}
+                                        {item.precision !== undefined && item.precision !== null && (
+                                            <Chip
+                                                label={`Prec: ${formatAccuracy(item.precision)}`}
+                                                size="small"
+                                                sx={{
+                                                    height: 18,
+                                                    fontSize: '0.62rem',
+                                                    fontWeight: 700,
+                                                    bgcolor: mode === 'dark' ? alpha(theme.secondary ?? theme.info, 0.18) : alpha(theme.secondary ?? theme.info, 0.1),
+                                                    color: mode === 'dark' ? '#60a5fa' : theme.secondary ?? theme.info,
+                                                    border: `1px solid ${alpha(theme.secondary ?? theme.info, 0.3)}`,
+                                                }}
+                                            />
+                                        )}
+                                    </Stack>
+                                );
+                            })()}
 
                             {formattedDate && (
                                 <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.64rem', display: 'block', fontWeight: 600, mt: 0.5 }}>
@@ -1295,9 +1237,10 @@ interface BotMessageContentProps {
     msgType?: string;
     themeRef: any;  // stable theme reference
     mode: 'dark' | 'light';
+    onExpandTable: (content: React.ReactNode, title?: string) => void;
 }
 
-const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode }: BotMessageContentProps) => {
+const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode, onExpandTable }: BotMessageContentProps) => {
     const cleanContent = useMemo(() => {
         let cleaned = content.replace(/<!--[\s\S]*?-->/g, '');
         // Strip out fuzzy name matching confidence warning
@@ -1380,35 +1323,72 @@ const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode }: Bot
                 <Box component="code" sx={{ fontSize: '0.76rem', fontFamily: 'monospace', color: theme.textMain }} {...props} />
             </Box>
         ),
-        table: ({ node, ...props }: any) => (
-            <Box sx={{
-                overflowX: 'auto',
-                overflowY: 'auto',
-                maxHeight: '320px',
-                my: 1.5,
-                borderRadius: '14px',
-                border: `1px solid ${alpha(theme.primary, 0.15)}`,
-                boxShadow: `0 4px 20px -4px ${alpha(theme.primary, 0.08)}`,
-                bgcolor: mode === 'dark' ? alpha('#0f172a', 0.6) : alpha('#fff', 0.95),
-                backdropFilter: 'blur(8px)',
-                '&::-webkit-scrollbar': {
-                    width: '6px',
-                    height: '6px',
-                },
-                '&::-webkit-scrollbar-track': {
-                    bgcolor: 'transparent',
-                },
-                '&::-webkit-scrollbar-thumb': {
-                    bgcolor: alpha(theme.primary, 0.25),
-                    borderRadius: '4px',
-                    '&:hover': {
-                        bgcolor: alpha(theme.primary, 0.45),
-                    },
-                },
-            }}>
-                <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }} {...props} />
-            </Box>
-        ),
+        table: ({ node, children, ...props }: any) => {
+            const handleExpand = () => {
+                onExpandTable(
+                    <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                        {children}
+                    </Box>,
+                    "Full Table View"
+                );
+            };
+
+            return (
+                <Box sx={{ my: 1.5 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+                        <Button
+                            size="small"
+                            variant="text"
+                            onClick={handleExpand}
+                            startIcon={<LaunchIcon sx={{ fontSize: 12 }} />}
+                            sx={{
+                                textTransform: 'none',
+                                fontSize: '0.7rem',
+                                fontWeight: 800,
+                                py: 0.2,
+                                px: 1,
+                                borderRadius: '6px',
+                                color: theme.primary,
+                                bgcolor: alpha(theme.primary, 0.05),
+                                '&:hover': {
+                                    bgcolor: alpha(theme.primary, 0.12),
+                                },
+                            }}
+                        >
+                            Open in Large View
+                        </Button>
+                    </Box>
+                    <Box sx={{
+                        overflowX: 'auto',
+                        overflowY: 'auto',
+                        maxHeight: '320px',
+                        borderRadius: '14px',
+                        border: `1px solid ${alpha(theme.primary, 0.15)}`,
+                        boxShadow: `0 4px 20px -4px ${alpha(theme.primary, 0.08)}`,
+                        bgcolor: mode === 'dark' ? alpha('#0f172a', 0.6) : alpha('#fff', 0.95),
+                        backdropFilter: 'blur(8px)',
+                        '&::-webkit-scrollbar': {
+                            width: '6px',
+                            height: '6px',
+                        },
+                        '&::-webkit-scrollbar-track': {
+                            bgcolor: 'transparent',
+                        },
+                        '&::-webkit-scrollbar-thumb': {
+                            bgcolor: alpha(theme.primary, 0.25),
+                            borderRadius: '4px',
+                            '&:hover': {
+                                bgcolor: alpha(theme.primary, 0.45),
+                            },
+                        },
+                    }}>
+                        <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }} {...props}>
+                            {children}
+                        </Box>
+                    </Box>
+                </Box>
+            );
+        },
         thead: ({ node, ...props }: any) => (
             <Box component="thead" sx={{
                 background: mode === 'dark'
@@ -1466,7 +1446,7 @@ const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode }: Bot
             );
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }), [theme.primary, theme.secondary, theme.textMain, theme.textMuted, theme.textSecondary, theme.border, theme.success, theme.error, theme.warning, mode, msgType]);
+    }), [theme.primary, theme.secondary, theme.textMain, theme.textMuted, theme.textSecondary, theme.border, theme.success, theme.error, theme.warning, mode, msgType, onExpandTable]);
 
     return (
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
@@ -1483,9 +1463,10 @@ interface MessageRowProps {
     theme: any;
     mode: 'dark' | 'light';
     onComparisonClick: (data: any[]) => void;
+    onExpandTable: (content: React.ReactNode, title?: string) => void;
 }
 
-const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick }: MessageRowProps) => {
+const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick, onExpandTable }: MessageRowProps) => {
     const motionProps = isNew
         ? { initial: { opacity: 0, y: 12, scale: 0.98 }, animate: { opacity: 1, y: 0, scale: 1 }, transition: { duration: 0.25, type: 'spring' as const, damping: 20 } }
         : { initial: false as const, animate: false as const, transition: {} };
@@ -1571,6 +1552,7 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick }: Message
                                     msgType={msg.type}
                                     themeRef={theme}
                                     mode={mode}
+                                    onExpandTable={onExpandTable}
                                 />
                             )}
                         </Typography>
@@ -1580,36 +1562,84 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick }: Message
                             isEntityList
                                 ? <EntityList data={msg.data} type={entityType as any} />
                                 : cols.length > 0 && (
-                                    <Box sx={{ mt: 1.5, borderRadius: '14px', overflow: 'hidden', border: `1px solid ${alpha(theme.border, 0.35)}`, boxShadow: `0 4px 16px -4px ${alpha('#000', 0.06)}` }}>
-                                        <Box sx={{ overflowX: 'auto' }}>
-                                            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
-                                                <Box component="thead">
-                                                    <Box component="tr" sx={{ background: `linear-gradient(135deg, ${alpha(theme.primary, 0.12)}, ${alpha(theme.primary, 0.06)})`, borderBottom: `2px solid ${alpha(theme.primary, 0.2)}` }}>
-                                                        {cols.map(col => (
-                                                            <Box key={col} component="th" sx={{ px: 1.5, py: 1, textAlign: 'left', fontWeight: 800, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: 0.8, color: theme.primary, whiteSpace: 'nowrap' }}>
-                                                                {col.replace(/_/g, ' ')}
+                                    <Box sx={{ mt: 1.5 }}>
+                                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+                                            <Button
+                                                size="small"
+                                                variant="text"
+                                                onClick={() => {
+                                                    const rowData = msg.data || [];
+                                                    onExpandTable(
+                                                        <Box sx={{ overflowX: 'auto', p: 1 }}>
+                                                            <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                                                                <Box component="thead">
+                                                                    <Box component="tr" sx={{ background: `linear-gradient(135deg, ${alpha(theme.primary, 0.12)}, ${alpha(theme.primary, 0.06)})`, borderBottom: `2px solid ${alpha(theme.primary, 0.2)}` }}>
+                                                                        {cols.map(col => (
+                                                                            <Box key={col} component="th" sx={{ px: 2, py: 1.5, textAlign: 'left', fontWeight: 800, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 0.8, color: theme.primary, whiteSpace: 'nowrap' }}>
+                                                                                {col.replace(/_/g, ' ')}
+                                                                            </Box>
+                                                                        ))}
+                                                                    </Box>
+                                                                </Box>
+                                                                <Box component="tbody">
+                                                                    {rowData.map((row: any, rIdx: number) => (
+                                                                        <Box key={rIdx} component="tr" sx={{ bgcolor: rIdx % 2 === 0 ? 'transparent' : alpha(theme.textMain, 0.025), borderBottom: rIdx < rowData.length - 1 ? `1px solid ${alpha(theme.border, 0.2)}` : 'none', transition: 'background 0.15s', '&:hover': { bgcolor: alpha(theme.primary, 0.04) } }}>
+                                                                            {cols.map(col => (
+                                                                                <Box key={col} component="td" sx={{ px: 2, py: 1.2, color: theme.textMain, fontWeight: 500, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                                                                                    {row[col] !== null && row[col] !== undefined ? String(row[col]) : <Box component="span" sx={{ color: theme.textMuted, fontStyle: 'italic' }}>—</Box>}
+                                                                                </Box>
+                                                                            ))}
+                                                                        </Box>
+                                                                    ))}
+                                                                </Box>
+                                                            </Box>
+                                                        </Box>,
+                                                        "Full Table View"
+                                                    );
+                                                }}
+                                                startIcon={<LaunchIcon sx={{ fontSize: 12 }} />}
+                                                sx={{
+                                                    textTransform: 'none',
+                                                    fontSize: '0.7rem',
+                                                    fontWeight: 800,
+                                                    py: 0.2,
+                                                    px: 1,
+                                                    borderRadius: '6px',
+                                                    color: theme.primary,
+                                                    bgcolor: alpha(theme.primary, 0.05),
+                                                    '&:hover': {
+                                                        bgcolor: alpha(theme.primary, 0.12),
+                                                    },
+                                                }}
+                                            >
+                                                Open in Large View
+                                            </Button>
+                                        </Box>
+                                        <Box sx={{ borderRadius: '14px', overflow: 'hidden', border: `1px solid ${alpha(theme.border, 0.35)}`, boxShadow: `0 4px 16px -4px ${alpha('#000', 0.06)}` }}>
+                                            <Box sx={{ overflowX: 'auto' }}>
+                                                <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.75rem' }}>
+                                                    <Box component="thead">
+                                                        <Box component="tr" sx={{ background: `linear-gradient(135deg, ${alpha(theme.primary, 0.12)}, ${alpha(theme.primary, 0.06)})`, borderBottom: `2px solid ${alpha(theme.primary, 0.2)}` }}>
+                                                            {cols.map(col => (
+                                                                <Box key={col} component="th" sx={{ px: 1.5, py: 1, textAlign: 'left', fontWeight: 800, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: 0.8, color: theme.primary, whiteSpace: 'nowrap' }}>
+                                                                    {col.replace(/_/g, ' ')}
+                                                                </Box>
+                                                            ))}
+                                                        </Box>
+                                                    </Box>
+                                                    <Box component="tbody">
+                                                        {msg.data.map((row: any, rIdx: number) => (
+                                                            <Box key={rIdx} component="tr" sx={{ bgcolor: rIdx % 2 === 0 ? 'transparent' : alpha(theme.textMain, 0.025), borderBottom: rIdx < msg.data!.length - 1 ? `1px solid ${alpha(theme.border, 0.2)}` : 'none', transition: 'background 0.15s', '&:hover': { bgcolor: alpha(theme.primary, 0.04) } }}>
+                                                                {cols.map(col => (
+                                                                    <Box key={col} component="td" sx={{ px: 1.5, py: 0.9, color: theme.textMain, fontWeight: 500, fontSize: '0.76rem', whiteSpace: 'nowrap', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                        {row[col] !== null && row[col] !== undefined ? String(row[col]) : <Box component="span" sx={{ color: theme.textMuted, fontStyle: 'italic' }}>—</Box>}
+                                                                    </Box>
+                                                                ))}
                                                             </Box>
                                                         ))}
                                                     </Box>
                                                 </Box>
-                                                <Box component="tbody">
-                                                    {msg.data.map((row: any, rIdx: number) => (
-                                                        <Box key={rIdx} component="tr" sx={{ bgcolor: rIdx % 2 === 0 ? 'transparent' : alpha(theme.textMain, 0.025), borderBottom: rIdx < msg.data!.length - 1 ? `1px solid ${alpha(theme.border, 0.2)}` : 'none', transition: 'background 0.15s', '&:hover': { bgcolor: alpha(theme.primary, 0.04) } }}>
-                                                            {cols.map(col => (
-                                                                <Box key={col} component="td" sx={{ px: 1.5, py: 0.9, color: theme.textMain, fontWeight: 500, fontSize: '0.76rem', whiteSpace: 'nowrap', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                    {row[col] !== null && row[col] !== undefined ? String(row[col]) : <Box component="span" sx={{ color: theme.textMuted, fontStyle: 'italic' }}>—</Box>}
-                                                                </Box>
-                                                            ))}
-                                                        </Box>
-                                                    ))}
-                                                </Box>
                                             </Box>
-                                        </Box>
-                                        <Box sx={{ px: 1.5, py: 0.7, borderTop: `1px solid ${alpha(theme.border, 0.2)}`, bgcolor: alpha(theme.textMain, 0.02), display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: theme.success, boxShadow: `0 0 6px ${theme.success}` }} />
-                                            <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem', fontWeight: 700 }}>
-                                                {msg.data.length} {msg.data.length === 1 ? 'record' : 'records'} retrieved
-                                            </Typography>
                                         </Box>
                                     </Box>
                                 )
@@ -1686,6 +1716,7 @@ export default function Chatbot() {
     const [isOpen, setIsOpen] = useState(false);
     const [input, setInput] = useState('');
     const [comparisonModal, setComparisonModal] = useState<{ open: boolean; data: any[] }>({ open: false, data: [] });
+    const [expandedTable, setExpandedTable] = useState<{ open: boolean; content: React.ReactNode; title?: string }>({ open: false, content: null, title: 'Table View' });
     const [messages, setMessages] = useState<Message[]>([{
         id: '1', role: 'bot', type: 'text', timestamp: new Date(),
         content: "Hi, I'm **MIRA** — your **MARS Intelligent Repository Assistant**! 🤖\n\nI can help you explore your models, factories, versions, and performance metrics — just ask me anything.",
@@ -1802,7 +1833,7 @@ export default function Chatbot() {
                         }}
                     >
                         <Paper elevation={0} sx={{
-                            width: 440, height: 640, borderRadius: '28px',
+                            width: { xs: '340px', sm: '560px' }, height: 700, borderRadius: '28px',
                             display: 'flex', flexDirection: 'column', overflow: 'hidden',
                             bgcolor: mode === 'dark' ? alpha(theme.paper, 0.82) : alpha('#fff', 0.88),
                             backdropFilter: 'blur(24px) saturate(180%)',
@@ -1889,6 +1920,7 @@ export default function Chatbot() {
                                         theme={theme}
                                         mode={mode}
                                         onComparisonClick={(data) => setComparisonModal({ open: true, data })}
+                                        onExpandTable={(content, title) => setExpandedTable({ open: true, content, title })}
                                     />
                                 ))}
 
@@ -2043,10 +2075,92 @@ export default function Chatbot() {
                 onClose={() => setComparisonModal({ open: false, data: [] })}
             />
 
+            {/* ── Expanded Table Modal ── */}
+            <Dialog
+                open={expandedTable.open}
+                onClose={() => setExpandedTable(prev => ({ ...prev, open: false }))}
+                maxWidth="lg"
+                fullWidth
+                sx={{ zIndex: 10000 }}
+                PaperProps={{
+                    sx: {
+                        borderRadius: '24px',
+                        bgcolor: mode === 'dark' ? '#12121f' : '#f8f9fc',
+                        backgroundImage: 'none',
+                        border: `1px solid ${alpha(theme.border, 0.3)}`,
+                        boxShadow: `0 40px 100px rgba(0,0,0,0.4)`,
+                        overflow: 'hidden',
+                    }
+                }}
+            >
+                <Box sx={{
+                    px: 3.5, py: 2.2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    background: `linear-gradient(135deg, ${alpha(theme.primary, 0.12)} 0%, ${alpha(theme.secondary ?? theme.primary, 0.06)} 100%)`,
+                    borderBottom: `1px solid ${alpha(theme.border, 0.2)}`,
+                }}>
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                        <Box sx={{
+                            width: 36, height: 36, borderRadius: '12px',
+                            background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary ?? theme.primary})`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            boxShadow: `0 4px 12px ${alpha(theme.primary, 0.4)}`,
+                        }}>
+                            <ExpandIcon sx={{ color: '#fff', fontSize: 18 }} />
+                        </Box>
+                        <Typography variant="h6" fontWeight={900} sx={{ color: theme.textMain, letterSpacing: '-0.02em' }}>
+                            {expandedTable.title || 'Table View'}
+                        </Typography>
+                    </Stack>
+                    <IconButton
+                        onClick={() => setExpandedTable(prev => ({ ...prev, open: false }))}
+                        size="small"
+                        sx={{
+                            color: theme.textMuted,
+                            bgcolor: alpha(theme.textMain, 0.05), borderRadius: '10px',
+                            '&:hover': { bgcolor: alpha(theme.error, 0.1), color: theme.error },
+                        }}
+                    >
+                        <CloseIcon fontSize="small" />
+                    </IconButton>
+                </Box>
+                <DialogContent sx={{ p: 3.5, bgcolor: mode === 'dark' ? '#0d0d15' : '#f4f6fa', overflowX: 'auto' }}>
+                    <Box sx={{
+                        borderRadius: '16px',
+                        border: `1px solid ${alpha(theme.border, 0.25)}`,
+                        boxShadow: `0 8px 30px rgba(0,0,0,0.12)`,
+                        bgcolor: mode === 'dark' ? '#0f172a' : '#fff',
+                        p: 2.5,
+                        minWidth: 'fit-content'
+                    }}>
+                        {expandedTable.content}
+                    </Box>
+                </DialogContent>
+                <DialogActions sx={{ px: 3.5, py: 2, borderTop: `1px solid ${alpha(theme.border, 0.15)}`, bgcolor: mode === 'dark' ? '#12121f' : '#f8f9fc' }}>
+                    <Button
+                        onClick={() => setExpandedTable(prev => ({ ...prev, open: false }))}
+                        variant="contained"
+                        sx={{
+                            fontWeight: 800,
+                            borderRadius: '10px',
+                            textTransform: 'none',
+                            bgcolor: theme.primary,
+                            px: 3,
+                            '&:hover': { bgcolor: alpha(theme.primary, 0.85) }
+                        }}
+                    >
+                        Close View
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
             {/* ── Clear Warning Dialog ── */}
             <Dialog
                 open={clearWarningOpen}
                 onClose={() => setClearWarningOpen(false)}
+                sx={{ zIndex: 10000 }}
                 PaperProps={{
                     sx: {
                         borderRadius: '16px',

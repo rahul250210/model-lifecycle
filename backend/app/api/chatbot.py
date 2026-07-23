@@ -207,25 +207,38 @@ def download_report(
         else:
             algorithms = db.query(Algorithm).order_by(Algorithm.name.asc()).all()
 
-        # Header Row (exactly matching algorithms.py:generate_algorithm_report)
-        writer.writerow([
-            "Factory Name",
-            "Model Name",
-            "Version Number",
-            "Created At",
-            "Description",
-            "Dataset Total Count",
-            "Accuracy",
-            "Precision",
-            "Recall",
-            "F1 Score",
-            "CPU Utilization (%)",
-            "GPU Utilization (%)",
-            "Inference Time (ms)",
-            "Hyperparameters"
-        ])
-
         for algo in algorithms:
+            # Write Algorithm Header Information for each algorithm
+            writer.writerow(["Algorithm Details"])
+            writer.writerow(["Name", algo.name])
+            writer.writerow(["Description", algo.description or "N/A"])
+            writer.writerow([])
+
+            if algo.ini_config:
+                writer.writerow(["INI Configuration"])
+                for line in algo.ini_config.splitlines():
+                    if line.strip():
+                        writer.writerow([line.strip()])
+                writer.writerow([])
+
+            # Header Row (exactly matching algorithms.py:generate_algorithm_report)
+            writer.writerow([
+                "Factory Name",
+                "Model Name",
+                "Version Number",
+                "Created At",
+                "Description",
+                "Dataset Total Count",
+                "Accuracy",
+                "Precision",
+                "Recall",
+                "F1 Score",
+                "CPU Utilization (%)",
+                "GPU Utilization (%)",
+                "Inference Time (ms)",
+                "Hyperparameters"
+            ])
+
             query = (
                 db.query(Model)
                 .options(

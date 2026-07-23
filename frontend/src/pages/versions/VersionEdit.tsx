@@ -18,6 +18,8 @@ import {
   Switch,
   Grid,
   Alert,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -99,6 +101,8 @@ export default function VersionEdit() {
 
   const [datasetMode, setDatasetMode] = useState<"replace" | "append">("replace");
   const [labelMode, setLabelMode] = useState<"replace" | "append">("replace");
+  const [iniConfig, setIniConfig] = useState("");
+  const [inputType, setInputType] = useState<"manual" | "file">("manual");
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -186,6 +190,7 @@ export default function VersionEdit() {
         setNote(data.note || "");
         setIsActive(data.is_active || false);
         setVersionNumber(data.version_number);
+        setIniConfig(data.ini_config || "");
 
         const fetchedEvalMetrics = {
           accuracy: data.accuracy?.toString() || "",
@@ -260,6 +265,7 @@ export default function VersionEdit() {
         setInitialState({
           note: data.note || "",
           isActive: data.is_active || false,
+          iniConfig: data.ini_config || "",
           evalMetrics: fetchedEvalMetrics,
           resourceMetrics: rm,
           parameters: fetchedParams,
@@ -288,6 +294,7 @@ export default function VersionEdit() {
     // Check simple fields
     if (note !== initialState.note) return true;
     if (isActive !== initialState.isActive) return true;
+    if (iniConfig !== initialState.iniConfig) return true;
 
     // Check objects using JSON stringify for simple deep comparison
     if (JSON.stringify(evalMetrics) !== JSON.stringify(initialState.evalMetrics)) return true;
@@ -456,6 +463,10 @@ export default function VersionEdit() {
           return acc;
         }, {} as Record<string, string>);
         formData.append("custom_params", JSON.stringify(customObj));
+      }
+
+      if (iniConfig.trim() !== initialState.iniConfig.trim()) {
+        formData.append("ini_config", iniConfig.trim() || ""); // Send empty string if cleared
       }
 
       formData.append("dataset_mode", datasetMode);
@@ -1127,6 +1138,122 @@ export default function VersionEdit() {
               }}>
                 <CardContent sx={{ p: 5 }}>
                   <ResourceMetricsInput metrics={resourceMetrics} onChange={setResourceMetrics} />
+                </CardContent>
+              </Card>
+
+              {/* INI Config Input */}
+              <Card elevation={0} sx={{ borderRadius: "24px", border: `1px solid ${theme.border}`, boxShadow: "0px 4px 20px rgba(0,0,0,0.02)", bgcolor: theme.paper }}>
+                <CardContent sx={{ p: 4 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>
+                        INI Configuration
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: theme.textMuted }}>(Optional)</Typography>
+                    </Box>
+                    <ToggleButtonGroup
+                      value={inputType}
+                      exclusive
+                      onChange={(_, newVal) => { if(newVal) setInputType(newVal) }}
+                      size="small"
+                      sx={{ 
+                        height: 28,
+                        '& .MuiToggleButton-root': {
+                          color: theme.textSecondary,
+                          borderColor: alpha(theme.border, 0.5),
+                          '&.Mui-selected': {
+                            color: theme.primary,
+                            bgcolor: alpha(theme.primary, 0.1),
+                          },
+                          '&:hover': {
+                            bgcolor: alpha(theme.textMain, 0.05),
+                          }
+                        }
+                      }}
+                    >
+                      <ToggleButton value="manual" sx={{ px: 2, textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}>
+                        Manual Entry
+                      </ToggleButton>
+                      <ToggleButton value="file" sx={{ px: 2, textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}>
+                        <UploadFileIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                        Upload File
+                      </ToggleButton>
+                    </ToggleButtonGroup>
+                  </Box>
+
+                  {inputType === "manual" ? (
+                    <TextField
+                      placeholder={"[Section]\nkey=value"}
+                      fullWidth
+                      multiline
+                      rows={6}
+                      value={iniConfig}
+                      onChange={(e) => setIniConfig(e.target.value)}
+                      variant="outlined"
+                      sx={{
+                        fontFamily: 'monospace',
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                          bgcolor: theme.background,
+                          transition: "all 0.2s",
+                          "&:hover": { bgcolor: theme.paper },
+                          "&.Mui-focused": { bgcolor: theme.paper, boxShadow: `0 0 0 4px ${alpha(theme.primary, 0.1)}` },
+                          "& .MuiOutlinedInput-input": { color: theme.textMain, fontFamily: 'monospace', fontSize: '0.9rem' }
+                        }
+                      }}
+                    />
+                  ) : (
+                    <Box 
+                      sx={{ 
+                        border: `2px dashed ${alpha(theme.primary, 0.3)}`, 
+                        borderRadius: "12px",
+                        p: 3, 
+                        textAlign: "center",
+                        bgcolor: alpha(theme.primary, 0.02),
+                        transition: "all 0.2s",
+                        "&:hover": {
+                          bgcolor: alpha(theme.primary, 0.05),
+                          borderColor: theme.primary
+                        }
+                      }}
+                    >
+                      <Button
+                        component="label"
+                        startIcon={<UploadFileIcon />}
+                        sx={{ 
+                          textTransform: 'none', 
+                          fontWeight: 600,
+                          color: theme.primary,
+                          bgcolor: alpha(theme.primary, 0.1),
+                          "&:hover": { bgcolor: alpha(theme.primary, 0.2) },
+                          borderRadius: "8px",
+                          px: 3,
+                          py: 1
+                        }}
+                      >
+                        Select INI File
+                        <input
+                          hidden
+                          type="file"
+                          accept=".ini,.txt"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                setIniConfig(ev.target?.result as string);
+                                setInputType("manual"); // Switch back to manual to show the loaded content
+                              };
+                              reader.readAsText(file);
+                            }
+                          }}
+                        />
+                      </Button>
+                      <Typography variant="body2" sx={{ color: theme.textSecondary, mt: 2 }}>
+                        Supports .ini or .txt files
+                      </Typography>
+                    </Box>
+                  )}
                 </CardContent>
               </Card>
 

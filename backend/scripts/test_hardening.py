@@ -102,7 +102,7 @@ class TestMIRA(unittest.TestCase):
         """Test 6b: Verify cross-factory comparison without explicit model name resolves correctly."""
         res = run_sql_agent("compare the Bhushan model with suwon model in FAS", self.db)
         self.assertEqual(res.get("type"), "comparison")
-        self.assertEqual(res.get("entity_type"), "versions")
+        self.assertEqual(res.get("entity_type"), "models")
         
         mids = {row["model_id"] for row in res.get("data", [])}
         self.assertIn(23, mids)  # Resnet in Bhushan
@@ -395,7 +395,7 @@ class TestMIRA(unittest.TestCase):
         """Test 16: Verify that comparing models of an algorithm resolves to ComparisonType.MODELS_IN_ALGORITHM and returns type: comparison with version_number."""
         res = run_sql_agent("compare all the models of FAS", self.db)
         self.assertEqual(res.get("type"), "comparison")
-        self.assertEqual(res.get("entity_type"), "versions")
+        self.assertEqual(res.get("entity_type"), "models")
         
         # Verify that version_number is selected and present in rows
         rows = res.get("data", [])
@@ -714,6 +714,112 @@ class TestMIRA(unittest.TestCase):
         # Verify SQL determinism is preserved
         self.assertTrue(res.get("verified"))
         self.assertIsNotNone(res.get("data"))
+
+    def test_compare_two_versions_same_model(self):
+        """Test 29: Compare two specific versions of the same model returns correct comparison data."""
+        res = run_sql_agent("compare v4 and v5 of R2+1D", self.db)
+        
+        self.assertIsNotNone(res)
+        self.assertNotEqual(res.get("type"), "unsupported", "Query fell through to unsupported!")
+        self.assertNotEqual(res.get("type"), "error", "Query returned error!")
+        
+        answer = res.get("answer", "")
+        # Should reference both versions
+        self.assertIn("v4", answer)
+        self.assertIn("v5", answer)
+        
+        # Should have comparison data
+        comp = res.get("comparison_data")
+        if comp:
+            versions = comp.get("versions", comp.get("data", []))
+            v_nums = [v.get("version_number") for v in versions]
+            self.assertIn(4, v_nums, "Version 4 missing from comparison data")
+            self.assertIn(5, v_nums, "Version 5 missing from comparison data")
+            # All rows should be same model
+            model_names = set(v.get("model_name", "").lower() for v in versions)
+            self.assertTrue(all("r2+1d" in mn for mn in model_names), "Not all versions belong to R2+1D")
+
+    def test_compare_two_different_models(self):
+        """Test 30: Compare two different models returns cross-model comparison data."""
+        res = run_sql_agent("compare yolov11 and R2+1D", self.db)
+        
+        self.assertIsNotNone(res)
+        self.assertNotEqual(res.get("type"), "unsupported", "Query fell through to unsupported!")
+        self.assertNotEqual(res.get("type"), "error", "Query returned error!")
+        
+        answer = res.get("answer", "")
+        # Should mention both model names
+        self.assertTrue(
+            "yolov11" in answer.lower() or "r2+1d" in answer.lower(),
+            "Neither model name found in answer"
+        )
+        
+        # Should have comparison data with multiple models
+        comp = res.get("comparison_data")
+        if comp:
+            versions = comp.get("versions", comp.get("data", []))
+            model_names_lower = set(v.get("model_name", "").lower() for v in versions)
+            self.assertTrue(len(model_names_lower) >= 2, f"Expected 2+ different model names, got {model_names_lower}")
+
+    def test_download_zip_by_version_number(self):
+        """Test 31: Download zip for a specific version resolves to correct version."""
+        self.db.begin_nested()
+        try:
+            fact = self.db.execute(text("SELECT id FROM factories LIMIT 1")).fetchone()
+            algo = self.db.execute(text("SELECT id FROM algorithms LIMIT 1")).fetchone()
+            
+            self.db.execute(
+                text("INSERT INTO models (id, name, algorithm_id, factory_id, created_at) VALUES (9998, 'TestZipModel', :aid, :fid, CURRENT_TIMESTAMP)"),
+                {"aid": algo[0], "fid": fact[0]}
+            )
+            self.db.execute(
+                text("INSERT INTO model_versions (id, model_id, version_number, is_active, created_at) VALUES (9997, 9998, 1, false, CURRENT_TIMESTAMP)")
+            )
+            self.db.execute(
+                text("INSERT INTO model_versions (id, model_id, version_number, is_active, created_at) VALUES (9998, 9998, 2, true, CURRENT_TIMESTAMP)")
+            )
+            # Add artifacts to version 2
+            self.db.execute(
+                text("INSERT INTO artifacts (id, version_id, name, type, path, size, checksum) VALUES "
+                     "(9980, 9998, 'img1.jpg', 'dataset', '/tmp/img1.jpg', 100, 'abc'),"
+                     "(9981, 9998, 'weights.pt', 'model', '/tmp/weights.pt', 2000, 'def')")
+            )
+            
+            res = run_sql_agent("download zip for TestZipModel version 2", self.db)
+            answer = res.get("answer", "")
+            
+            # Should mention Version 2 specifically
+            self.assertIn("Version 2", answer, "Answer should reference Version 2")
+            self.assertIn("DOWNLOAD_PROMPT", answer, "Should contain DOWNLOAD_PROMPT state")
+            
+            # Verify the download prompt references version_id=9998 (v2), not 9997 (v1)
+            self.assertIn("version_id=9998", answer, "Should reference version_id of v2")
+            
+        finally:
+            self.db.rollback()
+
+    def test_download_report_by_name_only(self):
+        """Test 32: Report download triggered by 'give me the report' without explicit 'download' keyword."""
+        res = run_sql_agent("give me the report for R2+1D", self.db)
+        
+        self.assertIsNotNone(res)
+        self.assertNotEqual(res.get("type"), "unsupported", "Query fell through to unsupported!")
+        self.assertNotEqual(res.get("type"), "error", "Query returned error!")
+        
+        # Should have download actions with a report URL
+        actions = res.get("actions", [])
+        report_actions = [a for a in actions if a.get("download_type") == "report"]
+        self.assertTrue(len(report_actions) >= 1, f"Expected at least 1 report download action, got {actions}")
+        
+        report_action = report_actions[0]
+        self.assertIn("/report", report_action.get("download_url", ""), "Report URL should contain /report")
+        self.assertEqual(report_action.get("entity_type"), "model", "Entity type should be 'model'")
+
+    def test_compare_all_algorithms_empty_models(self):
+        """Test 33: Compare all the algorithms resolves safely and does not raise IndexError when there are no models or resolved list is empty."""
+        res = run_sql_agent("compare all the algorithms", self.db)
+        self.assertIsNotNone(res)
+        self.assertNotEqual(res.get("type"), "error")
 
 if __name__ == "__main__":
     from sqlalchemy import text

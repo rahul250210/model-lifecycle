@@ -27,6 +27,7 @@ class VersionOut(BaseModel):
     model_id: int
     version_number: int
     note: str | None
+    ini_config: str | None
     is_active: bool
     created_at: datetime
     updated_at: datetime | None

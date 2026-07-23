@@ -137,3 +137,9 @@ button:focus-visible { box-shadow: 0 0 0 4px rgba(100,108,255,0.12); }
 .MuiCard-root { border-radius: var(--radius-2) !important; box-shadow: var(--shadow-1) !important; }
 .MuiCardContent-root { padding: 12px 16px !important; }
 .MuiDrawer-paper { background: linear-gradient(180deg, #071021, #081428); }
+
+/* Remove ugly rectangular focus outline when clicking on graphs/cards with a mouse, 
+   but preserve it for keyboard navigation accessibility */
+*:focus:not(:focus-visible) {
+  outline: none !important;
+}

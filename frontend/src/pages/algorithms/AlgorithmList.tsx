@@ -19,12 +19,15 @@ import {
   Stack,
   Chip,
   Grid,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import SchemaIcon from "@mui/icons-material/Schema";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import DownloadIcon from "@mui/icons-material/Download";
+import FileUploadIcon from "@mui/icons-material/FileUpload";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
@@ -46,12 +49,27 @@ export default function AlgorithmList() {
   const [algorithms, setAlgorithms] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Edit Dialog States
   const [editOpen, setEditOpen] = useState(false);
   const [selectedAlgo, setSelectedAlgo] = useState<any | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editIniConfig, setEditIniConfig] = useState("");
+  const [editInputType, setEditInputType] = useState<"manual" | "file">("manual");
   const [saving, setSaving] = useState(false);
+
+  const handleEditFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text === "string") {
+        setEditIniConfig(text);
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // Delete Dialog States
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -207,6 +225,8 @@ export default function AlgorithmList() {
                           setSelectedAlgo(algo);
                           setEditName(algo.name);
                           setEditDescription(algo.description || "");
+                          setEditIniConfig(algo.ini_config || "");
+                          setEditInputType("manual");
                           setEditOpen(true);
                         }}>
                           <EditIcon fontSize="small" sx={{ color: theme.textMuted }} />
@@ -317,6 +337,73 @@ export default function AlgorithmList() {
                 sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px", bgcolor: theme.paper, color: theme.textMain } }}
               />
             </Box>
+            
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="caption" fontWeight={700} sx={{ color: theme.textMuted, textTransform: 'uppercase' }}>
+                  {t("algorithmCreate.iniConfigLabel", "INI Configuration")}
+                </Typography>
+                <ToggleButtonGroup
+                  value={editInputType}
+                  exclusive
+                  onChange={(_, newVal) => { if(newVal) setEditInputType(newVal) }}
+                  size="small"
+                  sx={{ 
+                    height: 28,
+                    '& .MuiToggleButton-root': {
+                      color: theme.textSecondary,
+                      borderColor: alpha(theme.border, 0.5),
+                      '&.Mui-selected': { color: theme.primary, bgcolor: alpha(theme.primary, 0.1) },
+                      '&:hover': { bgcolor: alpha(theme.textMain, 0.05) }
+                    }
+                  }}
+                >
+                  <ToggleButton value="manual" sx={{ px: 2, textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}>
+                    {t("algorithmCreate.manualEntry", "Manual Entry")}
+                  </ToggleButton>
+                  <ToggleButton value="file" sx={{ px: 2, textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}>
+                    <FileUploadIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                    {t("algorithmCreate.uploadIniFile", "Upload .ini file")}
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+
+              {editInputType === "file" ? (
+                <Box sx={{ border: `1px dashed ${theme.border}`, borderRadius: "12px", p: 3, textAlign: 'center', bgcolor: alpha(theme.primary, 0.02) }}>
+                  <Button variant="outlined" component="label" sx={{ borderRadius: "8px", textTransform: 'none', fontWeight: 600 }}>
+                    {t("algorithmCreate.uploadIniFile", "Upload .ini file")}
+                    <input type="file" accept=".ini,.txt" hidden onChange={handleEditFileUpload} />
+                  </Button>
+                  {editIniConfig && (
+                    <Box sx={{ mt: 3, textAlign: 'left' }}>
+                       <Typography variant="caption" sx={{ display: 'block', mb: 1, color: theme.success || "#4caf50", fontWeight: 700 }}>
+                         ✓ INI file loaded successfully
+                       </Typography>
+                       <Box sx={{ p: 2, borderRadius: '8px', bgcolor: theme.background, border: `1px solid ${theme.border}`, maxHeight: '150px', overflowY: 'auto' }}>
+                         <Typography variant="body2" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', color: theme.textMain }}>
+                           {editIniConfig}
+                         </Typography>
+                       </Box>
+                    </Box>
+                  )}
+                </Box>
+              ) : (
+                <TextField
+                  placeholder={t("algorithmCreate.iniConfigPlaceholder", "[AlgorithmName]\nParam1=100")}
+                  fullWidth
+                  multiline
+                  rows={5}
+                  value={editIniConfig}
+                  onChange={(e) => setEditIniConfig(e.target.value)}
+                  variant="outlined"
+                  sx={{
+                    "& .MuiOutlinedInput-root": {
+                      borderRadius: "12px", bgcolor: theme.paper, fontFamily: 'monospace', fontSize: '0.875rem', color: theme.textMain
+                    }
+                  }}
+                />
+              )}
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
@@ -330,6 +417,7 @@ export default function AlgorithmList() {
                 const res = await axios.put(`/algorithms/${selectedAlgo.id}`, {
                   name: editName,
                   description: editDescription,
+                  ini_config: editIniConfig || null,
                 });
                 setAlgorithms((prev) => prev.map((a) => (a.id === selectedAlgo.id ? res.data : a)));
                 setEditOpen(false);

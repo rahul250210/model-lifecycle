@@ -75,6 +75,28 @@ User Question: {user_question}"""
         print(f"[QueryRouter] Failed to parse router response: {raw_response}. Error: {e}")
         
     # Simple default fallback if LLM is offline or JSON parsing fails
+    q = user_question.lower()
+    is_action = False
+    
+    if any(kw in q for kw in ["download", "export", "report", "csv", "zip", "bundle", "weights"]):
+        is_action = True
+        
+    if "compare" in q or "vs" in q or "versus" in q or "evolution" in q or "changed" in q or "change" in q or "delta" in q:
+        if any(kw in q for kw in ["accuracy", "precision", "recall", "f1", "inference", "latency", "average", "mean", "max", "min", "highest", "lowest", "best"]):
+            is_action = False
+        else:
+            is_action = True
+            
+    if is_action:
+        return {"query_type": "ACTION_QUERY", "explanation": "Rule fallback: contains action keywords"}
+        
+    is_hybrid = False
+    if any(kw in q for kw in ["explain", "what is", "how does", "why"]):
+        is_hybrid = True
+        
+    if is_hybrid:
+        return {"query_type": "HYBRID_QUERY", "explanation": "LLM offline hybrid query fallback"}
+        
     return {"query_type": "DATABASE_QUERY", "explanation": "LLM offline/rate-limited fallback"}
 
 def handle_knowledge_query(user_question: str) -> str:
@@ -90,39 +112,234 @@ User Question: {user_question}"""
         return "⚠️ I'm sorry, I am currently offline and cannot answer conceptual questions. Please try again later or ask a database-related query."
     return answer
 
-def get_database_context(user_question: str, db_session: Session) -> str:
-    """Searches the database for entities matching terms in the query and returns formatted context."""
-    q = user_question.lower()
+def resolve_entities(user_question: str, db_session: Session, context: Optional[List[Dict[str, Any]]] = None) -> Dict[str, List[Any]]:
+    """
+    Extracts referenced model, factory, or algorithm names from the query using the LLM,
+    then retrieves matching records from the database using SQL ILIKE.
+    """
+    history_str = ""
+    if context:
+        formatted = []
+        for msg in context:
+            role = "User" if msg.get("role") == "user" else "Assistant"
+            content = msg.get("content", "")
+            if content:
+                formatted.append(f"{role}: {content}")
+        if formatted:
+            history_str = "\nCONVERSATION HISTORY:\n" + "\n".join(formatted) + "\n"
+
+    prompt = f"""You are a precise entity name extractor for an MLOps platform database.
+{history_str}
+Analyze the user's question and extract all references to the names of:
+1. Models (e.g. YOLOv11, R2+1D, test, Resnet, etc.)
+2. Factories (e.g. Suwon, FAS, etc.)
+3. Algorithms (e.g. YOLO, FAS, CNN, etc.)
+
+If the user's question uses pronouns, relative pronouns, or references (e.g., "them", "it", "that model", "the first one", "its versions", "this factory") to refer to entities mentioned in the CONVERSATION HISTORY, resolve those pronouns and extract the actual entity names from the conversation history.
+
+Return ONLY a JSON object with keys "models", "factories", and "algorithms". Each key should map to a list of strings representing the extracted names. If a category is not referenced, map it to an empty list [].
+Do NOT wrap in markdown backticks, do NOT write ```json, do NOT write any explanation before or after.
+
+User Question: "{user_question}"
+
+Output:"""
+
+    raw_response = call_llm(prompt, temperature=0.0).strip()
     
-    # Fetch all models, factories, and algorithms
-    models = db_session.execute(text("SELECT id, name, description, algorithm_id, factory_id FROM models")).fetchall()
-    factories = db_session.execute(text("SELECT id, name, description FROM factories")).fetchall()
-    algorithms = db_session.execute(text("SELECT id, name, description FROM algorithms")).fetchall()
+    # Clean JSON wrapper if present
+    if raw_response.startswith("```json"):
+        raw_response = raw_response[7:]
+    if raw_response.startswith("```"):
+        raw_response = raw_response[3:]
+    if raw_response.endswith("```"):
+        raw_response = raw_response[:-3]
+    raw_response = raw_response.strip()
+    
+    extracted = {"models": [], "factories": [], "algorithms": []}
+    try:
+        if raw_response and raw_response != "__LLM_OFFLINE__":
+            extracted = json.loads(raw_response)
+    except Exception as e:
+        print(f"[QueryRouter] resolve_entities JSON parsing failed: {e}")
+        # Fallback keyword match in case of LLM offline/parse error
+        q = user_question.lower()
+        models = db_session.execute(text("SELECT name FROM models")).fetchall()
+        factories = db_session.execute(text("SELECT name FROM factories")).fetchall()
+        algorithms = db_session.execute(text("SELECT name FROM algorithms")).fetchall()
+        
+        extracted = {"models": [], "factories": [], "algorithms": []}
+        for m in models:
+            if m[0].lower() in q:
+                extracted["models"].append(m[0])
+        for f in factories:
+            if f[0].lower() in q:
+                extracted["factories"].append(f[0])
+        for a in algorithms:
+            if a[0].lower() in q:
+                extracted["algorithms"].append(a[0])
+
+    # Database-backed alignment post-process: align LLM extractions with DB reality
+    q_lower = user_question.lower()
+    db_models = [r[0] for r in db_session.execute(text("SELECT name FROM models")).fetchall()]
+    db_factories = [r[0] for r in db_session.execute(text("SELECT name FROM factories")).fetchall()]
+    db_algorithms = [r[0] for r in db_session.execute(text("SELECT name FROM algorithms")).fetchall()]
+    
+    # Convert lists to case-insensitive sets for quick membership check
+    ext_models_lower = {x.lower() for x in extracted.get("models", [])}
+    ext_factories_lower = {x.lower() for x in extracted.get("factories", [])}
+    ext_algorithms_lower = {x.lower() for x in extracted.get("algorithms", [])}
+    
+    for f in db_factories:
+        if f.lower() in q_lower and f.lower() not in ext_factories_lower:
+            if "factories" not in extracted:
+                extracted["factories"] = []
+            extracted["factories"].append(f)
+            ext_factories_lower.add(f.lower())
+            
+    for a in db_algorithms:
+        if a.lower() in q_lower and a.lower() not in ext_algorithms_lower:
+            if "algorithms" not in extracted:
+                extracted["algorithms"] = []
+            extracted["algorithms"].append(a)
+            ext_algorithms_lower.add(a.lower())
+            
+    for m in db_models:
+        if m.lower() in q_lower and m.lower() not in ext_models_lower:
+            if "models" not in extracted:
+                extracted["models"] = []
+            extracted["models"].append(m)
+            ext_models_lower.add(m.lower())
+
+    matched_models = []
+    matched_factories = []
+    matched_algorithms = []
+
+    for name in extracted.get("factories", []):
+        row = db_session.execute(
+            text("SELECT id, name, description FROM factories WHERE name ILIKE :name LIMIT 1"),
+            {"name": name}
+        ).fetchone()
+        if row:
+            matched_factories.append(row)
+            
+    for name in extracted.get("algorithms", []):
+        row = db_session.execute(
+            text("SELECT id, name, description FROM algorithms WHERE name ILIKE :name LIMIT 1"),
+            {"name": name}
+        ).fetchone()
+        if row:
+            matched_algorithms.append(row)
+
+    STOP_WORDS = {
+        "compare", "model", "models", "version", "versions", "from", "and", "the", "with", 
+        "factory", "factories", "in", "of", "for", "to", "on", "at", "by", "or", "a", "an", 
+        "is", "are", "was", "were", "which", "what", "how", "why", "algorithm", "algorithms"
+    }
+
+    # Query DB using ILIKE for exact case-insensitive matches of models, contextually checking factories
+    factory_ids = [f.id for f in matched_factories]
+    for name in extracted.get("models", []):
+        if factory_ids:
+            for fid in factory_ids:
+                row = db_session.execute(
+                    text("SELECT id, name, description, algorithm_id, factory_id FROM models WHERE name ILIKE :name AND factory_id = :fid LIMIT 1"),
+                    {"name": name, "fid": fid}
+                ).fetchone()
+                if row:
+                    matched_models.append(row)
+        if not matched_models:
+            rows = db_session.execute(
+                text("SELECT id, name, description, algorithm_id, factory_id FROM models WHERE name ILIKE :name"),
+                {"name": name}
+            ).fetchall()
+            matched_models.extend(rows)
+
+        # Word-level fallback: if no direct name match, check individual words (e.g. "RF" in "RF models")
+        if not matched_models:
+            words = [w.strip() for w in re.split(r"\W+", name) if len(w) > 1]
+            for word in words:
+                if word.lower() in STOP_WORDS:
+                    continue
+                if factory_ids:
+                    for fid in factory_ids:
+                        row = db_session.execute(
+                            text("SELECT id, name, description, algorithm_id, factory_id FROM models WHERE name ILIKE :word AND factory_id = :fid LIMIT 1"),
+                            {"word": f"%{word}%", "fid": fid}
+                        ).fetchone()
+                        if row and row not in matched_models:
+                            matched_models.append(row)
+                if not matched_models:
+                    rows = db_session.execute(
+                        text("SELECT id, name, description, algorithm_id, factory_id FROM models WHERE name ILIKE :word"),
+                        {"word": f"%{word}%"}
+                    ).fetchall()
+                    for row in rows:
+                        if row not in matched_models:
+                            matched_models.append(row)
+
+    # Implicit model lookup: if no models matched but factories were specified (and potentially an algorithm or general query words)
+    if not matched_models and matched_factories:
+        q_words = [w.strip() for w in re.split(r"\W+", user_question) if len(w) > 1]
+        for f in matched_factories:
+            found = False
+            for w in q_words:
+                if w.lower() in STOP_WORDS:
+                    continue
+                row = db_session.execute(
+                    text("SELECT id, name, description, algorithm_id, factory_id FROM models WHERE factory_id = :fid AND name ILIKE :w LIMIT 1"),
+                    {"fid": f.id, "w": f"%{w}%"}
+                ).fetchone()
+                if row:
+                    matched_models.append(row)
+                    found = True
+                    break
+            
+            if not found:
+                if matched_algorithms:
+                    for a in matched_algorithms:
+                        row = db_session.execute(
+                            text("""
+                                SELECT id, name, description, algorithm_id, factory_id 
+                                FROM models 
+                                WHERE factory_id = :fid AND algorithm_id = :aid 
+                                ORDER BY CASE WHEN name ILIKE '%test%' THEN 1 ELSE 0 END ASC, id ASC
+                                LIMIT 1
+                            """),
+                            {"fid": f.id, "aid": a.id}
+                        ).fetchone()
+                        if row:
+                            matched_models.append(row)
+                            found = True
+                if not found:
+                    row = db_session.execute(
+                        text("""
+                            SELECT id, name, description, algorithm_id, factory_id 
+                            FROM models 
+                            WHERE factory_id = :fid 
+                            ORDER BY CASE WHEN name ILIKE '%test%' THEN 1 ELSE 0 END ASC, id ASC
+                            LIMIT 1
+                        """),
+                        {"fid": f.id}
+                    ).fetchone()
+                    if row:
+                        matched_models.append(row)
+
+    return {
+        "models": matched_models,
+        "factories": matched_factories,
+        "algorithms": matched_algorithms
+    }
+
+def get_database_context(user_question: str, db_session: Session, context: Optional[List[Dict[str, Any]]] = None) -> str:
+    """Searches the database for entities matching terms in the query and returns formatted context."""
+    entities = resolve_entities(user_question, db_session, context=context)
+    
+    matched_factories = entities["factories"]
+    matched_algorithms = entities["algorithms"]
+    matched_models = entities["models"]
     
     context_lines = []
     
-    # Match factories
-    matched_factories = []
-    for f in factories:
-        if f.name.lower() in q:
-            matched_factories.append(f)
-            
-    # Match algorithms
-    matched_algorithms = []
-    for a in algorithms:
-        if a.name.lower() in q:
-            matched_algorithms.append(a)
-            
-    # Match models (sorted by length DESC to match longest first)
-    matched_models = []
-    temp_q = q
-    sorted_models = sorted(models, key=lambda m: len(m.name), reverse=True)
-    for m in sorted_models:
-        name_lower = m.name.lower()
-        if name_lower in temp_q:
-            matched_models.append(m)
-            temp_q = temp_q.replace(name_lower, "")
-            
     # Build context for matched factories
     for f in matched_factories:
         context_lines.append(f"--- Factory Entity Found ---")
@@ -194,16 +411,16 @@ def get_database_context(user_question: str, db_session: Session) -> str:
         
     return "\n".join(context_lines).strip()
 
-def handle_hybrid_query(user_question: str, db_session: Session) -> str:
+def handle_hybrid_query(user_question: str, db_session: Session, context: Optional[List[Dict[str, Any]]] = None) -> str:
     """Answers a hybrid question combining database entity context and conceptual explanation."""
-    context = get_database_context(user_question, db_session)
-    if not context:
+    db_context = get_database_context(user_question, db_session, context=context)
+    if not db_context:
         # Fallback to pure knowledge if no entities are resolved in the repository database
         return handle_knowledge_query(user_question)
         
     prompt = f"""You are a helpful AI assistant for MARS, an MLOps platform.
 We found the following context in our database repository related to the query:
-{context}
+{db_context}
 
 User question: {user_question}
 

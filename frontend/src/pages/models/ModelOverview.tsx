@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -405,8 +405,17 @@ export default function ModelOverview() {
 
         if (factoryRes.data && factoryRes.data.name) setFactoryName(factoryRes.data.name);
 
-        const currentAlgo = (allAlgosRes.data as any[]).find((a: any) => a.id == algorithmId);
+        const currentAlgo = (allAlgosRes.data as any[]).find((a: any) => a.id == algorithmId || a.id == modelRes.data.algorithm_id);
         if (currentAlgo) setAlgorithmName(currentAlgo.name);
+
+        if (
+          modelRes.data &&
+          (String(modelRes.data.algorithm_id) !== String(algorithmId) ||
+            String(modelRes.data.factory_id) !== String(factoryId) ||
+            String(modelRes.data.id) !== String(modelId))
+        ) {
+          navigate(`/algorithms/${modelRes.data.algorithm_id}/factories/${modelRes.data.factory_id}/models/${modelRes.data.id}`, { replace: true });
+        }
 
       } catch (err) {
         console.error("Failed to load model overview", err);
@@ -451,6 +460,26 @@ export default function ModelOverview() {
     }
   };
 
+  const activeVersion = useMemo(() => 
+    versions.find((v) => v.is_active) ||
+    versions[versions.length - 1], [versions]);
+
+  const toNum = (v: any) => (v !== undefined && v !== null && v !== '' && !isNaN(Number(v))) ? Number(v) : null;
+
+  const chartData = useMemo(() => [...versions].sort((a, b) => a.version_number - b.version_number).map(v => ({
+    name: `v${v.version_number}`,
+    accuracy:        toNum(v.accuracy),
+    precision:       toNum(v.precision),
+    recall:          toNum(v.recall),
+    f1_score:        toNum(v.f1_score),
+    cpu_utilization: toNum(v.cpu_utilization),
+    gpu_utilization: toNum(v.gpu_utilization),
+    inference_time:  toNum(v.inference_time),
+    learning_rate:   toNum(v.parameters?.learning_rate),
+    batch_size:      toNum(v.parameters?.batch_size),
+    epochs:          toNum(v.parameters?.epochs),
+  })), [versions]);
+
   if (loading || !model) {
     return (
       <Box sx={{ height: "80vh", display: "flex", justifyContent: "center", alignItems: "center" }}>
@@ -458,10 +487,6 @@ export default function ModelOverview() {
       </Box>
     );
   }
-
-  const activeVersion =
-    versions.find((v) => v.is_active) ||
-    versions[versions.length - 1];
 
 
 
@@ -511,25 +536,7 @@ export default function ModelOverview() {
     </Paper>
   );
 
-  // --- PREPARE DATA FOR CHARTS ---
-  const toNum = (v: any) => (v !== undefined && v !== null && v !== '' && !isNaN(Number(v))) ? Number(v) : null;
 
-  const chartData = [...versions].sort((a, b) => a.version_number - b.version_number).map(v => ({
-    name: `v${v.version_number}`,
-    // Performance metrics
-    accuracy:        toNum(v.accuracy),
-    precision:       toNum(v.precision),
-    recall:          toNum(v.recall),
-    f1_score:        toNum(v.f1_score),
-    // Resource metrics (columns)
-    cpu_utilization: toNum(v.cpu_utilization),
-    gpu_utilization: toNum(v.gpu_utilization),
-    inference_time:  toNum(v.inference_time),
-    // Training parameters (from parameters JSON)
-    learning_rate:   toNum(v.parameters?.learning_rate),
-    batch_size:      toNum(v.parameters?.batch_size),
-    epochs:          toNum(v.parameters?.epochs),
-  }));
 
   return (
     <Box sx={{ minHeight: "100vh", paddingBottom: 10 }}>

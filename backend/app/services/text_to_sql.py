@@ -86,6 +86,11 @@ JSON Output:"""
 
     # 3. Call the LLM
     response = call_llm(prompt, temperature=0.0)
+    if response == "__LLM_OFFLINE__":
+        return {
+            "sql": "",
+            "reasoning": "__LLM_OFFLINE__: LLM server is down."
+        }
 
     # 4. Parse JSON safely from LLM output
     response_clean = response.strip()

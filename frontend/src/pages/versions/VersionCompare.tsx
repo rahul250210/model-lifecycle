@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -65,6 +65,7 @@ interface DatasetDelta {
 
 interface Version {
   id: number;
+  model_id: number;
   version_number: number;
   parent_version_id?: number;
   metrics?: Record<string, number>;
@@ -118,6 +119,8 @@ export default function VersionCompare() {
 
   const [versions, setVersions] = useState<Version[]>([]);
   const [modelName, setModelName] = useState<string>("Model");
+  const [algorithmName, setAlgorithmName] = useState<string>("");
+  const [modelNames, setModelNames] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [datasetDelta, setDatasetDelta] = useState<DatasetDelta>({ added: [], removed: [] });
   const [galleryLoading, setGalleryLoading] = useState(false);
@@ -128,6 +131,7 @@ export default function VersionCompare() {
   // Derived left (baseline) and right (latest candidate) versions
   const left = versions[0] || null;
   const right = versions[versions.length - 1] || null;
+  const isCrossModel = useMemo(() => new Set(versions.map(v => v.model_id)).size > 1, [versions]);
 
   // Colors palette for multiple versions
   const colors = [
@@ -163,10 +167,11 @@ export default function VersionCompare() {
   useEffect(() => {
     const fetchVersions = async () => {
       try {
-        const [modelRes, ...versionResList] = await Promise.all([
+        const [modelRes, algoRes, ...versionResList] = await Promise.all([
           axios.get(
             `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}`
           ),
+          algorithmId ? axios.get(`/algorithms/${algorithmId}`) : Promise.resolve({ data: { name: 'Unknown' } }),
           ...versionIds.map(id => 
             axios.get(
               `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions/${id}`
@@ -178,7 +183,31 @@ export default function VersionCompare() {
         // Sort chronologically by version number
         fetchedVersions.sort((a, b) => a.version_number - b.version_number);
 
+        // Fetch model names for all versions dynamically
+        const uniqueModelIds = Array.from(new Set(fetchedVersions.map(v => v.model_id)));
+        const namesMap: Record<number, string> = {};
+        await Promise.all(
+          uniqueModelIds.map(async (mId) => {
+            try {
+              let res;
+              try {
+                res = await axios.get(`/models/by-id/${mId}`);
+              } catch {
+                res = await axios.get(`/algorithms/by-id/${mId}`);
+              }
+              namesMap[mId] = res.data.name;
+            } catch (e) {
+              console.error("Failed to fetch model name by id", mId, e);
+            }
+          })
+        );
+
+        if (algoRes && algoRes.data) {
+          setAlgorithmName(algoRes.data.name);
+        }
+
         setVersions(fetchedVersions);
+        setModelNames(namesMap);
         setModelName(modelRes.data.name);
       } catch (err) {
         console.error("Failed to compare versions", err);
@@ -418,10 +447,13 @@ export default function VersionCompare() {
                   </Box>
                 </Typography>
                 <Typography variant="body2" sx={{ color: theme.textMuted, fontWeight: 700, mt: 0.2 }}>
-                  {t("versionCompare.comparingVersions")}{" "}
+                  {isCrossModel ? "Comparing Models: " : t("versionCompare.comparingVersions") + " "}
                   {versions.map((v, i) => (
                     <Box component="span" key={v.id} sx={{ color: i === 0 ? theme.textMain : i === versions.length - 1 ? theme.primary : theme.textSecondary, fontWeight: 800 }}>
-                      v-{v.version_number}{i < versions.length - 1 ? ', ' : ''}
+                      {isCrossModel
+                        ? `${modelNames[v.model_id] || "Model"} (v${v.version_number})`
+                        : `${modelNames[v.model_id] || "Model"} v-${v.version_number}`}
+                      {i < versions.length - 1 ? ', ' : ''}
                     </Box>
                   ))}
                 </Typography>
@@ -430,8 +462,12 @@ export default function VersionCompare() {
 
             <Stack direction="row" spacing={2} sx={{ display: { xs: 'none', md: 'flex' } }}>
               <Box sx={{ textAlign: 'right' }}>
-                <Typography variant="overline" fontWeight={900} sx={{ color: theme.textMuted, letterSpacing: 2 }}>{t("versionCompare.modelIdentity")}</Typography>
-                <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>{modelName}</Typography>
+                <Typography variant="overline" fontWeight={900} sx={{ color: theme.textMuted, letterSpacing: 2 }}>
+                  {isCrossModel ? "ALGORITHM IDENTITY" : t("versionCompare.modelIdentity")}
+                </Typography>
+                <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
+                  {isCrossModel ? (algorithmName || "Algorithm") : modelName}
+                </Typography>
               </Box>
             </Stack>
           </Box>
@@ -484,7 +520,7 @@ export default function VersionCompare() {
                               {t("versionCompare.accuracyLeader")}
                             </Typography>
                             <Typography variant="subtitle1" fontWeight={900} sx={{ color: theme.textMain }}>
-                              {t("versionCompare.versionNumber", { number: bestPerformer.version_number })}
+                              {modelNames[bestPerformer.model_id] || "Model"} v{bestPerformer.version_number}
                             </Typography>
                             <Typography variant="caption" sx={{ color: theme.textSecondary, display: 'block', mt: 0.5, lineHeight: 1.3 }}>
                               {t("versionCompare.highestAccuracy", { accuracy: bestPerformer.accuracy || 0, f1: bestPerformer.f1_score || 0 })}
@@ -531,7 +567,7 @@ export default function VersionCompare() {
                               {t("versionCompare.speedLeader")}
                             </Typography>
                             <Typography variant="subtitle1" fontWeight={900} sx={{ color: theme.textMain }}>
-                              {t("versionCompare.versionNumber", { number: fastestVersion.version_number })}
+                              {modelNames[fastestVersion.model_id] || "Model"} v{fastestVersion.version_number}
                             </Typography>
                             <Typography variant="caption" sx={{ color: theme.textSecondary, display: 'block', mt: 0.5, lineHeight: 1.3 }}>
                               {t("versionCompare.lowestLatency", { time: fastestVersion.inference_time || 0 })}
@@ -578,7 +614,7 @@ export default function VersionCompare() {
                               {t("versionCompare.hardwareChampion")}
                             </Typography>
                             <Typography variant="subtitle1" fontWeight={900} sx={{ color: theme.textMain }}>
-                              {t("versionCompare.versionNumber", { number: efficientVersion.version_number })}
+                              {modelNames[efficientVersion.model_id] || "Model"} v{efficientVersion.version_number}
                             </Typography>
                             <Typography variant="caption" sx={{ color: theme.textSecondary, display: 'block', mt: 0.5, lineHeight: 1.3 }}>
                               {t("versionCompare.memoryFootprint", { cpu: efficientVersion.cpu_memory_usage || 0, gpu: efficientVersion.gpu_memory_usage || 0 })}
@@ -642,10 +678,10 @@ export default function VersionCompare() {
                       <ResponsiveContainer>
                         <LineChart
                           data={[
-                            { metric: t("versionDetails.accuracy") || 'Accuracy', ...versions.reduce((acc, v) => ({ ...acc, [`v_${v.version_number}`]: v.accuracy || 0 }), {}) },
-                            { metric: t("versionDetails.precision") || 'Precision', ...versions.reduce((acc, v) => ({ ...acc, [`v_${v.version_number}`]: v.precision || 0 }), {}) },
-                            { metric: t("versionDetails.recall") || 'Recall', ...versions.reduce((acc, v) => ({ ...acc, [`v_${v.version_number}`]: v.recall || 0 }), {}) },
-                            { metric: t("versionDetails.f1Score") || 'F1 Score', ...versions.reduce((acc, v) => ({ ...acc, [`v_${v.version_number}`]: v.f1_score || 0 }), {}) },
+                            { metric: t("versionDetails.accuracy") || 'Accuracy', ...versions.reduce((acc, v) => ({ ...acc, [`vid_${v.id}`]: v.accuracy || 0 }), {}) },
+                            { metric: t("versionDetails.precision") || 'Precision', ...versions.reduce((acc, v) => ({ ...acc, [`vid_${v.id}`]: v.precision || 0 }), {}) },
+                            { metric: t("versionDetails.recall") || 'Recall', ...versions.reduce((acc, v) => ({ ...acc, [`vid_${v.id}`]: v.recall || 0 }), {}) },
+                            { metric: t("versionDetails.f1Score") || 'F1 Score', ...versions.reduce((acc, v) => ({ ...acc, [`vid_${v.id}`]: v.f1_score || 0 }), {}) },
                           ]}
                           margin={{ top: 10, right: 30, left: -20, bottom: 0 }}
                         >
@@ -672,8 +708,8 @@ export default function VersionCompare() {
                             <Line
                               key={v.id}
                               type="monotone"
-                              dataKey={`v_${v.version_number}`}
-                              name={t("versionCompare.versionNumber", { number: v.version_number })}
+                              dataKey={`vid_${v.id}`}
+                              name={`${modelNames[v.model_id] || "Model"} v${v.version_number}`}
                               stroke={colors[idx % colors.length]}
                               strokeWidth={3.5}
                               dot={{ r: 5, strokeWidth: 3, stroke: colors[idx % colors.length], fill: theme.paper }}
@@ -719,10 +755,10 @@ export default function VersionCompare() {
                         <BarChart
                           layout="vertical"
                           data={[
-                            { name: `${t("versionDetails.inference") || "Inference"} (ms)`, ...versions.reduce((acc, v) => ({ ...acc, [`v_${v.version_number}`]: v.inference_time || 0 }), {}) },
-                            { name: `${t("versionDetails.cpuUsage") || "CPU Usage"} (%)`, ...versions.reduce((acc, v) => ({ ...acc, [`v_${v.version_number}`]: v.cpu_utilization || 0 }), {}) },
-                            { name: `${t("versionDetails.gpuUsage") || "GPU Usage"} (%)`, ...versions.reduce((acc, v) => ({ ...acc, [`v_${v.version_number}`]: v.gpu_utilization || 0 }), {}) },
-                            { name: t("versionDetails.cameras") || "Cameras", ...versions.reduce((acc, v) => ({ ...acc, [`v_${v.version_number}`]: v.cameras_supported || 0 }), {}) },
+                            { name: `${t("versionDetails.inference") || "Inference"} (ms)`, ...versions.reduce((acc, v) => ({ ...acc, [`vid_${v.id}`]: v.inference_time || 0 }), {}) },
+                            { name: `${t("versionDetails.cpuUsage") || "CPU Usage"} (%)`, ...versions.reduce((acc, v) => ({ ...acc, [`vid_${v.id}`]: v.cpu_utilization || 0 }), {}) },
+                            { name: `${t("versionDetails.gpuUsage") || "GPU Usage"} (%)`, ...versions.reduce((acc, v) => ({ ...acc, [`vid_${v.id}`]: v.gpu_utilization || 0 }), {}) },
+                            { name: t("versionDetails.cameras") || "Cameras", ...versions.reduce((acc, v) => ({ ...acc, [`vid_${v.id}`]: v.cameras_supported || 0 }), {}) },
                           ]}
                           margin={{ top: 0, right: 20, left: 10, bottom: 0 }}
                           barGap={6}
@@ -750,8 +786,8 @@ export default function VersionCompare() {
                           {versions.map((v, idx) => (
                             <Bar
                               key={v.id}
-                              name={t("versionCompare.versionNumber", { number: v.version_number })}
-                              dataKey={`v_${v.version_number}`}
+                              name={`${modelNames[v.model_id] || "Model"} v${v.version_number}`}
+                              dataKey={`vid_${v.id}`}
                               fill={colors[idx % colors.length]}
                               radius={[0, 10, 10, 0]}
                               barSize={Math.max(4, 16 - versions.length * 2)}
@@ -815,7 +851,7 @@ export default function VersionCompare() {
                       boxShadow: `0 4px 12px ${alpha(colors[idx % colors.length], 0.05)}`
                     }}
                   >
-                    {t("versionCompare.versionNumber", { number: v.version_number }).toUpperCase()}
+                    {`${modelNames[v.model_id] || "MODEL"} V${v.version_number}`.toUpperCase()}
                   </Typography>
                 ))}
               </Box>
@@ -926,7 +962,7 @@ export default function VersionCompare() {
                         boxShadow: `0 4px 12px ${alpha(colors[idx % colors.length], 0.05)}`
                       }}
                     >
-                      {t("versionCompare.versionNumber", { number: v.version_number }).toUpperCase()}
+                      {`${modelNames[v.model_id] || "MODEL"} V${v.version_number}`.toUpperCase()}
                     </Typography>
                   ))}
                 </Box>

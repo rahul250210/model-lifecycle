@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Box,
   Typography,
@@ -22,6 +22,13 @@ import {
   ToggleButtonGroup,
   Dialog,
   DialogActions,
+  TextField,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import FactoryIcon from "@mui/icons-material/Factory";
@@ -31,6 +38,8 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import NavigateNextIcon from "@mui/icons-material/NavigateNext";
 import DeleteIcon from "@mui/icons-material/Delete";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import EditIcon from "@mui/icons-material/Edit";
+import CloseIcon from "@mui/icons-material/Close";
 
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axios";
@@ -65,6 +74,7 @@ export default function FactoryListForAlgorithm() {
   const [loading, setLoading] = useState(true);
   const [algorithmName, setAlgorithmName] = useState("Algorithm");
   const [reportLoading, setReportLoading] = useState(false);
+  const [iniConfig, setIniConfig] = useState<string | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<"accuracy" | "precision" | "recall" | "f1_score">("accuracy");
 
   // Remove Factory Dialog States
@@ -142,6 +152,7 @@ export default function FactoryListForAlgorithm() {
       setVersions(versionsRes.data);
       if (algoRes.data && algoRes.data.name) {
         setAlgorithmName(algoRes.data.name);
+        if (algoRes.data.ini_config) setIniConfig(algoRes.data.ini_config);
       }
     } catch (err) {
       console.error("Failed to load factories for algorithm", err);
@@ -161,6 +172,109 @@ export default function FactoryListForAlgorithm() {
   const totalFactoriesCount = factories.length;
   const totalModelsCount = factories.reduce((sum, f) => sum + (f.models_count || 0), 0);
   const totalVersionsCount = versions.length;
+
+  const [parsedIni, setParsedIni] = useState<{ section: string; pairs: { key: string, value: string, meaning: string }[] }[]>([]);
+  const [savingIni, setSavingIni] = useState(false);
+  const [isEditingIni, setIsEditingIni] = useState(false);
+
+  useEffect(() => {
+    if (iniConfig) {
+      const lines = iniConfig.split('\n');
+      const result: { section: string; pairs: { key: string, value: string, meaning: string }[] }[] = [];
+      let currentSection = { section: 'Global', pairs: [] as { key: string, value: string, meaning: string }[] };
+      let lastComment = "";
+      
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          lastComment = "";
+          return;
+        }
+        if (trimmed.startsWith(';') || trimmed.startsWith('#')) {
+          lastComment = trimmed.substring(1).trim();
+          return;
+        }
+        
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          if (currentSection.pairs.length > 0) result.push(currentSection);
+          currentSection = { section: trimmed.slice(1, -1), pairs: [] };
+          lastComment = "";
+        } else {
+          const idx = trimmed.indexOf('=');
+          if (idx > 0) {
+            currentSection.pairs.push({
+              key: trimmed.substring(0, idx).trim(),
+              value: trimmed.substring(idx + 1).trim(),
+              meaning: lastComment
+            });
+            lastComment = "";
+          }
+        }
+      });
+      if (currentSection.pairs.length > 0) result.push(currentSection);
+      setParsedIni(result);
+    }
+  }, [iniConfig]);
+
+  const handleSaveIni = async () => {
+    try {
+      setSavingIni(true);
+      let newIni = "";
+      parsedIni.forEach(sec => {
+        newIni += `[${sec.section}]\n`;
+        sec.pairs.forEach(p => {
+          if (p.meaning) newIni += `# ${p.meaning}\n`;
+          newIni += `${p.key}=${p.value}\n`;
+        });
+        newIni += "\n";
+      });
+      
+      await axios.put(`/algorithms/${algorithmId}`, {
+        name: algorithmName,
+        ini_config: newIni.trim()
+      });
+      
+      setIniConfig(newIni.trim());
+      setIniConfig(newIni.trim());
+      setIsEditingIni(false);
+      toast.success(t('factoryList.iniSaveSuccess', 'INI Configuration updated successfully'));
+    } catch (err) {
+      console.error(err);
+      toast.error(t('factoryList.iniSaveFail', 'Failed to save INI configuration'));
+    } finally {
+      setSavingIni(false);
+    }
+  };
+
+  const cancelIniEdit = () => {
+    setIsEditingIni(false);
+    if (iniConfig) {
+      const lines = iniConfig.split('\n');
+      const result: { section: string; pairs: { key: string, value: string, meaning: string }[] }[] = [];
+      let currentSection = { section: 'Global', pairs: [] as { key: string, value: string, meaning: string }[] };
+      let lastComment = "";
+      
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) { lastComment = ""; return; }
+        if (trimmed.startsWith(';') || trimmed.startsWith('#')) { lastComment = trimmed.substring(1).trim(); return; }
+        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+          if (currentSection.pairs.length > 0) result.push(currentSection);
+          currentSection = { section: trimmed.slice(1, -1), pairs: [] };
+          lastComment = "";
+        } else {
+          const idx = trimmed.indexOf('=');
+          if (idx > 0) {
+            currentSection.pairs.push({ key: trimmed.substring(0, idx).trim(), value: trimmed.substring(idx + 1).trim(), meaning: lastComment });
+            lastComment = "";
+          }
+        }
+      });
+      if (currentSection.pairs.length > 0) result.push(currentSection);
+      setParsedIni(result);
+    }
+  };
+
 
 
 
@@ -207,6 +321,36 @@ export default function FactoryListForAlgorithm() {
     '#8b5cf6',
     '#10b981'
   ];
+
+  const updateMeaning = (sIdx: number, pIdx: number, newMeaning: string) => {
+    const newParsedIni = [...parsedIni];
+    newParsedIni[sIdx].pairs[pIdx].meaning = newMeaning;
+    setParsedIni(newParsedIni);
+  };
+
+  const updateKey = (sIdx: number, pIdx: number, newKey: string) => {
+    const newParsedIni = [...parsedIni];
+    newParsedIni[sIdx].pairs[pIdx].key = newKey;
+    setParsedIni(newParsedIni);
+  };
+
+  const updateValue = (sIdx: number, pIdx: number, newValue: string) => {
+    const newParsedIni = [...parsedIni];
+    newParsedIni[sIdx].pairs[pIdx].value = newValue;
+    setParsedIni(newParsedIni);
+  };
+
+  const addParameter = (sIdx: number) => {
+    const newParsedIni = [...parsedIni];
+    newParsedIni[sIdx].pairs.push({ key: "NewParam", value: "", meaning: "" });
+    setParsedIni(newParsedIni);
+  };
+
+  const removeParameter = (sIdx: number, pIdx: number) => {
+    const newParsedIni = [...parsedIni];
+    newParsedIni[sIdx].pairs.splice(pIdx, 1);
+    setParsedIni(newParsedIni);
+  };
 
   const hasChartData = versions.length > 0;
   const metricLabel = t(`versionDetails.${selectedMetric === 'f1_score' ? 'f1Score' : selectedMetric}`);
@@ -587,6 +731,204 @@ export default function FactoryListForAlgorithm() {
           </Paper>
         )}
 
+
+
+
+        {/* INI Configuration Section */}
+        {parsedIni && parsedIni.length > 0 && (
+          <Paper
+            elevation={0}
+            sx={{
+              mb: 6,
+              p: 4,
+              borderRadius: '24px',
+              border: `1px solid ${theme.border}`,
+              bgcolor: mode === 'dark' ? alpha(theme.paper, 0.4) : alpha(theme.paper, 0.7),
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain }}>
+                INI Configuration
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                {isEditingIni ? (
+                  <>
+                    <Button 
+                      variant="outlined" 
+                      onClick={cancelIniEdit} 
+                      disabled={savingIni}
+                      sx={{ 
+                        color: theme.textMuted,
+                        borderColor: alpha(theme.border, 0.5),
+                        borderRadius: '8px', 
+                        textTransform: 'none', 
+                        fontWeight: 600,
+                        px: 3 
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      variant="contained" 
+                      onClick={handleSaveIni} 
+                      disabled={savingIni}
+                      sx={{ 
+                        bgcolor: theme.primary, 
+                        color: '#fff', 
+                        borderRadius: '8px', 
+                        textTransform: 'none', 
+                        fontWeight: 600,
+                        px: 3 
+                      }}
+                    >
+                      {savingIni ? <CircularProgress size={20} color="inherit" /> : "Save Configuration"}
+                    </Button>
+                  </>
+                ) : (
+                  <Button 
+                    variant="contained" 
+                    startIcon={<EditIcon />}
+                    onClick={() => setIsEditingIni(true)} 
+                    sx={{ 
+                      bgcolor: theme.paper, 
+                      color: theme.primary,
+                      border: `1px solid ${theme.border}`,
+                      borderRadius: '8px', 
+                      textTransform: 'none', 
+                      fontWeight: 600,
+                      px: 3,
+                      boxShadow: 'none',
+                      '&:hover': {
+                        bgcolor: alpha(theme.primary, 0.05),
+                        boxShadow: 'none',
+                      }
+                    }}
+                  >
+                    Edit Configuration
+                  </Button>
+                )}
+              </Box>
+            </Box>
+            
+            <TableContainer component={Paper} elevation={0} sx={{ 
+              borderRadius: '20px', 
+              border: `1px solid ${alpha(theme.primary, 0.15)}`, 
+              bgcolor: mode === 'dark' ? alpha(theme.primary, 0.02) : '#fff',
+              boxShadow: mode === 'dark' ? '0 10px 40px -10px rgba(0,0,0,0.5)' : `0 10px 40px -10px ${alpha(theme.primary, 0.1)}`,
+              overflow: 'hidden'
+            }}>
+              <Table sx={{ minWidth: 650 }}>
+                <TableHead sx={{ bgcolor: alpha(theme.primary, 0.06), borderBottom: `2px solid ${alpha(theme.primary, 0.1)}` }}>
+                  <TableRow>
+                    <TableCell sx={{ color: theme.primary, fontWeight: 900, width: isEditingIni ? '25%' : '30%', py: 2.5, letterSpacing: 1 }}>PARAMETER</TableCell>
+                    <TableCell sx={{ color: theme.primary, fontWeight: 900, width: isEditingIni ? '40%' : '50%', py: 2.5, letterSpacing: 1 }}>MEANING</TableCell>
+                    <TableCell align="right" sx={{ color: theme.primary, fontWeight: 900, width: isEditingIni ? '25%' : '20%', py: 2.5, letterSpacing: 1 }}>VALUE</TableCell>
+                    {isEditingIni && <TableCell sx={{ width: '10%', py: 2.5 }}></TableCell>}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {parsedIni.map((section, sIdx) => (
+                    <React.Fragment key={sIdx}>
+
+                      
+                      {/* Parameters Rows */}
+                      {section.pairs.map((pair, pIdx) => (
+                        <TableRow key={pIdx} hover sx={{ transition: 'all 0.2s', '&:last-child td, &:last-child th': { border: 0 } }}>
+                          <TableCell sx={{ verticalAlign: 'middle', borderBottom: `1px solid ${alpha(theme.border, 0.3)}` }}>
+                            {isEditingIni ? (
+                              <TextField
+                                size="small"
+                                fullWidth
+                                placeholder="Key"
+                                value={pair.key}
+                                onChange={(e) => updateKey(sIdx, pIdx, e.target.value)}
+                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: theme.background, color: theme.textMain, '& input': { p: 1.5, fontSize: '0.85rem', fontWeight: 600, fontFamily: 'monospace', color: theme.textMain } } }}
+                              />
+                            ) : (
+                              <Typography variant="body2" sx={{ color: theme.textSecondary, fontWeight: 700, wordBreak: 'break-all' }}>{pair.key}</Typography>
+                            )}
+                          </TableCell>
+                          
+                          <TableCell sx={{ verticalAlign: 'middle', borderBottom: `1px solid ${alpha(theme.border, 0.3)}` }}>
+                            {isEditingIni ? (
+                              <TextField
+                                size="small"
+                                fullWidth
+                                placeholder="Add parameter description..."
+                                value={pair.meaning}
+                                onChange={(e) => updateMeaning(sIdx, pIdx, e.target.value)}
+                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: theme.background, color: theme.textMain, '& input': { p: 1.5, fontSize: '0.85rem', color: theme.textMain } } }}
+                              />
+                            ) : (
+                              <Typography variant="body2" sx={{ color: pair.meaning ? theme.textMain : theme.textMuted, fontStyle: pair.meaning ? 'normal' : 'italic' }}>
+                                {pair.meaning || "No description"}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          
+                          <TableCell align="right" sx={{ verticalAlign: 'middle', borderBottom: `1px solid ${alpha(theme.border, 0.3)}` }}>
+                            {isEditingIni ? (
+                              <TextField
+                                size="small"
+                                fullWidth
+                                placeholder="Value"
+                                value={pair.value}
+                                onChange={(e) => updateValue(sIdx, pIdx, e.target.value)}
+                                sx={{ '& .MuiOutlinedInput-root': { borderRadius: '8px', bgcolor: theme.background, color: theme.textMain, '& input': { p: 1.5, fontSize: '0.85rem', fontWeight: 600, fontFamily: 'monospace', textAlign: 'right', color: theme.textMain } } }}
+                              />
+                            ) : (
+                              <Typography variant="body2" sx={{ display: 'inline-block', color: theme.textMain, fontFamily: 'monospace', fontWeight: 800, bgcolor: alpha(theme.textMain, 0.05), px: 1.5, py: 1, borderRadius: '6px', wordBreak: 'break-all' }}>
+                                {pair.value}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          
+                          {isEditingIni && (
+                            <TableCell align="center" sx={{ verticalAlign: 'middle', borderBottom: `1px solid ${alpha(theme.border, 0.3)}` }}>
+                              <IconButton size="small" onClick={() => removeParameter(sIdx, pIdx)} sx={{ color: theme.danger }}>
+                                <CloseIcon fontSize="small" />
+                              </IconButton>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))}
+                      
+                      {/* Add Parameter Button Row */}
+                      {isEditingIni && (
+                        <TableRow>
+                          <TableCell colSpan={4} align="center" sx={{ py: 3, borderBottom: `1px solid ${alpha(theme.border, 0.3)}` }}>
+                            <Button 
+                              variant="outlined"
+                              startIcon={<AddIcon />} 
+                              onClick={() => addParameter(sIdx)}
+                              sx={{ 
+                                width: '100%',
+                                maxWidth: '300px',
+                                color: theme.primary, 
+                                borderColor: alpha(theme.primary, 0.4),
+                                borderStyle: 'dashed',
+                                borderWidth: '2px',
+                                fontWeight: 800, 
+                                textTransform: 'none', 
+                                borderRadius: '12px', 
+                                py: 1,
+                                '&:hover': { bgcolor: alpha(theme.primary, 0.05), borderColor: theme.primary } 
+                              }}
+                            >
+                              Add Parameter
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </React.Fragment>
+                  ))}
+                  
+                  {/* Remove Add New Section */}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        )}
 
 
         {/* Section Header for Factories */}

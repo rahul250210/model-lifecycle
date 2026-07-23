@@ -123,6 +123,7 @@ app.add_middleware(
 app.include_router(factories.router, prefix="/factories", tags=["Factories"])
 app.include_router(algorithms.router, prefix="/algorithms", tags=["Algorithms"])
 app.include_router(models.router, prefix="/algorithms", tags=["Models"])
+app.include_router(models.router, prefix="/models", tags=["Models API"])
 app.include_router(versions.router, prefix="/algorithms", tags=["Versions"])
 app.include_router(experiments.router, prefix="/algorithms", tags=["Experiments"])
 app.include_router(artifacts.router, prefix="/artifacts", tags=["Artifacts"])  

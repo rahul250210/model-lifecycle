@@ -40,6 +40,7 @@ class ModelVersion(Base):
 
     parameters = Column(JSONB, default=dict)
     resource_metrics = Column(JSONB, default=dict)
+    ini_config = Column(String, nullable=True)
     
     artifacts = relationship(
         "Artifact",

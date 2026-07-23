@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     Box, Grid, Typography, CircularProgress, Paper, Stack, Container,
     Chip, Divider, Button, IconButton,
@@ -187,6 +187,9 @@ export default function Dashboard() {
     // Compare widget states
     const [selectedCompareModelId, setSelectedCompareModelId] = useState<number | ''>('');
     const [selectedVersionIds, setSelectedVersionIds] = useState<number[]>([]);
+    const [analysisTab, setAnalysisTab] = useState<'versions' | 'models'>('versions');
+    const [selectedAlgoId, setSelectedAlgoId] = useState<number | ''>('');
+    const [selectedModelIds, setSelectedModelIds] = useState<number[]>([]);
 
     const PALETTE = [theme.primary, theme.secondary, theme.success, theme.warning, theme.error, theme.info, '#f97316', '#ec4899'];
 
@@ -218,7 +221,7 @@ export default function Dashboard() {
     }, [selectedFactory]);
 
     // Flatten hierarchy to models list
-    const flatModels = comparisonHierarchy.flatMap(a => 
+    const flatModels = useMemo(() => comparisonHierarchy.flatMap(a => 
         a.factories.flatMap((f: any) => 
             f.models.map((m: any) => ({
                 ...m,
@@ -228,9 +231,9 @@ export default function Dashboard() {
                 algorithmName: a.algorithm_name
             }))
         )
-    );
+    ), [comparisonHierarchy]);
 
-    const selectedModelObj = flatModels.find(m => m.model_id === selectedCompareModelId);
+    const selectedModelObj = useMemo(() => flatModels.find(m => m.model_id === selectedCompareModelId), [flatModels, selectedCompareModelId]);
 
     // Reset selection if factory filter changes and selected model is no longer visible
     useEffect(() => {
@@ -239,6 +242,20 @@ export default function Dashboard() {
             setSelectedVersionIds([]);
         }
     }, [selectedFactory, selectedModelObj]);
+
+    // Filtering activity based on selected factory
+    const filteredActivity = useMemo(() => selectedFactory === 'All' 
+        ? activity 
+        : activity.filter(a => a.factory_name === selectedFactory), [selectedFactory, activity]);
+
+    // Filtering factory statuses based on selected factory
+    const filteredFactories = useMemo(() => selectedFactory === 'All' 
+        ? factoryStatus 
+        : factoryStatus.filter(f => f.factory_name === selectedFactory), [selectedFactory, factoryStatus]);
+
+    const filteredCompareModels = useMemo(() => selectedFactory === 'All'
+        ? flatModels
+        : flatModels.filter(m => m.factoryName === selectedFactory), [selectedFactory, flatModels]);
 
     if (loading) return (
         <Box sx={{ height: '80vh', display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', gap: 2 }}>
@@ -249,20 +266,6 @@ export default function Dashboard() {
 
     // Count of models tracked in performance trends
     const totalModelsWithTrends = performanceTrends.modelNames.length;
-
-    const filteredCompareModels = selectedFactory === 'All'
-        ? flatModels
-        : flatModels.filter(m => m.factoryName === selectedFactory);
-
-    // Filtering activity based on selected factory
-    const filteredActivity = selectedFactory === 'All' 
-        ? activity 
-        : activity.filter(a => a.factory_name === selectedFactory);
-
-    // Filtering factory statuses based on selected factory
-    const filteredFactories = selectedFactory === 'All' 
-        ? factoryStatus 
-        : factoryStatus.filter(f => f.factory_name === selectedFactory);
 
 
 
@@ -414,11 +417,11 @@ export default function Dashboard() {
                     </Box>
                 </motion.div>
 
-                {/* ═══ CHARTS ROW 1: Activity Trend + Top Model ═══ */}
+                {/* ═══ CHARTS ROW 1: Performance Trends Full Width ═══ */}
                 <Grid container spacing={3} sx={{ mb: 4 }}>
-                    <Grid size={{ xs: 12, md: stats?.latest_deployment ? 7 : 12 }} sx={{ display: 'flex' }}>
+                    <Grid size={{ xs: 12 }} sx={{ display: 'flex' }}>
                         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }} style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
-                            <Paper elevation={0} sx={{ ...paperSx(theme), p: 3, height: '100%', minHeight: 340, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                            <Paper elevation={0} sx={{ ...paperSx(theme), p: 3, height: '100%', minHeight: 460, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                 <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 3 }}>
                                     <SectionHeader title={t("dashboard.performanceTrends", "Performance Trends")} subtitle={t("dashboard.performanceTrendsSub", "Model accuracy across sequential versions")} icon={<TrendingUp />} color={theme.primary} />
                                     {totalModelsWithTrends > 0 && (
@@ -427,18 +430,18 @@ export default function Dashboard() {
                                     )}
                                 </Stack>
                                 {performanceTrends.chartData.length === 0 ? (
-                                    <Box sx={{ height: 260, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Box sx={{ height: 380, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                         <Typography sx={{ color: theme.textMuted }}>{t("dashboard.noPerformanceData", "No performance trend data yet")}</Typography>
                                     </Box>
                                 ) : (
-                                    <Box sx={{ height: 260 }}>
+                                    <Box sx={{ height: 380 }}>
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={performanceTrends.chartData} margin={{ top: 8, right: 8, bottom: 8, left: -16 }}>
+                                            <LineChart data={performanceTrends.chartData} margin={{ top: 15, right: 30, bottom: 15, left: -10 }}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.border, 0.3)} />
-                                                <XAxis dataKey="version" axisLine={false} tickLine={false}
-                                                    tick={{ fill: theme.textMuted, fontSize: 11, fontWeight: 600 }} />
-                                                <YAxis axisLine={false} tickLine={false}
-                                                    tick={{ fill: theme.textMuted, fontSize: 11, fontWeight: 600 }}
+                                                <XAxis dataKey="version" axisLine={false} tickLine={false} tickMargin={8}
+                                                    tick={{ fill: theme.textMuted, fontSize: 12, fontWeight: 600 }} />
+                                                <YAxis axisLine={false} tickLine={false} tickMargin={8}
+                                                    tick={{ fill: theme.textMuted, fontSize: 12, fontWeight: 600 }}
                                                     domain={[0, 100]}
                                                     allowDecimals={false} />
                                                 <ReTooltip 
@@ -453,7 +456,7 @@ export default function Dashboard() {
                                                     formatter={(v: any, name: any) => [`${v}%`, name]}
                                                     cursor={{ stroke: theme.textMuted, strokeWidth: 1, strokeDasharray: '4 4' }} 
                                                 />
-                                                <Legend iconType="circle" iconSize={8} formatter={(v) => <span style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 600 }}>{v}</span>} />
+                                                <Legend iconType="circle" iconSize={8} verticalAlign="bottom" height={36} formatter={(v) => <span style={{ color: theme.textSecondary, fontSize: 11, fontWeight: 600 }}>{v}</span>} />
                                                 {performanceTrends.modelNames.map((name, i) => (
                                                     <Line 
                                                         key={name}
@@ -473,86 +476,6 @@ export default function Dashboard() {
                             </Paper>
                         </motion.div>
                     </Grid>
-
-                    {/* Latest Deployment Spotlight */}
-                    {stats?.latest_deployment && (
-                        <Grid size={{ xs: 12, md: 5 }} sx={{ display: 'flex' }}>
-                            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.35 }} style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
-                                <Paper elevation={0} sx={{
-                                    borderRadius: '24px', p: 3, height: '100%', minHeight: 340, position: 'relative', overflow: 'hidden',
-                                    background: mode === 'dark'
-                                        ? `linear-gradient(145deg, ${alpha(theme.success, 0.12)} 0%, ${alpha(theme.primary, 0.05)} 100%)`
-                                        : `linear-gradient(145deg, ${alpha(theme.success, 0.06)} 0%, ${alpha(theme.primary, 0.03)} 100%)`,
-                                    border: `1px solid ${alpha(theme.success, 0.25)}`,
-                                    backdropFilter: 'blur(20px)',
-                                }}>
-                                    <Box sx={{ position: 'absolute', top: -40, right: -40, width: 160, height: 160, borderRadius: '50%', bgcolor: alpha(theme.success, 0.08), filter: 'blur(30px)' }} />
-                                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
-                                        <Box sx={{ p: 1, bgcolor: alpha(theme.success, 0.12), borderRadius: '14px', color: theme.success, display: 'flex' }}>
-                                            <PrecisionManufacturing />
-                                        </Box>
-                                        <Box>
-                                            <Typography variant="h6" fontWeight={800} sx={{ background: `linear-gradient(45deg, ${theme.textMain}, ${theme.textSecondary})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                                                {t("dashboard.latestDeployment", "Latest Deployment")}
-                                            </Typography>
-                                            <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("dashboard.latestDeploymentSub", "Most recently activated model version")}</Typography>
-                                        </Box>
-                                    </Stack>
-
-                                    <Typography variant="h5" fontWeight={900} sx={{ color: theme.textMain, mb: 0.5 }} noWrap>
-                                        {stats.latest_deployment.model_name}
-                                        <Chip label={`v${stats.latest_deployment.version_number}`} size="small" sx={{ ml: 1.2, bgcolor: alpha(theme.success, 0.12), color: theme.success, fontWeight: 800, height: 22 }} />
-                                    </Typography>
-
-                                    <Typography variant="caption" sx={{ color: theme.textMuted, display: 'block', mb: 2.5, fontWeight: 700 }}>
-                                        {stats.latest_deployment.factory_name} › {stats.latest_deployment.algorithm_name}
-                                    </Typography>
-
-                                    <Stack spacing={1.5} sx={{ mb: 1.5 }}>
-                                        <Box display="flex" justifyContent="space-between" alignItems="center">
-                                            <Typography variant="body2" sx={{ color: theme.textSecondary, fontWeight: 600 }}>{t("dashboard.accuracy", "Accuracy")}</Typography>
-                                            <Typography variant="body2" sx={{ color: theme.primary, fontWeight: 800 }}>
-                                                {stats.latest_deployment.accuracy ? `${stats.latest_deployment.accuracy.toFixed(1)}%` : 'N/A'}
-                                            </Typography>
-                                        </Box>
-                                        <Box display="flex" justifyContent="space-between" alignItems="center">
-                                            <Typography variant="body2" sx={{ color: theme.textSecondary, fontWeight: 600 }}>{t("dashboard.f1Score", "F1 Score")}</Typography>
-                                            <Typography variant="body2" sx={{ color: theme.success, fontWeight: 800 }}>
-                                                {stats.latest_deployment.f1_score ? `${stats.latest_deployment.f1_score.toFixed(1)}%` : 'N/A'}
-                                            </Typography>
-                                        </Box>
-                                        <Box display="flex" justifyContent="space-between" alignItems="center">
-                                            <Typography variant="body2" sx={{ color: theme.textSecondary, fontWeight: 600 }}>{t("dashboard.latency", "Latency (Inference)")}</Typography>
-                                            <Typography variant="body2" sx={{ color: theme.info, fontWeight: 800 }}>
-                                                {stats.latest_deployment.inference_time ? `${stats.latest_deployment.inference_time.toFixed(1)} ms` : 'N/A'}
-                                            </Typography>
-                                        </Box>
-                                        {stats.latest_deployment.gpu_utilization !== null && (
-                                            <Box display="flex" justifyContent="space-between" alignItems="center">
-                                                <Typography variant="body2" sx={{ color: theme.textSecondary, fontWeight: 600 }}>{t("dashboard.gpuUtil", "GPU Utilization")}</Typography>
-                                                <Typography variant="body2" sx={{ color: theme.warning, fontWeight: 800 }}>
-                                                    {stats.latest_deployment.gpu_utilization.toFixed(1)}%
-                                                </Typography>
-                                            </Box>
-                                        )}
-                                        {stats.latest_deployment.cpu_utilization !== null && stats.latest_deployment.gpu_utilization === null && (
-                                            <Box display="flex" justifyContent="space-between" alignItems="center">
-                                                <Typography variant="body2" sx={{ color: theme.textSecondary, fontWeight: 600 }}>{t("dashboard.cpuUtil", "CPU Utilization")}</Typography>
-                                                <Typography variant="body2" sx={{ color: theme.warning, fontWeight: 800 }}>
-                                                    {stats.latest_deployment.cpu_utilization.toFixed(1)}%
-                                                </Typography>
-                                            </Box>
-                                        )}
-                                    </Stack>
-
-                                    <Divider sx={{ my: 1.5, borderColor: alpha(theme.border, 0.3) }} />
-                                    <Typography variant="caption" sx={{ color: theme.textMuted, display: 'block', textAlign: 'right', fontWeight: 600 }}>
-                                        {t("dashboard.deployed", "Deployed")}: {timeAgo(stats.latest_deployment.updated_at)}
-                                    </Typography>
-                                </Paper>
-                            </motion.div>
-                        </Grid>
-                    )}
                 </Grid>
 
                 {/* ═══ CHARTS ROW 2: Leaderboard + Storage ═══ */}
@@ -562,254 +485,475 @@ export default function Dashboard() {
                         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.4 }} style={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
                             <Paper elevation={0} sx={{ ...paperSx(theme), p: 4, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 300 }}>
                                 <Box>
-                                    <SectionHeader title={t("dashboard.iterativeAnalysis", "Iterative Analysis")} subtitle={t("dashboard.iterativeAnalysisSub", "Select and compare performance metrics between two versions")} icon={<LayersOutlined />} color={theme.warning} />
+                                    <SectionHeader title={t("dashboard.iterativeAnalysis", "Iterative Analysis")} subtitle="Select and compare evaluation metrics side-by-side" icon={<LayersOutlined />} color={theme.warning} />
                                     
-                                    <Grid container spacing={3} sx={{ mt: 1 }}>
-                                        {/* Step 1: Model Dropdown */}
-                                        <Grid size={{ xs: 12 }}>
-                                            <FormControl fullWidth size="small">
-                                                <InputLabel 
-                                                    id="model-select-label" 
-                                                    sx={{ 
-                                                        color: theme.textSecondary,
-                                                        '&.Mui-focused': { color: theme.primary },
-                                                        '&.MuiInputLabel-shrink': { color: theme.textSecondary },
-                                                        '&.Mui-disabled': { color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.35) : alpha(theme.textMuted, 0.5) }
-                                                    }}
-                                                >
-                                                    {t("dashboard.selectModel", "Select Model")}
-                                                </InputLabel>
-                                                <Select
-                                                    labelId="model-select-label"
-                                                    value={selectedCompareModelId}
-                                                    label={t("dashboard.selectModel", "Select Model")}
-                                                    onChange={(e) => {
-                                                        setSelectedCompareModelId(e.target.value as number);
-                                                        setSelectedVersionIds([]);
-                                                    }}
-                                                    MenuProps={{
-                                                        PaperProps: {
-                                                            sx: {
-                                                                bgcolor: theme.paper,
-                                                                border: `1px solid ${theme.border}`,
-                                                                backgroundImage: 'none',
-                                                                "& .MuiMenuItem-root": {
-                                                                    color: theme.textMain,
-                                                                    fontWeight: 600,
-                                                                    "&:hover": {
-                                                                        bgcolor: alpha(theme.primary, 0.08),
-                                                                    },
-                                                                    "&.Mui-selected": {
-                                                                        bgcolor: alpha(theme.primary, 0.15),
-                                                                        color: theme.primary,
-                                                                        "&:hover": {
-                                                                            bgcolor: alpha(theme.primary, 0.2),
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    }}
-                                                    sx={{
-                                                        borderRadius: '12px',
-                                                        color: theme.textMain,
-                                                        bgcolor: theme.mode === 'dark' ? alpha(theme.background, 0.5) : theme.background,
-                                                        '.MuiOutlinedInput-notchedOutline': { borderColor: theme.mode === 'dark' ? alpha(theme.border, 0.8) : theme.border },
-                                                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
-                                                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
-                                                        '.MuiSelect-icon': { color: theme.textSecondary },
-                                                        '&.Mui-disabled': {
-                                                            color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.35) : alpha(theme.textMuted, 0.5),
-                                                            '.MuiOutlinedInput-notchedOutline': {
-                                                                borderColor: theme.mode === 'dark' ? alpha(theme.border, 0.3) : alpha(theme.border, 0.4)
-                                                            },
-                                                            '.MuiSelect-icon': {
-                                                                color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.2) : alpha(theme.textMuted, 0.35)
-                                                            }
-                                                        }
-                                                    }}
-                                                >
-                                                    {filteredCompareModels.length === 0 ? (
-                                                        <MenuItem disabled value="">{t("dashboard.noModelsAvailable", "No models available")}</MenuItem>
-                                                    ) : (
-                                                        filteredCompareModels.map(m => (
-                                                            <MenuItem key={m.model_id} value={m.model_id}>
-                                                                {m.model_name} ({m.algorithmName}) @ {m.factoryName}
-                                                            </MenuItem>
-                                                        ))
-                                                    )}
-                                                </Select>
-                                            </FormControl>
-                                        </Grid>
+                                    {/* Tabs */}
+                                    <Box sx={{ display: 'flex', gap: 1.5, mb: 3, borderBottom: `1px solid ${alpha(theme.border, 0.4)}`, pb: 1.5 }}>
+                                        <Button
+                                            size="small"
+                                            onClick={() => setAnalysisTab('versions')}
+                                            sx={{
+                                                textTransform: 'none',
+                                                fontWeight: 800,
+                                                fontSize: '0.8rem',
+                                                px: 2, py: 0.5,
+                                                borderRadius: '8px',
+                                                bgcolor: analysisTab === 'versions' ? alpha(theme.primary, 0.1) : 'transparent',
+                                                color: analysisTab === 'versions' ? theme.primary : theme.textMuted,
+                                                border: `1px solid ${analysisTab === 'versions' ? alpha(theme.primary, 0.3) : 'transparent'}`,
+                                                '&:hover': { bgcolor: alpha(theme.primary, 0.05) }
+                                            }}
+                                        >
+                                            Version Comparison (Same Model)
+                                        </Button>
+                                        <Button
+                                            size="small"
+                                            onClick={() => setAnalysisTab('models')}
+                                            sx={{
+                                                textTransform: 'none',
+                                                fontWeight: 800,
+                                                fontSize: '0.8rem',
+                                                px: 2, py: 0.5,
+                                                borderRadius: '8px',
+                                                bgcolor: analysisTab === 'models' ? alpha(theme.primary, 0.1) : 'transparent',
+                                                color: analysisTab === 'models' ? theme.primary : theme.textMuted,
+                                                border: `1px solid ${analysisTab === 'models' ? alpha(theme.primary, 0.3) : 'transparent'}`,
+                                                '&:hover': { bgcolor: alpha(theme.primary, 0.05) }
+                                            }}
+                                        >
+                                            Cross-Model Comparison (Same Algorithm)
+                                        </Button>
+                                    </Box>
 
-                                        {/* Step 2: Versions Multi-Select */}
-                                        <Grid size={{ xs: 12 }}>
-                                            {selectedModelObj && selectedModelObj.versions && selectedModelObj.versions.length > 0 && (
-                                                <Stack direction="row" justifyContent="flex-end" sx={{ mb: 0.5 }}>
-                                                    <Button
-                                                        size="small"
-                                                        variant="text"
-                                                        onClick={() => {
-                                                            const allIds = selectedModelObj.versions.map((v: any) => v.version_id);
-                                                            const isAllSelected = selectedVersionIds.length === allIds.length;
-                                                            setSelectedVersionIds(isAllSelected ? [] : allIds);
-                                                        }}
-                                                        sx={{
-                                                            textTransform: 'none',
-                                                            fontWeight: 800,
-                                                            p: 0,
-                                                            fontSize: '0.72rem',
-                                                            color: theme.primary,
-                                                            '&:hover': { bgcolor: 'transparent', color: theme.primaryDark }
+                                    {analysisTab === 'versions' ? (
+                                        <Grid container spacing={3}>
+                                            {/* Step 1: Model Dropdown */}
+                                            <Grid size={{ xs: 12 }}>
+                                                <FormControl fullWidth size="small">
+                                                    <InputLabel 
+                                                        id="model-select-label" 
+                                                        sx={{ 
+                                                            color: theme.textSecondary,
+                                                            '&.Mui-focused': { color: theme.primary },
+                                                            '&.MuiInputLabel-shrink': { color: theme.textSecondary },
+                                                            '&.Mui-disabled': { color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.35) : alpha(theme.textMuted, 0.5) }
                                                         }}
                                                     >
-                                                        {selectedVersionIds.length === selectedModelObj.versions.length ? "Deselect All Versions" : "Select All Versions"}
-                                                    </Button>
-                                                </Stack>
-                                            )}
-                                            <FormControl fullWidth size="small" disabled={!selectedCompareModelId}>
-                                                <InputLabel 
-                                                    id="versions-select-label" 
-                                                    sx={{ 
-                                                        color: theme.textSecondary,
-                                                        '&.Mui-focused': { color: theme.primary },
-                                                        '&.MuiInputLabel-shrink': { color: theme.textSecondary },
-                                                        '&.Mui-disabled': { color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.35) : alpha(theme.textMuted, 0.5) }
-                                                    }}
-                                                >
-                                                    Select Versions to Compare (2 or more)
-                                                </InputLabel>
-                                                <Select
-                                                    labelId="versions-select-label"
-                                                    multiple
-                                                    value={selectedVersionIds}
-                                                    onChange={(e) => setSelectedVersionIds(e.target.value as number[])}
-                                                    renderValue={(selected) => (
-                                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                                            {(selected as number[]).map((value) => {
-                                                                const vObj = selectedModelObj?.versions.find((v: any) => v.version_id === value);
-                                                                return (
-                                                                    <Chip 
-                                                                        key={value} 
-                                                                        label={`v${vObj?.version_number ?? value}`} 
-                                                                        size="small"
-                                                                        sx={{ height: 20, fontSize: '0.75rem', fontWeight: 700 }}
-                                                                    />
-                                                                );
-                                                            })}
-                                                        </Box>
-                                                    )}
-                                                    label="Select Versions to Compare (2 or more)"
-                                                    MenuProps={{
-                                                        PaperProps: {
-                                                            sx: {
-                                                                bgcolor: theme.paper,
-                                                                border: `1px solid ${theme.border}`,
-                                                                backgroundImage: 'none',
-                                                                "& .MuiMenuItem-root": {
-                                                                    color: theme.textMain,
-                                                                    fontWeight: 600,
-                                                                    "&:hover": {
-                                                                        bgcolor: alpha(theme.primary, 0.08),
-                                                                    },
-                                                                    "&.Mui-selected": {
-                                                                        bgcolor: alpha(theme.primary, 0.15),
-                                                                        color: theme.primary,
+                                                        {t("dashboard.selectModel", "Select Model")}
+                                                    </InputLabel>
+                                                    <Select
+                                                        labelId="model-select-label"
+                                                        value={selectedCompareModelId}
+                                                        label={t("dashboard.selectModel", "Select Model")}
+                                                        onChange={(e) => {
+                                                            setSelectedCompareModelId(e.target.value as number);
+                                                            setSelectedVersionIds([]);
+                                                        }}
+                                                        MenuProps={{
+                                                            PaperProps: {
+                                                                sx: {
+                                                                    bgcolor: theme.paper,
+                                                                    border: `1px solid ${theme.border}`,
+                                                                    backgroundImage: 'none',
+                                                                    "& .MuiMenuItem-root": {
+                                                                        color: theme.textMain,
+                                                                        fontWeight: 600,
                                                                         "&:hover": {
-                                                                            bgcolor: alpha(theme.primary, 0.2),
+                                                                            bgcolor: alpha(theme.primary, 0.08),
+                                                                        },
+                                                                        "&.Mui-selected": {
+                                                                            bgcolor: alpha(theme.primary, 0.15),
+                                                                            color: theme.primary,
+                                                                            "&:hover": {
+                                                                                bgcolor: alpha(theme.primary, 0.2),
+                                                                            }
                                                                         }
                                                                     }
                                                                 }
                                                             }
-                                                        }
-                                                    }}
-                                                    sx={{
-                                                        borderRadius: '12px',
-                                                        color: theme.textMain,
-                                                        bgcolor: theme.mode === 'dark' ? alpha(theme.background, 0.5) : theme.background,
-                                                        '.MuiOutlinedInput-notchedOutline': { borderColor: theme.mode === 'dark' ? alpha(theme.border, 0.8) : theme.border },
-                                                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
-                                                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
-                                                        '.MuiSelect-icon': { color: theme.textSecondary },
-                                                        '&.Mui-disabled': {
-                                                            color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.35) : alpha(theme.textMuted, 0.5),
-                                                            '.MuiOutlinedInput-notchedOutline': {
-                                                                borderColor: theme.mode === 'dark' ? alpha(theme.border, 0.3) : alpha(theme.border, 0.4)
-                                                            },
-                                                            '.MuiSelect-icon': {
-                                                                color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.2) : alpha(theme.textMuted, 0.35)
+                                                        }}
+                                                        sx={{
+                                                            borderRadius: '12px',
+                                                            color: theme.textMain,
+                                                            bgcolor: theme.mode === 'dark' ? alpha(theme.background, 0.5) : theme.background,
+                                                            '.MuiOutlinedInput-notchedOutline': { borderColor: theme.mode === 'dark' ? alpha(theme.border, 0.8) : theme.border },
+                                                            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
+                                                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
+                                                            '.MuiSelect-icon': { color: theme.textSecondary },
+                                                            '&.Mui-disabled': {
+                                                                color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.35) : alpha(theme.textMuted, 0.5),
+                                                                '.MuiOutlinedInput-notchedOutline': {
+                                                                    borderColor: theme.mode === 'dark' ? alpha(theme.border, 0.3) : alpha(theme.border, 0.4)
+                                                                },
+                                                                '.MuiSelect-icon': {
+                                                                    color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.2) : alpha(theme.textMuted, 0.35)
+                                                                }
                                                             }
-                                                        }
-                                                    }}
-                                                >
-                                                    {selectedModelObj?.versions.map((v: any) => (
-                                                        <MenuItem key={v.version_id} value={v.version_id}>
-                                                            v{v.version_number}
-                                                        </MenuItem>
-                                                    ))}
-                                                </Select>
-                                            </FormControl>
-                                        </Grid>
-                                    </Grid>
+                                                        }}
+                                                    >
+                                                        {filteredCompareModels.length === 0 ? (
+                                                            <MenuItem disabled value="">{t("dashboard.noModelsAvailable", "No models available")}</MenuItem>
+                                                        ) : (
+                                                            filteredCompareModels.map(m => (
+                                                                <MenuItem key={m.model_id} value={m.model_id}>
+                                                                    {m.model_name} ({m.algorithmName}) @ {m.factoryName}
+                                                                </MenuItem>
+                                                            ))
+                                                        )}
+                                                    </Select>
+                                                </FormControl>
+                                            </Grid>
 
-                                    {/* Interactive Comparison Preview Card */}
-                                    <Box sx={{ mt: 3 }}>
-                                        {selectedModelObj ? (
-                                            <Box sx={{ 
-                                                p: 2, 
-                                                borderRadius: '16px', 
-                                                bgcolor: alpha(theme.primary, 0.02), 
-                                                border: `1px dashed ${alpha(theme.primary, 0.15)}` 
-                                            }}>
-                                                <Typography variant="caption" sx={{ color: theme.primary, display: 'block', mb: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                                    Comparison Summary
-                                                </Typography>
-                                                <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 1.5, gap: 0.5 }}>
-                                                    <Chip size="small" label={`Factory: ${selectedModelObj.factoryName}`} sx={{ bgcolor: alpha(theme.border, 0.4), color: theme.textSecondary, fontWeight: 600, height: 20, fontSize: '0.7rem' }} />
-                                                    <Chip size="small" label={`Algorithm: ${selectedModelObj.algorithmName}`} sx={{ bgcolor: alpha(theme.border, 0.4), color: theme.textSecondary, fontWeight: 600, height: 20, fontSize: '0.7rem' }} />
-                                                </Stack>
-                                                <Typography variant="caption" sx={{ color: theme.textSecondary, fontWeight: 600, display: 'block', mb: 1 }}>
-                                                    Versions available for selection:
-                                                </Typography>
-                                                <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
-                                                    {selectedModelObj.versions.map((v: any) => {
-                                                        const isSelected = selectedVersionIds.includes(v.version_id);
-                                                        return (
-                                                            <Box 
-                                                                key={v.version_id} 
-                                                                sx={{ 
-                                                                    px: 1.2, py: 0.3, borderRadius: '6px', 
-                                                                    fontSize: '0.7rem', fontWeight: 800,
-                                                                    bgcolor: isSelected 
-                                                                        ? alpha(theme.primary, 0.15) 
-                                                                        : alpha(theme.border, 0.3),
-                                                                    color: isSelected 
-                                                                        ? theme.primary 
-                                                                        : theme.textMuted,
-                                                                    border: `1px solid ${isSelected ? theme.primary : 'transparent'}`,
-                                                                    transition: 'all 0.2s'
-                                                                }}
-                                                            >
-                                                                v{v.version_number} {isSelected ? '(Selected)' : ''}
+                                            {/* Step 2: Versions Multi-Select */}
+                                            <Grid size={{ xs: 12 }}>
+                                                {selectedModelObj && selectedModelObj.versions && selectedModelObj.versions.length > 0 && (
+                                                    <Stack direction="row" justifyContent="flex-end" sx={{ mb: 0.5 }}>
+                                                        <Button
+                                                            size="small"
+                                                            variant="text"
+                                                            onClick={() => {
+                                                                const allIds = selectedModelObj.versions.map((v: any) => v.version_id);
+                                                                const isAllSelected = selectedVersionIds.length === allIds.length;
+                                                                setSelectedVersionIds(isAllSelected ? [] : allIds);
+                                                            }}
+                                                            sx={{
+                                                                textTransform: 'none',
+                                                                fontWeight: 800,
+                                                                p: 0,
+                                                                fontSize: '0.72rem',
+                                                                color: theme.primary,
+                                                                '&:hover': { bgcolor: 'transparent', color: theme.primaryDark }
+                                                            }}
+                                                        >
+                                                            {selectedVersionIds.length === selectedModelObj.versions.length ? "Deselect All Versions" : "Select All Versions"}
+                                                        </Button>
+                                                    </Stack>
+                                                )}
+                                                <FormControl fullWidth size="small" disabled={!selectedCompareModelId}>
+                                                    <InputLabel 
+                                                        id="versions-select-label" 
+                                                        sx={{ 
+                                                            color: theme.textSecondary,
+                                                            '&.Mui-focused': { color: theme.primary },
+                                                            '&.MuiInputLabel-shrink': { color: theme.textSecondary },
+                                                            '&.Mui-disabled': { color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.35) : alpha(theme.textMuted, 0.5) }
+                                                        }}
+                                                    >
+                                                        Select Versions to Compare (2 or more)
+                                                    </InputLabel>
+                                                    <Select
+                                                        labelId="versions-select-label"
+                                                        multiple
+                                                        value={selectedVersionIds}
+                                                        onChange={(e) => setSelectedVersionIds(e.target.value as number[])}
+                                                        renderValue={(selected) => (
+                                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                                                {(selected as number[]).map((value) => {
+                                                                    const vObj = selectedModelObj?.versions.find((v: any) => v.version_id === value);
+                                                                    return (
+                                                                        <Chip 
+                                                                            key={value} 
+                                                                            label={`v${vObj?.version_number ?? value}`} 
+                                                                            size="small"
+                                                                            sx={{ height: 20, fontSize: '0.75rem', fontWeight: 700 }}
+                                                                        />
+                                                                    );
+                                                                })}
                                                             </Box>
-                                                        );
-                                                    })}
+                                                        )}
+                                                        label="Select Versions to Compare (2 or more)"
+                                                        MenuProps={{
+                                                            PaperProps: {
+                                                                sx: {
+                                                                    bgcolor: theme.paper,
+                                                                    border: `1px solid ${theme.border}`,
+                                                                    backgroundImage: 'none',
+                                                                    "& .MuiMenuItem-root": {
+                                                                        color: theme.textMain,
+                                                                        fontWeight: 600,
+                                                                        "&:hover": {
+                                                                            bgcolor: alpha(theme.primary, 0.08),
+                                                                        },
+                                                                        "&.Mui-selected": {
+                                                                            bgcolor: alpha(theme.primary, 0.15),
+                                                                            color: theme.primary,
+                                                                            "&:hover": {
+                                                                                bgcolor: alpha(theme.primary, 0.2),
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }}
+                                                        sx={{
+                                                            borderRadius: '12px',
+                                                            color: theme.textMain,
+                                                            bgcolor: theme.mode === 'dark' ? alpha(theme.background, 0.5) : theme.background,
+                                                            '.MuiOutlinedInput-notchedOutline': { borderColor: theme.mode === 'dark' ? alpha(theme.border, 0.8) : theme.border },
+                                                            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
+                                                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
+                                                            '.MuiSelect-icon': { color: theme.textSecondary },
+                                                            '&.Mui-disabled': {
+                                                                color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.35) : alpha(theme.textMuted, 0.5),
+                                                                '.MuiOutlinedInput-notchedOutline': {
+                                                                    borderColor: theme.mode === 'dark' ? alpha(theme.border, 0.3) : alpha(theme.border, 0.4)
+                                                                },
+                                                                '.MuiSelect-icon': {
+                                                                    color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.2) : alpha(theme.textMuted, 0.35)
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        {selectedModelObj?.versions.map((v: any) => (
+                                                            <MenuItem key={v.version_id} value={v.version_id}>
+                                                                v{v.version_number}
+                                                            </MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                            </Grid>
+                                        </Grid>
+                                    ) : (
+                                        <Grid container spacing={3}>
+                                            {/* Algorithm Dropdown */}
+                                            <Grid size={{ xs: 12 }}>
+                                                <FormControl fullWidth size="small">
+                                                    <InputLabel 
+                                                        id="algo-select-label"
+                                                        sx={{ color: theme.textSecondary }}
+                                                    >
+                                                        Select Algorithm
+                                                    </InputLabel>
+                                                    <Select
+                                                        labelId="algo-select-label"
+                                                        value={selectedAlgoId}
+                                                        label="Select Algorithm"
+                                                        onChange={(e) => {
+                                                            setSelectedAlgoId(e.target.value as number);
+                                                            setSelectedModelIds([]);
+                                                        }}
+                                                        MenuProps={{
+                                                            PaperProps: {
+                                                                sx: {
+                                                                    bgcolor: theme.paper,
+                                                                    border: `1px solid ${theme.border}`,
+                                                                    backgroundImage: 'none',
+                                                                    "& .MuiMenuItem-root": {
+                                                                        color: theme.textMain,
+                                                                        fontWeight: 600,
+                                                                        "&:hover": { bgcolor: alpha(theme.primary, 0.08) },
+                                                                        "&.Mui-selected": {
+                                                                            bgcolor: alpha(theme.primary, 0.15),
+                                                                            color: theme.primary
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }}
+                                                        sx={{
+                                                            borderRadius: '12px',
+                                                            color: theme.textMain,
+                                                            bgcolor: theme.mode === 'dark' ? alpha(theme.background, 0.5) : theme.background,
+                                                            '.MuiOutlinedInput-notchedOutline': { borderColor: theme.mode === 'dark' ? alpha(theme.border, 0.8) : theme.border },
+                                                            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
+                                                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
+                                                            '.MuiSelect-icon': { color: theme.textSecondary }
+                                                        }}
+                                                    >
+                                                        {comparisonHierarchy.map(a => (
+                                                            <MenuItem key={a.algorithm_id} value={a.algorithm_id}>
+                                                                {a.algorithm_name}
+                                                            </MenuItem>
+                                                        ))}
+                                                    </Select>
+                                                </FormControl>
+                                            </Grid>
+
+                                            {/* Models Dropdown */}
+                                            <Grid size={{ xs: 12 }}>
+                                                <FormControl fullWidth size="small" disabled={!selectedAlgoId}>
+                                                    <InputLabel 
+                                                        id="models-multi-select-label"
+                                                        sx={{ color: theme.textSecondary }}
+                                                    >
+                                                        Select Models to Compare (2 or more)
+                                                    </InputLabel>
+                                                    <Select
+                                                        labelId="models-multi-select-label"
+                                                        multiple
+                                                        value={selectedModelIds}
+                                                        label="Select Models to Compare (2 or more)"
+                                                        onChange={(e) => setSelectedModelIds(e.target.value as number[])}
+                                                        renderValue={(selected) => (
+                                                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                                                {(selected as number[]).map((mId) => {
+                                                                    const algoObj = comparisonHierarchy.find(a => a.algorithm_id === selectedAlgoId);
+                                                                    const models = algoObj ? algoObj.factories.flatMap((f: any) => f.models) : [];
+                                                                    const mObj = models.find((m: any) => m.model_id === mId);
+                                                                    return (
+                                                                        <Chip 
+                                                                            key={mId} 
+                                                                            label={mObj?.model_name ?? mId} 
+                                                                            size="small"
+                                                                            sx={{ height: 20, fontSize: '0.75rem', fontWeight: 700 }}
+                                                                        />
+                                                                    );
+                                                                })}
+                                                            </Box>
+                                                        )}
+                                                        MenuProps={{
+                                                            PaperProps: {
+                                                                sx: {
+                                                                    bgcolor: theme.paper,
+                                                                    border: `1px solid ${theme.border}`,
+                                                                    backgroundImage: 'none',
+                                                                    "& .MuiMenuItem-root": {
+                                                                        color: theme.textMain,
+                                                                        fontWeight: 600,
+                                                                        "&:hover": { bgcolor: alpha(theme.primary, 0.08) },
+                                                                        "&.Mui-selected": {
+                                                                            bgcolor: alpha(theme.primary, 0.15),
+                                                                            color: theme.primary
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }}
+                                                        sx={{
+                                                            borderRadius: '12px',
+                                                            color: theme.textMain,
+                                                            bgcolor: theme.mode === 'dark' ? alpha(theme.background, 0.5) : theme.background,
+                                                            '.MuiOutlinedInput-notchedOutline': { borderColor: theme.mode === 'dark' ? alpha(theme.border, 0.8) : theme.border },
+                                                            '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
+                                                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: theme.primary },
+                                                            '.MuiSelect-icon': { color: theme.textSecondary }
+                                                        }}
+                                                    >
+                                                        {(() => {
+                                                            const algoObj = comparisonHierarchy.find(a => a.algorithm_id === selectedAlgoId);
+                                                            const models = algoObj 
+                                                                ? algoObj.factories.flatMap((f: any) => f.models.map((m: any) => ({ ...m, factoryName: f.factory_name })))
+                                                                : [];
+                                                            return models.map((m: any) => (
+                                                                <MenuItem key={m.model_id} value={m.model_id}>
+                                                                    {m.model_name} @ {m.factoryName}
+                                                                </MenuItem>
+                                                            ));
+                                                        })()}
+                                                    </Select>
+                                                </FormControl>
+                                            </Grid>
+                                        </Grid>
+                                    )}
+
+                                    {/* Summary preview block */}
+                                    <Box sx={{ mt: 3 }}>
+                                        {analysisTab === 'versions' ? (
+                                            selectedModelObj ? (
+                                                <Box sx={{ 
+                                                    p: 2, 
+                                                    borderRadius: '16px', 
+                                                    bgcolor: alpha(theme.primary, 0.02), 
+                                                    border: `1px dashed ${alpha(theme.primary, 0.15)}` 
+                                                }}>
+                                                    <Typography variant="caption" sx={{ color: theme.primary, display: 'block', mb: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                                        Comparison Summary
+                                                    </Typography>
+                                                    <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 1.5, gap: 0.5 }}>
+                                                        <Chip size="small" label={`Factory: ${selectedModelObj.factoryName}`} sx={{ bgcolor: alpha(theme.border, 0.4), color: theme.textSecondary, fontWeight: 600, height: 20, fontSize: '0.7rem' }} />
+                                                        <Chip size="small" label={`Algorithm: ${selectedModelObj.algorithmName}`} sx={{ bgcolor: alpha(theme.border, 0.4), color: theme.textSecondary, fontWeight: 600, height: 20, fontSize: '0.7rem' }} />
+                                                    </Stack>
+                                                    <Typography variant="caption" sx={{ color: theme.textSecondary, fontWeight: 600, display: 'block', mb: 1 }}>
+                                                        Versions available for selection:
+                                                    </Typography>
+                                                    <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
+                                                        {selectedModelObj.versions.map((v: any) => {
+                                                            const isSelected = selectedVersionIds.includes(v.version_id);
+                                                            return (
+                                                                <Box 
+                                                                    key={v.version_id} 
+                                                                    sx={{ 
+                                                                        px: 1.2, py: 0.3, borderRadius: '6px', 
+                                                                        fontSize: '0.7rem', fontWeight: 800,
+                                                                        bgcolor: isSelected 
+                                                                            ? alpha(theme.primary, 0.15) 
+                                                                            : alpha(theme.border, 0.3),
+                                                                        color: isSelected 
+                                                                            ? theme.primary 
+                                                                            : theme.textMuted,
+                                                                        border: `1px solid ${isSelected ? theme.primary : 'transparent'}`,
+                                                                        transition: 'all 0.2s'
+                                                                    }}
+                                                                >
+                                                                    v{v.version_number} {isSelected ? '(Selected)' : ''}
+                                                                </Box>
+                                                            );
+                                                        })}
+                                                    </Box>
                                                 </Box>
-                                            </Box>
+                                            ) : (
+                                                <Box sx={{ 
+                                                    p: 2.5, 
+                                                    borderRadius: '16px', 
+                                                    bgcolor: alpha(theme.warning, 0.02), 
+                                                    border: `1px dashed ${alpha(theme.warning, 0.15)}` 
+                                                }}>
+                                                    <Typography variant="caption" sx={{ color: theme.warning, display: 'block', mb: 0.8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                                        Iterative Version Analysis
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ color: theme.textMuted, lineHeight: 1.5, display: 'block', fontSize: '0.78rem' }}>
+                                                        Select a model from the list, then select multiple registered versions (2 or more) to compare their evaluation accuracy, F1, latency, and system utilization side-by-side.
+                                                    </Typography>
+                                                </Box>
+                                            )
                                         ) : (
-                                            <Box sx={{ 
-                                                p: 2.5, 
-                                                borderRadius: '16px', 
-                                                bgcolor: alpha(theme.warning, 0.02), 
-                                                border: `1px dashed ${alpha(theme.warning, 0.15)}` 
-                                            }}>
-                                                <Typography variant="caption" sx={{ color: theme.warning, display: 'block', mb: 0.8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                                    Iterative Version Analysis
-                                                </Typography>
-                                                <Typography variant="caption" sx={{ color: theme.textMuted, lineHeight: 1.5, display: 'block', fontSize: '0.78rem' }}>
-                                                    Select a model from the list, then select multiple registered versions (2 or more) to compare their evaluation accuracy, F1, latency, and system utilization side-by-side.
-                                                </Typography>
-                                            </Box>
+                                            selectedAlgoId ? (
+                                                <Box sx={{ 
+                                                    p: 2, 
+                                                    borderRadius: '16px', 
+                                                    bgcolor: alpha(theme.primary, 0.02), 
+                                                    border: `1px dashed ${alpha(theme.primary, 0.15)}` 
+                                                }}>
+                                                    <Typography variant="caption" sx={{ color: theme.primary, display: 'block', mb: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                                        Comparison Summary
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ color: theme.textSecondary, fontWeight: 600, display: 'block', mb: 1 }}>
+                                                        Models selected for comparison (Active version will be compared):
+                                                    </Typography>
+                                                    <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
+                                                        {(() => {
+                                                            const algoObj = comparisonHierarchy.find(a => a.algorithm_id === selectedAlgoId);
+                                                            const models = algoObj ? algoObj.factories.flatMap((f: any) => f.models.map((m: any) => ({ ...m, factoryName: f.factory_name }))) : [];
+                                                            const selectedModels = models.filter((m: any) => selectedModelIds.includes(m.model_id));
+                                                            if (selectedModels.length === 0) {
+                                                                return <Typography variant="caption" color="text.secondary">No models selected yet.</Typography>;
+                                                            }
+                                                            return selectedModels.map((m: any) => (
+                                                                <Chip 
+                                                                    key={m.model_id} 
+                                                                    size="small"
+                                                                    label={`${m.model_name} @ ${m.factoryName} (v${(m.versions.find((v: any) => v.is_active) || m.versions[m.versions.length - 1])?.version_number})`}
+                                                                    sx={{ bgcolor: alpha(theme.primary, 0.1), color: theme.primary, fontWeight: 700 }}
+                                                                />
+                                                            ));
+                                                        })()}
+                                                    </Box>
+                                                </Box>
+                                            ) : (
+                                                <Box sx={{ 
+                                                    p: 2.5, 
+                                                    borderRadius: '16px', 
+                                                    bgcolor: alpha(theme.warning, 0.02), 
+                                                    border: `1px dashed ${alpha(theme.warning, 0.15)}` 
+                                                }}>
+                                                    <Typography variant="caption" sx={{ color: theme.warning, display: 'block', mb: 0.8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                                                        Cross-Model Analysis
+                                                    </Typography>
+                                                    <Typography variant="caption" sx={{ color: theme.textMuted, lineHeight: 1.5, display: 'block', fontSize: '0.78rem' }}>
+                                                        Select an algorithm, then select two or more models running that algorithm to compare their active evaluation metrics, dataset sizes, inference latency, and hardware utilization side-by-side.
+                                                    </Typography>
+                                                </Box>
+                                            )
                                         )}
                                     </Box>
                                 </Box>
@@ -818,12 +962,31 @@ export default function Dashboard() {
                                 <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-end' }}>
                                     <Button
                                         variant="contained"
-                                        disabled={!selectedCompareModelId || selectedVersionIds.length < 2}
+                                        disabled={
+                                            analysisTab === 'versions'
+                                                ? (!selectedCompareModelId || selectedVersionIds.length < 2)
+                                                : (!selectedAlgoId || selectedModelIds.length < 2)
+                                        }
                                         onClick={() => {
-                                            if (selectedModelObj) {
-                                                const sortedIds = [...selectedVersionIds];
-                                                const idsStr = sortedIds.join(",");
-                                                navigate(`/algorithms/${selectedModelObj.algorithmId}/factories/${selectedModelObj.factoryId}/models/${selectedModelObj.model_id}/versions/compare?left=${sortedIds[0]}&right=${sortedIds[sortedIds.length - 1]}&ids=${idsStr}`);
+                                            if (analysisTab === 'versions') {
+                                                if (selectedModelObj) {
+                                                    const sortedIds = [...selectedVersionIds];
+                                                    const idsStr = sortedIds.join(",");
+                                                    navigate(`/algorithms/${selectedModelObj.algorithmId}/factories/${selectedModelObj.factoryId}/models/${selectedModelObj.model_id}/versions/compare?left=${sortedIds[0]}&right=${sortedIds[sortedIds.length - 1]}&ids=${idsStr}`);
+                                                }
+                                            } else {
+                                                const algoObj = comparisonHierarchy.find(a => a.algorithm_id === selectedAlgoId);
+                                                const models = algoObj ? algoObj.factories.flatMap((f: any) => f.models.map((m: any) => ({ ...m, factoryId: f.factory_id }))) : [];
+                                                const selectedModels = models.filter((m: any) => selectedModelIds.includes(m.model_id));
+                                                const versionsList = selectedModels.map((m: any) => {
+                                                    const activeVersion = m.versions.find((v: any) => v.is_active);
+                                                    return (activeVersion || m.versions[m.versions.length - 1])?.version_id;
+                                                }).filter(Boolean);
+                                                if (versionsList.length >= 2) {
+                                                    const firstModel = selectedModels[0];
+                                                    const idsStr = versionsList.join(",");
+                                                    navigate(`/algorithms/${selectedAlgoId}/factories/${firstModel.factoryId}/models/${firstModel.model_id}/versions/compare?left=${versionsList[0]}&right=${versionsList[versionsList.length - 1]}&ids=${idsStr}`);
+                                                }
                                             }
                                         }}
                                         sx={{
@@ -845,7 +1008,9 @@ export default function Dashboard() {
                                             }
                                         }}
                                     >
-                                        {selectedVersionIds.length < 2 ? "Select at least 2 Versions" : t("dashboard.comparePerformance", "Compare Performance")}
+                                        {analysisTab === 'versions'
+                                            ? (selectedVersionIds.length < 2 ? "Select at least 2 Versions" : t("dashboard.comparePerformance", "Compare Performance"))
+                                            : (selectedModelIds.length < 2 ? "Select at least 2 Models" : "Compare Models")}
                                     </Button>
                                 </Box>
                             </Paper>

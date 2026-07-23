@@ -1,6 +1,6 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc, distinct
 from datetime import datetime, timedelta
 
@@ -483,50 +483,60 @@ def get_comparison_hierarchy(db: Session = Depends(get_db)):
     """
     Get hierarchy of Algorithm -> Factory -> Model -> Versions for the Compare launcher.
     """
-    algorithms = db.query(Algorithm).order_by(Algorithm.name).all()
-    
-    hierarchy = []
-    for algo in algorithms:
-        algo_data = {
-            "algorithm_id": algo.id,
-            "algorithm_name": algo.name,
-            "factories": []
-        }
-        # Find factories running models for this algorithm
-        factories_in_algo = (
-            db.query(Factory)
-            .join(Model, Model.factory_id == Factory.id)
-            .filter(Model.algorithm_id == algo.id)
-            .distinct()
-            .order_by(Factory.name)
-            .all()
+    models = (
+        db.query(Model)
+        .options(
+            joinedload(Model.algorithm),
+            joinedload(Model.factory),
+            joinedload(Model.versions)
         )
-        for f in factories_in_algo:
-            f_data = {
-                "factory_id": f.id,
-                "factory_name": f.name,
+        .all()
+    )
+    
+    # Build hierarchy in memory
+    algo_dict = {}
+    for model in models:
+        if not model.algorithm or not model.factory:
+            continue
+            
+        algo_id = model.algorithm.id
+        if algo_id not in algo_dict:
+            algo_dict[algo_id] = {
+                "algorithm_id": algo_id,
+                "algorithm_name": model.algorithm.name,
+                "factories": {}
+            }
+            
+        fac_id = model.factory.id
+        if fac_id not in algo_dict[algo_id]["factories"]:
+            algo_dict[algo_id]["factories"][fac_id] = {
+                "factory_id": fac_id,
+                "factory_name": model.factory.name,
                 "models": []
             }
-            models = (
-                db.query(Model)
-                .filter(Model.algorithm_id == algo.id, Model.factory_id == f.id)
-                .order_by(Model.name)
-                .all()
-            )
-            for model in models:
-                model_data = {
-                    "model_id": model.id,
-                    "model_name": model.name,
-                    "versions": [
-                        {"version_id": v.id, "version_number": v.version_number}
-                        for v in sorted(model.versions, key=lambda x: x.version_number)
-                    ]
-                }
-                if model_data["versions"]:
-                    f_data["models"].append(model_data)
-            if f_data["models"]:
-                algo_data["factories"].append(f_data)
-        if algo_data["factories"]:
-            hierarchy.append(algo_data)
+            
+        versions = [
+            {"version_id": v.id, "version_number": v.version_number, "is_active": bool(v.is_active)}
+            for v in sorted(model.versions, key=lambda x: x.version_number)
+        ]
+        
+        if versions:
+            algo_dict[algo_id]["factories"][fac_id]["models"].append({
+                "model_id": model.id,
+                "model_name": model.name,
+                "versions": versions
+            })
+            
+    # Convert dicts to lists
+    hierarchy = []
+    for algo in sorted(algo_dict.values(), key=lambda x: x["algorithm_name"]):
+        # Convert factories dict to list
+        algo["factories"] = sorted(list(algo["factories"].values()), key=lambda x: x["factory_name"])
+        # Sort models
+        for f in algo["factories"]:
+            f["models"].sort(key=lambda x: x["model_name"])
+            
+        if algo["factories"]:
+            hierarchy.append(algo)
             
     return hierarchy

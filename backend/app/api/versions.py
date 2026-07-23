@@ -21,6 +21,7 @@ from app.models.factory import Factory
 from app.schemas.version import VersionOut
 from app.utils.hashing import sha256_bytes
 from app.utils.logger import logger
+from app.utils.resolver import resolve_model_id, resolve_version_id
 from fastapi.responses import FileResponse
 import zipfile
 import tempfile
@@ -86,6 +87,7 @@ def create_version(
     optimizer: str | None = Form(None),
     image_size: int | None = Form(None),
     custom_params: str | None = Form(None), # JSON string for dynamic key-values
+    ini_config: str | None = Form(None),
 
     note: str = Form(""),
     db: Session = Depends(get_db),
@@ -138,9 +140,8 @@ def create_version(
     if learning_rate is not None:
         parameters["learning_rate"] = learning_rate
 
-    if optimizer:
+    if optimizer is not None:
         parameters["optimizer"] = optimizer
-
     if image_size is not None:
         parameters["image_size"] = image_size
 
@@ -175,6 +176,7 @@ def create_version(
         version_number=version_number,
         note=note,
         is_active=True,
+        ini_config=ini_config,
         accuracy=accuracy,
         precision=precision,
         recall=recall,
@@ -464,12 +466,16 @@ def create_version(
     response_model=list[VersionOut],
 )
 def list_versions(
-    model_id: int,
+    algorithm_id: str,
+    factory_id: str,
+    model_id: str,
     db: Session = Depends(get_db),
 ):
+    mod_id = resolve_model_id(db, model_id, algorithm_id, factory_id)
     return (
         db.query(ModelVersion)
-        .filter(ModelVersion.model_id == model_id)
+        .options(joinedload(ModelVersion.delta))
+        .filter(ModelVersion.model_id == mod_id)
         .order_by(ModelVersion.version_number.desc())
         .all()
     )
@@ -483,21 +489,24 @@ def list_versions(
     response_model=VersionOut,
 )
 def get_version(
-    algorithm_id: int,
-    model_id: int,
-    version_id: int,
+    algorithm_id: str,
+    model_id: str,
+    version_id: str,
     db: Session = Depends(get_db),
 ):
+    mod_id = resolve_model_id(db, model_id, algorithm_id)
+    ver_id = resolve_version_id(db, version_id, mod_id)
     version = (
         db.query(ModelVersion)
+        .options(joinedload(ModelVersion.delta))
         .filter(
-            ModelVersion.id == version_id,
-            ModelVersion.model_id == model_id,
+            ModelVersion.id == ver_id,
+            ModelVersion.model_id == mod_id,
         )
         .first()
     )
     if not version:
-        version = db.query(ModelVersion).filter(ModelVersion.id == version_id).first()
+        version = db.query(ModelVersion).filter(ModelVersion.id == ver_id).first()
     
     if not version:
         raise HTTPException(404, "Version not found")
@@ -939,6 +948,7 @@ def edit_version(
     custom_resource_metrics: str | None = Form(None), # JSON string
 
     note: str = Form(""),
+    ini_config: str | None = Form(None),
     dataset_mode: str = Form("replace"),  # "replace" or "append"
     label_mode: str = Form("replace"),    # "replace" or "append"
     db: Session = Depends(get_db),
@@ -985,6 +995,9 @@ def edit_version(
 
     if note:
         version.note = note
+    
+    if ini_config is not None:
+        version.ini_config = ini_config
 
     if version.parameters is None:
         version.parameters = {}

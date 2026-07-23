@@ -13,10 +13,13 @@ import {
   alpha,
   Paper,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import SchemaIcon from "@mui/icons-material/Schema";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DescriptionIcon from "@mui/icons-material/Description";
+import FileUploadIcon from "@mui/icons-material/FileUpload";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import axios from "../../api/axios";
@@ -30,8 +33,28 @@ export default function AlgorithmCreate() {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [iniConfig, setIniConfig] = useState("");
+  const [inputType, setInputType] = useState<"manual" | "file">("manual");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result;
+      if (typeof text === "string") {
+        setIniConfig(text);
+        if (error) setError("");
+      }
+    };
+    reader.onerror = () => {
+      setError(t("algorithmCreate.iniFileError"));
+    };
+    reader.readAsText(file);
+  };
 
   const handleSubmit = async () => {
     if (!name.trim()) {
@@ -46,6 +69,7 @@ export default function AlgorithmCreate() {
       await axios.post("/algorithms", {
         name,
         description,
+        ini_config: iniConfig || null,
       });
 
       navigate("/algorithms");
@@ -183,6 +207,102 @@ export default function AlgorithmCreate() {
                       }
                     }}
                   />
+                </Box>
+
+                {/* INI Config Input */}
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2" fontWeight={700} sx={{ color: theme.textMain }}>
+                        {t("algorithmCreate.iniConfigLabel")}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: theme.textMuted }}>{t("algorithmCreate.descOptional")}</Typography>
+                    </Box>
+                    <ToggleButtonGroup
+                      value={inputType}
+                      exclusive
+                      onChange={(_, newVal) => { if(newVal) setInputType(newVal) }}
+                      size="small"
+                      sx={{ 
+                        height: 28,
+                        '& .MuiToggleButton-root': {
+                          color: theme.textSecondary,
+                          borderColor: alpha(theme.border, 0.5),
+                          '&.Mui-selected': {
+                            color: theme.primary,
+                            bgcolor: alpha(theme.primary, 0.1),
+                          },
+                          '&:hover': {
+                            bgcolor: alpha(theme.textMain, 0.05),
+                          }
+                        }
+                      }}
+                    >
+                      <ToggleButton value="manual" sx={{ px: 2, textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}>
+                        {t("algorithmCreate.manualEntry")}
+                      </ToggleButton>
+                      <ToggleButton value="file" sx={{ px: 2, textTransform: 'none', fontSize: '0.75rem', fontWeight: 600 }}>
+                        <FileUploadIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                        {t("algorithmCreate.uploadIniFile")}
+                      </ToggleButton>
+                    </ToggleButtonGroup>
+                  </Box>
+
+                  {inputType === "file" ? (
+                    <Box sx={{ 
+                      border: `1px dashed ${theme.border}`, 
+                      borderRadius: "12px", 
+                      p: 3, 
+                      textAlign: 'center',
+                      bgcolor: alpha(theme.primary, 0.02)
+                    }}>
+                      <Button variant="outlined" component="label" sx={{ borderRadius: "8px", textTransform: 'none', fontWeight: 600 }}>
+                        {t("algorithmCreate.uploadIniFile")}
+                        <input type="file" accept=".ini,.txt" hidden onChange={handleFileUpload} />
+                      </Button>
+                      {iniConfig && (
+                        <Box sx={{ mt: 3, textAlign: 'left' }}>
+                           <Typography variant="caption" sx={{ display: 'block', mb: 1, color: theme.success || "#4caf50", fontWeight: 700 }}>
+                             ✓ INI file loaded successfully
+                           </Typography>
+                           <Box sx={{
+                             p: 2,
+                             borderRadius: '8px',
+                             bgcolor: theme.background,
+                             border: `1px solid ${theme.border}`,
+                             maxHeight: '200px',
+                             overflowY: 'auto'
+                           }}>
+                             <Typography variant="body2" sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', color: theme.textMain }}>
+                               {iniConfig}
+                             </Typography>
+                           </Box>
+                        </Box>
+                      )}
+                    </Box>
+                  ) : (
+                    <TextField
+                      placeholder={t("algorithmCreate.iniConfigPlaceholder")}
+                      fullWidth
+                      multiline
+                      rows={5}
+                      value={iniConfig}
+                      onChange={(e) => setIniConfig(e.target.value)}
+                      variant="outlined"
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          borderRadius: "12px",
+                          bgcolor: theme.background,
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                          transition: "all 0.2s",
+                          "&:hover": { bgcolor: theme.paper },
+                          "&.Mui-focused": { bgcolor: theme.paper, boxShadow: `0 0 0 4px ${alpha(theme.primary, 0.1)}` },
+                          "& .MuiOutlinedInput-input": { color: theme.textMain }
+                        }
+                      }}
+                    />
+                  )}
                 </Box>
 
                 {/* Error Message */}

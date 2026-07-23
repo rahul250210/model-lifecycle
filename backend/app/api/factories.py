@@ -14,6 +14,7 @@ from app.models.artifact import Artifact
 from app.schemas.factory import FactoryCreate, FactoryOut, FactoryUpdate
 from app.schemas.algorithm import AlgorithmOut
 from app.utils.logger import logger
+from app.utils.resolver import resolve_factory_id
 
 router = APIRouter()
 
@@ -112,17 +113,18 @@ def list_factories(
     response_model=FactoryOut,
 )
 def get_factory(
-    factory_id: int,
+    factory_id: str,
     db: Session = Depends(get_db),
 ):
-    factory = db.query(Factory).filter(Factory.id == factory_id).first()
+    fac_id = resolve_factory_id(db, factory_id)
+    factory = db.query(Factory).filter(Factory.id == fac_id).first()
     if not factory:
         raise HTTPException(status_code=404, detail="Factory not found")
 
     algos = (
         db.query(Algorithm.name, Algorithm.id)
         .join(Model, Model.algorithm_id == Algorithm.id)
-        .filter(Model.factory_id == factory_id)
+        .filter(Model.factory_id == fac_id)
         .distinct()
         .all()
     )
