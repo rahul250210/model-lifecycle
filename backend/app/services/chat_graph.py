@@ -63,6 +63,11 @@ def build_chat_graph():
             return "sql_expert"
         return "response_composer"
         
+    def route_from_sql_expert(state: ChatbotState):
+        if state["query_type"] == "ASK_CONTEXT":
+            return "response_composer"
+        return "sql_executor"
+        
     # Add edges
     graph.add_conditional_edges(
         "router",
@@ -94,7 +99,15 @@ def build_chat_graph():
     graph.add_edge("interactive_edit", END)
     graph.add_edge("interactive_delete", END)
     graph.add_edge("knowledge_expert", "response_composer")
-    graph.add_edge("sql_expert", "sql_executor")
+    
+    graph.add_conditional_edges(
+        "sql_expert",
+        route_from_sql_expert,
+        {
+            "sql_executor": "sql_executor",
+            "response_composer": "response_composer"
+        }
+    )
     
     graph.add_conditional_edges(
         "sql_executor",

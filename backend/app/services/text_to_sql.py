@@ -86,6 +86,11 @@ STRICT SQL GENERATION RULES:
 7. When querying a list of entities (factories, algorithms, models, versions), ALWAYS select their primary key `id` and any foreign keys (e.g. `factory_id`, `algorithm_id`, `model_id`). ALWAYS ensure the primary display name is selected as `name` (do not alias it to 'model' or 'factory'). This allows the frontend UI to render interactive cards.
 8. When listing algorithms associated with a factory (or factories for an algorithm), you MUST include BOTH algorithms that have deployed models in that factory (via the `models` table) AND the algorithm that created the factory (via `factories.created_by_algorithm_id`). You should use a UNION or an OR condition to get all relevant algorithms, since relying on just one method will miss some algorithms.
 9. When asked to compare models or versions, ALWAYS include the factory name (alias as `factory_name`) alongside the model name and version number. Also, pay close attention to the scope: ONLY filter by `is_active = true` if the user explicitly mentions "active", "deployed", or "current". If they ask for "all", do NOT filter by `is_active`.
+10. CRITICAL: If you join multiple tables that both have a `name` column (e.g. `models` and `factories`), you MUST alias the joined table's name column (e.g. `factories.name AS factory_name`) to prevent column name collisions in the JSON results. NEVER select two columns named `name`.
+11. CRITICAL: NEVER invent, hallucinate, or use string concatenation (e.g., 'Deployed at one of the factories...') to populate a `description`, `note`, or any other column. Only select actual columns from the database. If a column is NULL, let it be NULL.
+12. CRITICAL: If the User Question is a short clarification (e.g. just a factory or model name like "Factory X") answering an ambiguity question from the CONVERSATION HISTORY, you MUST fulfill the intent of the ORIGINAL user question (e.g. "list all versions of Model Y") but filtered by the new clarification. Do NOT just query the clarification entity itself.
+13. When querying models or versions, ALWAYS join the `algorithms` table (via `models.algorithm_id = algorithms.id`) and select the algorithm name (aliased as `algorithm_name`) so the user can see which algorithm the model belongs to.
+
 
 OUTPUT FORMAT:
 You must respond with a single JSON object in the exact format shown below:
@@ -195,6 +200,9 @@ STRICT SQL GENERATION RULES:
 7. When querying a list of entities (factories, algorithms, models, versions), ALWAYS select their primary key `id` and any foreign keys (e.g. `factory_id`, `algorithm_id`, `model_id`). ALWAYS ensure the primary display name is selected as `name` (do not alias it to 'model' or 'factory'). This allows the frontend UI to render interactive cards.
 8. When listing algorithms associated with a factory (or factories for an algorithm), you MUST include BOTH algorithms that have deployed models in that factory (via the `models` table) AND the algorithm that created the factory (via `factories.created_by_algorithm_id`). You should use a UNION or an OR condition to get all relevant algorithms, since relying on just one method will miss some algorithms.
 9. When asked to compare models or versions, ALWAYS include the factory name (alias as `factory_name`) alongside the model name and version number. Also, pay close attention to the scope: ONLY filter by `is_active = true` if the user explicitly mentions "active", "deployed", or "current". If they ask for "all", do NOT filter by `is_active`.
+10. CRITICAL: If you join multiple tables that both have a `name` column (e.g. `models` and `factories`), you MUST alias the joined table's name column (e.g. `factories.name AS factory_name`) to prevent column name collisions in the JSON results. NEVER select two columns named `name`.
+11. CRITICAL: NEVER invent, hallucinate, or use string concatenation (e.g., 'Deployed at one of the factories...') to populate a `description`, `note`, or any other column. Only select actual columns from the database. If a column is NULL, let it be NULL.
+
 
 PREVIOUS ATTEMPT DETAILS:
 User Question: {user_query}

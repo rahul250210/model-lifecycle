@@ -35,20 +35,20 @@ Your task is to classify the user's question into one of the four query types:
 1. DATABASE_QUERY:
 - Requests specific database records, lists, statistics, rankings, or analytics of the system.
 - Does not ask for definitions, AI/ML theory, or architectural explanations.
-- Examples: "how many versions does R2+1D have?", "show top 5 models by accuracy", "list all active versions".
+- Examples: "how many versions does Model X have?", "show top 5 models by accuracy", "list all active versions".
 
 2. KNOWLEDGE_QUERY:
 - Conceptual questions, definitions, AI/ML theory, architecture explanations, general tutorials, or software engineering concepts.
 - Does not reference specific data or models stored in the local repository database.
-- Examples: "What is LangChain?", "Explain YOLO architecture.", "What is a CNN?", "What is RAG?", "Explain Transformer architecture."
+- Examples: "What is LangChain?", "Explain CNN architecture.", "What is a neural network?", "What is RAG?", "Explain Transformer architecture."
 
 3. HYBRID_QUERY:
 - Combines general conceptual explanations/theory with specific local repository data or entities.
-- Examples: "What is YOLOv11?", "Explain YOLOv11 used in our repository.", "How does Random Forest work and what versions do we have?"
+- Examples: "What is Model X?", "Explain Model X used in our repository.", "How does Random Forest work and what versions do we have?"
 
 4. ACTION_QUERY:
 - Requests actions such as download reports, download zip bundles, compare entities, compare versions, export, navigate, or open screens.
-- Examples: "Download model report for YOLOv11", "Compare YOLOv11 version 1 and version 2", "Export weights for Resnet".
+- Examples: "Download model report for Model X", "Compare Model X version 1 and version 2", "Export weights for Model Y".
 
 Analyze the user's question and respond with ONLY a single JSON object (do NOT wrap it in markdown code block formatting, do NOT write ```json, do NOT write any explanation before or after):
 {{
@@ -102,6 +102,33 @@ User Question: {user_question}"""
         return "⚠️ I'm sorry, I am currently offline and cannot answer conceptual questions. Please try again later or ask a database-related query."
     return answer
 
+def check_ambiguous_match(entity_list: List[Any], entity_name: str, context_hints: str) -> Optional[str]:
+    """
+    Checks if there are multiple entities matching the same name and context doesn't clarify.
+    Returns a clarification question if ambiguous, None otherwise.
+    """
+    if not entity_list or len(entity_list) <= 1:
+        return None
+        
+    context_lower = context_hints.lower()
+    
+    if hasattr(entity_list[0], 'factory') and hasattr(entity_list[0], 'name'):
+        factory_names = [m.factory.name for m in entity_list if m.factory]
+        
+        for f_name in factory_names:
+            if f_name.lower() in context_lower:
+                return None
+                
+        unique_factories = list(set(factory_names))
+        if len(unique_factories) > 1:
+            if len(unique_factories) == 2:
+                factories_str = f"{unique_factories[0]} and {unique_factories[1]}"
+            else:
+                factories_str = ", ".join(unique_factories[:-1]) + f", and {unique_factories[-1]}"
+            return f"I found '{entity_name}' in multiple factories ({factories_str}). Which one did you mean?"
+            
+    return None
+
 def resolve_entities(user_question: str, db_session: Session, context: Optional[List[Dict[str, Any]]] = None) -> Dict[str, List[Any]]:
     """
     Extracts referenced model, factory, or algorithm names from the query using the LLM,
@@ -121,11 +148,11 @@ def resolve_entities(user_question: str, db_session: Session, context: Optional[
     prompt = f"""You are a precise entity name extractor for an MLOps platform database.
 {history_str}
 Analyze the user's question and extract all references to the names of:
-1. Models (e.g. YOLOv11, R2+1D, test, Resnet, etc.)
-2. Factories (e.g. Suwon, FAS, etc.)
-3. Algorithms (e.g. YOLO, FAS, CNN, etc.)
+1. Models (e.g. Model X, Model Y, etc.)
+2. Factories (e.g. Factory A, Factory B, etc.)
+3. Algorithms (e.g. Algorithm X, Algorithm Y, etc.)
 
-If the user's question uses pronouns, relative pronouns, or references (e.g., "them", "it", "that model", "the first one", "its versions", "this factory") to refer to entities mentioned in the CONVERSATION HISTORY, resolve those pronouns and extract the actual entity names from the conversation history.
+If the user's question uses pronouns, relative pronouns, or references (e.g., "them", "it", "that model", "the first one", "its versions", "this factory") to refer to entities mentioned in the CONVERSATION HISTORY, resolve those pronouns and extract the actual entity names from the conversation history. IMPORTANT: Do NOT extract entities from the CONVERSATION HISTORY unless the current User Question explicitly refers to them via pronouns or context. If the User Question is a completely new topic, ignore the history.
 
 Return ONLY a JSON object with keys "models", "factories", and "algorithms". Each key should map to a list of strings representing the extracted names. If a category is not referenced, map it to an empty list [].
 Do NOT wrap in markdown backticks, do NOT write ```json, do NOT write any explanation before or after.
@@ -275,13 +302,13 @@ Output:"""
         "algorithms": matched_algorithms
     }
 
-def get_database_context(user_question: str, db_session: Session, context: Optional[List[Dict[str, Any]]] = None) -> str:
+def get_database_context(user_question: str, db_session: Session, context: Optional[List[Dict[str, Any]]] = None, resolved_entities: Optional[Dict[str, List[Any]]] = None) -> str:
     """Searches the database for entities matching terms in the query and returns formatted context."""
-    entities = resolve_entities(user_question, db_session, context=context)
+    entities = resolved_entities or resolve_entities(user_question, db_session, context=context)
     
-    matched_factories = entities["factories"]
-    matched_algorithms = entities["algorithms"]
-    matched_models = entities["models"]
+    matched_factories = entities.get("factories", [])
+    matched_algorithms = entities.get("algorithms", [])
+    matched_models = entities.get("models", [])
     
     context_lines = []
     
@@ -356,9 +383,9 @@ def get_database_context(user_question: str, db_session: Session, context: Optio
         
     return "\n".join(context_lines).strip()
 
-def handle_hybrid_query(user_question: str, db_session: Session, context: Optional[List[Dict[str, Any]]] = None) -> str:
+def handle_hybrid_query(user_question: str, db_session: Session, context: Optional[List[Dict[str, Any]]] = None, resolved_entities: Optional[Dict[str, List[Any]]] = None) -> str:
     """Answers a hybrid question combining database entity context and conceptual explanation."""
-    db_context = get_database_context(user_question, db_session, context=context)
+    db_context = get_database_context(user_question, db_session, context=context, resolved_entities=resolved_entities)
     if not db_context:
         # Fallback to pure knowledge if no entities are resolved in the repository database
         return handle_knowledge_query(user_question)

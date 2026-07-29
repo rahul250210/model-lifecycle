@@ -110,25 +110,25 @@ Output ONLY a raw JSON object with the following schema:
   "entity_type": "model" | "algorithm" | "factory" | "version",
   "compare_scope": "models" | "versions" | null,
   "targets": [
-    {{"name": "extracted entity name, e.g. R2+1D", "version": version_number_or_null}}
+    {{"name": "extracted entity name, e.g. Model X", "version": version_number_or_null}}
   ]
 }}
 Each target pairs an entity name with its version number (or null if unspecified).
 Instructions for compare_scope:
-- If action is "compare_versions" and the comparison is between different versions of the SAME model name (e.g. "compare v1 and v2 of R2+1D"), set compare_scope to "versions".
-- If action is "compare_versions" and the comparison is between DIFFERENT models (e.g. "compare yolov11 and R2+1D", or yolov11 models in Beijing and Bhushan, or RF models in Sejong and Suwon), set compare_scope to "models".
+- If action is "compare_versions" and the comparison is between different versions of the SAME model name (e.g. "compare v1 and v2 of Model X"), set compare_scope to "versions".
+- If action is "compare_versions" and the comparison is between DIFFERENT models (e.g. "compare Model X and Model Y", or Model X models in Factory A and Factory B), set compare_scope to "models".
 - Otherwise, set compare_scope to null.
 Examples:
-- "compare v1 and v2 of R2+1D" -> action: "compare_versions", entity_type: "version", compare_scope: "versions", targets: [{{"name": "R2+1D", "version": 1}}, {{"name": "R2+1D", "version": 2}}]
-- "download zip for yolov11 version 3" -> action: "download_zip", entity_type: "version", compare_scope: null, targets: [{{"name": "yolov11", "version": 3}}]
-- "give me the report for R2+1D" -> action: "download_report", entity_type: "model", compare_scope: null, targets: [{{"name": "R2+1D", "version": null}}]
+- "compare v1 and v2 of Model X" -> action: "compare_versions", entity_type: "version", compare_scope: "versions", targets: [{{"name": "Model X", "version": 1}}, {{"name": "Model X", "version": 2}}]
+- "download zip for Model Y version 3" -> action: "download_zip", entity_type: "version", compare_scope: null, targets: [{{"name": "Model Y", "version": 3}}]
+- "give me the report for Model Z" -> action: "download_report", entity_type: "model", compare_scope: null, targets: [{{"name": "Model Z", "version": null}}]
 - "create a new model" -> action: "interactive_create", entity_type: "model", compare_scope: null, targets: []
-- "create a new version for YOLO" -> action: "interactive_create", entity_type: "version", compare_scope: null, targets: []
-- "delete the FAS algorithm" -> action: "interactive_delete", entity_type: "algorithm", compare_scope: null, targets: [{{"name": "FAS", "version": null}}]
-- "edit YOLOv11" -> action: "interactive_edit", entity_type: "model", compare_scope: null, targets: [{{"name": "YOLOv11", "version": null}}]
-- "edit the description of algorithm X" -> action: "interactive_edit", entity_type: "algorithm", compare_scope: null, targets: [{{"name": "X", "version": null}}]
-- "edit version 2 of YOLO" -> action: "interactive_edit", entity_type: "version", compare_scope: null, targets: [{{"name": "YOLO", "version": 2}}]
-- "link the Facemask algorithm to the Sejong factory" -> action: "interactive_create", entity_type: "factory", compare_scope: null, targets: [{{"name": "Sejong", "version": null}}]
+- "create a new version for Algorithm A" -> action: "interactive_create", entity_type: "version", compare_scope: null, targets: []
+- "delete the Algorithm B" -> action: "interactive_delete", entity_type: "algorithm", compare_scope: null, targets: [{{"name": "Algorithm B", "version": null}}]
+- "edit Model C" -> action: "interactive_edit", entity_type: "model", compare_scope: null, targets: [{{"name": "Model C", "version": null}}]
+- "edit the description of Algorithm X" -> action: "interactive_edit", entity_type: "algorithm", compare_scope: null, targets: [{{"name": "Algorithm X", "version": null}}]
+- "edit version 2 of Algorithm Y" -> action: "interactive_edit", entity_type: "version", compare_scope: null, targets: [{{"name": "Algorithm Y", "version": 2}}]
+- "link the Algorithm Z to the Factory C" -> action: "interactive_create", entity_type: "factory", compare_scope: null, targets: [{{"name": "Factory C", "version": null}}]
 Do NOT write any explanations, do NOT wrap in markdown backticks, do NOT write ```json.
 
 User Question: "{user_question}"
@@ -149,7 +149,7 @@ Output:"""
         }
     return plan
 
-def _resolve_targets(plan: Dict[str, Any], user_question: str, db_session: Session, context: List[Dict[str, Any]] = []) -> Dict[str, Any]:
+def _resolve_targets(plan: Dict[str, Any], user_question: str, db_session: Session, context: List[Dict[str, Any]] = [], resolved_entities: Optional[Dict[str, List[Any]]] = None) -> Dict[str, Any]:
     """Performs entity search and maps extracted properties using the plan schema."""
     action = plan.get("action", "none")
     entity_type = plan.get("entity_type")
@@ -161,10 +161,10 @@ def _resolve_targets(plan: Dict[str, Any], user_question: str, db_session: Sessi
         entity_names = list(dict.fromkeys(t.get("name") for t in targets if t.get("name")))
         version_numbers = [t.get("version") for t in targets if t.get("version") is not None]
         
-    resolved = resolve_entities(user_question, db_session, context=context)
-    models = resolved["models"]
-    factories = resolved["factories"]
-    algorithms = resolved["algorithms"]
+    resolved = resolved_entities or {"models": [], "factories": [], "algorithms": []}
+    models = resolved.get("models", [])
+    factories = resolved.get("factories", [])
+    algorithms = resolved.get("algorithms", [])
 
     if models:
         filtered_models = []
@@ -388,7 +388,8 @@ def plan_action(
     user_question: str,
     query_results: Dict[str, Any],
     db_session: Session,
-    context: List[Dict[str, Any]] = []
+    context: List[Dict[str, Any]] = [],
+    resolved_entities: Optional[Dict[str, List[Any]]] = None
 ) -> Dict[str, Any]:
     """
     Invokes the LLM to decide if a download/zip/compare action applies.
@@ -396,7 +397,7 @@ def plan_action(
     """
     plan = _get_plan_from_llm(user_question, query_results, context=context)
     
-    resolved_info = _resolve_targets(plan, user_question, db_session, context=context)
+    resolved_info = _resolve_targets(plan, user_question, db_session, context=context, resolved_entities=resolved_entities)
     action = resolved_info["action"]
     entity_type = resolved_info["entity_type"]
     version_numbers = resolved_info["version_numbers"]
@@ -405,6 +406,18 @@ def plan_action(
     algorithms = resolved_info["algorithms"]
     entity_type_plural = resolved_info["entity_type_plural"]
     
+    if models and len(models) > 1 and action in ["download_zip", "compare_versions", "download_report"]:
+        from app.services.query_router import check_ambiguous_match
+        ambiguity_q = check_ambiguous_match(models, models[0].name, user_question)
+        if ambiguity_q:
+            return {
+                "action_type": "ask_context",
+                "response": ambiguity_q,
+                "actions": [],
+                "comp_payload": None,
+                "entity_type": None
+            }
+
     actions = []
     comp_payload = None
     

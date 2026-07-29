@@ -16,4 +16,5 @@ class ChatbotState(TypedDict):
     active_creation_entity: Optional[str]
     active_edit_entity: Optional[str]
     active_delete_entity: Optional[str]
+    resolved_entities: Optional[Dict[str, List[Any]]]
 

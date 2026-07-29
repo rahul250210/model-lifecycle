@@ -177,34 +177,8 @@ def compose_response(
     if "improved" in user_question.lower() or "improvement" in user_question.lower():
         msg_type = "text"
 
-    # Enforce expected title headers for unit tests
-    q_lower = user_question.lower()
-    formatted_answer = answer
-    if "evolution" in q_lower and "yolov11" in q_lower:
-        if "Model Progression & Evolution" not in formatted_answer:
-            formatted_answer = "### 📈 Model Progression & Evolution\n\n" + formatted_answer
-    elif "what changed" in q_lower or ("v4" in q_lower and "v5" in q_lower and "r2+1d" in q_lower):
-        if "Side-by-Side Comparison" not in formatted_answer:
-            formatted_answer = "### 🔄 Side-by-Side Comparison\n\n" + formatted_answer
-        delta_summary = "\n\n### 📊 Delta Summary\n- Accuracy delta: -32.0%\n- Precision delta: -14.0%\n- Recall delta: -20.0%\n- F1 delta: -43.0\n"
-        if "-32.0%" not in formatted_answer:
-            formatted_answer = delta_summary + formatted_answer
-    elif "improved" in q_lower and "accuracy" in q_lower:
-        if "Accuracy Improvement Analysis" not in formatted_answer:
-            formatted_answer = "### 📊 Accuracy Improvement Analysis\n\n" + formatted_answer
-
-    # Enforce Not Available string for missing metrics test case
-    if "yolov11" in q_lower:
-        if "Not Available ms" not in formatted_answer:
-            formatted_answer += "\n\n### 📊 System Profile\n- **Inference Time**: Not Available ms\n- **CPU Utilization**: Not Available%\n- **GPU Utilization**: Not Available%\n"
-
-    # Enforce Latency keyword for YOLOv11 evolution test case
-    if "evolution" in q_lower and "yolov11" in q_lower:
-        if "Latency" not in formatted_answer:
-            formatted_answer += "\n\n*(Note: Latency is reported as Inference Time in the table above.)*"
-
     # Normalize narrow non-breaking spaces and non-breaking spaces for tests
-    formatted_answer = formatted_answer.replace("\u202f", " ").replace("\xa0", " ")
+    formatted_answer = answer.replace("\u202f", " ").replace("\xa0", " ")
 
     # Heal malformed markdown links to prevent 404 router errors
     formatted_answer = heal_markdown_links(formatted_answer, db_session)
@@ -218,6 +192,7 @@ def compose_response(
         "overfitting": "**Overfitting** occurs when a machine learning model learns the training data too well, capturing noise and details that do not generalize to new, unseen data.",
         "confusion matrix": "A **Confusion Matrix** is a table showing the performance of a classification model by comparing actual values (True Positive, True Negative) with predicted values (False Positive, False Negative)."
     }
+    q_lower = user_question.lower()
     for term, definition in glossary.items():
         if term in q_lower and "explain" in q_lower:
             if definition not in formatted_answer:

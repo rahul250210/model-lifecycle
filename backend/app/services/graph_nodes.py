@@ -220,12 +220,12 @@ def router_node(state: ChatbotState, config: RunnableConfig) -> Dict[str, Any]:
     if q_lower == "show me the strongest one":
         return {"query_type": "ASK_CLARIFICATION"}
         
-    _PRONOUNS = ["which one", "which is", "deployed one", "that one", "which of them"]
+    _PRONOUNS = ["which one", "which is", "deployed one", "that one", "which of them", "of a model", "of the model", "for a model", "for the model", "this model", "that model"]
     if any(p in q_lower for p in _PRONOUNS) or q_lower == "which one is deployed":
         has_context_entity = False
         for msg in state.get("messages", []):
             content = msg.get("content", "").lower()
-            if any(kw in content for kw in ["model", "factory", "algorithm", "yolo", "resnet", "r2+1d"]):
+            if any(kw in content for kw in ["model", "factory", "algorithm"]):
                 has_context_entity = True
                 break
         if not has_context_entity:
@@ -233,15 +233,23 @@ def router_node(state: ChatbotState, config: RunnableConfig) -> Dict[str, Any]:
 
     routing = route_query(state["current_question"], db_session, context=state.get("messages", []))
     q_type = routing.get("query_type", "DATABASE_QUERY")
-    return {"query_type": q_type}
+    
+    resolved_entities = None
+    if q_type in ["DATABASE_QUERY", "ACTION_QUERY", "HYBRID_QUERY"]:
+        from app.services.query_router import resolve_entities
+        resolved_entities = resolve_entities(state["current_question"], db_session, context=state.get("messages", []))
+
+    return {"query_type": q_type, "resolved_entities": resolved_entities}
 
 def action_expert_node(state: ChatbotState, config: RunnableConfig) -> Dict[str, Any]:
     db_session = db_session_from_config(config)
-    plan = plan_action(state["current_question"], {}, db_session, context=state.get("messages", []))
+    plan = plan_action(state["current_question"], {}, db_session, context=state.get("messages", []), resolved_entities=state.get("resolved_entities"))
     
     action_type = plan.get("action_type")
     
-    if action_type == "interactive_create":
+    if action_type == "ask_context":
+        return {"query_type": "ASK_CONTEXT", "final_response": plan.get("response", "Please clarify.")}
+    elif action_type == "interactive_create":
         return {"query_type": "INTERACTIVE_CREATION", "active_creation_entity": plan.get("entity_type")}
     elif action_type == "interactive_edit":
         return {"query_type": "INTERACTIVE_EDIT", "active_edit_entity": plan.get("entity_type")}
@@ -421,8 +429,15 @@ def sql_expert_node(state: ChatbotState, config: RunnableConfig) -> Dict[str, An
     schema_provider = SchemaProvider.from_session(db_session)
     schema_desc = schema_provider.get_pruned_schema(state["current_question"])
     
-    from app.services.query_router import resolve_entities
-    resolved = resolve_entities(state["current_question"], db_session, context=state.get("messages", []))
+    resolved = state.get("resolved_entities") or {}
+    
+    models_list = resolved.get("models", [])
+    if models_list and len(models_list) > 1:
+        from app.services.query_router import check_ambiguous_match
+        ambiguity_q = check_ambiguous_match(models_list, models_list[0].name, state["current_question"])
+        if ambiguity_q:
+            return {"query_type": "ASK_CONTEXT", "final_response": ambiguity_q}
+
     known_entities = {
         "models": [m.name for m in resolved.get("models", [])],
         "algorithms": [a.name for a in resolved.get("algorithms", [])],
@@ -465,7 +480,8 @@ def response_composer_node(state: ChatbotState, config: RunnableConfig) -> Dict[
     if q_type == "ASK_CLARIFICATION":
         return {"action_payload": compose_response(user_question, "Do you want to compare models, algorithms, or factories?", [], None, db_session)}
     if q_type == "ASK_CONTEXT":
-        return {"action_payload": compose_response(user_question, "Could you please specify which model, factory, or algorithm you are referring to?", [], None, db_session)}
+        msg = state.get("final_response") or "Could you please specify which model, factory, or algorithm you are referring to?"
+        return {"action_payload": compose_response(user_question, msg, [], None, db_session)}
     if q_type == "INTERACTIVE_DOWNLOAD":
         return {"action_payload": state["action_payload"]}
     if q_type == "TABLE_DOWNLOAD":
@@ -482,7 +498,7 @@ def response_composer_node(state: ChatbotState, config: RunnableConfig) -> Dict[
             "response": answer_text,
             "answer": answer_text,
             "actions": actions,
-            "follow_ups": ["Compare YOLOv11 and R2+1D", "List all models"],
+            "follow_ups": ["Compare models", "List all models"],
             "type": "download",
             "confidence": 1.0
         }
@@ -502,7 +518,7 @@ def response_composer_node(state: ChatbotState, config: RunnableConfig) -> Dict[
         if state.get("latest_error") and state["error_count"] >= 3:
             err = state["latest_error"]
             if "Only SELECT and WITH queries are allowed" in err:
-                final_answer = "⚠️ **Security Restriction:** I can only read data from the database. I cannot execute raw operations that modify, delete, or drop data. If you'd like to safely delete or edit a specific item, please explicitly ask me to (e.g. *'delete the YOLO model'*) so I can use the interactive deletion tools."
+                final_answer = "⚠️ **Security Restriction:** I can only read data from the database. I cannot execute raw operations that modify, delete, or drop data. If you'd like to safely delete or edit a specific item, please explicitly ask me to (e.g. *'delete a model'*) so I can use the interactive deletion tools."
             else:
                 final_answer = "I'm sorry, but I couldn't safely construct or execute a database query to answer that. Could you try rephrasing your request?"
             query_results = {"error": state["latest_error"]}
@@ -514,7 +530,7 @@ def response_composer_node(state: ChatbotState, config: RunnableConfig) -> Dict[
             final_answer = "⚠️ The AI service is currently offline. Please wait a few seconds and try again."
             
         if q_type == "HYBRID_QUERY":
-            conceptual_ans = handle_hybrid_query(user_question, db_session, context=state.get("messages", []))
+            conceptual_ans = handle_hybrid_query(user_question, db_session, context=state.get("messages", []), resolved_entities=state.get("resolved_entities"))
             if conceptual_ans and conceptual_ans != "__LLM_OFFLINE__":
                 if "concept explanation" not in final_answer.lower() and "concept explanation" not in conceptual_ans.lower():
                     final_answer = f"{final_answer}\n\n### 📖 Concept Explanation\n{conceptual_ans}"
@@ -522,14 +538,20 @@ def response_composer_node(state: ChatbotState, config: RunnableConfig) -> Dict[
                     final_answer = f"{final_answer}\n\n{conceptual_ans}"
                     
         # Check UI Action Planner on User query + query results
-        plan = plan_action(user_question, query_results, db_session, context=state.get("messages", []))
-        actions = plan.get("actions", [])
-        comp_payload = plan.get("comp_payload")
+        plan = plan_action(user_question, query_results, db_session, context=state.get("messages", []), resolved_entities=state.get("resolved_entities"))
         
-        has_model_report = any(a.get("download_type") == "report" and a.get("entity_type") == "model" for a in actions)
-        has_zip = any(a.get("download_type") == "zip" for a in actions)
-        if has_model_report and not has_zip:
-            final_answer += "\n\n*(If you would also like to download the source files like weights or dataset for this model, just ask to download the ZIP file!)*"
+        if plan.get("action_type") == "ask_context":
+            final_answer = plan.get("response", "Please clarify.")
+            actions = []
+            comp_payload = None
+        else:
+            actions = plan.get("actions", [])
+            comp_payload = plan.get("comp_payload")
+            
+            has_model_report = any(a.get("download_type") == "report" and a.get("entity_type") == "model" for a in actions)
+            has_zip = any(a.get("download_type") == "zip" for a in actions)
+            if has_model_report and not has_zip:
+                final_answer += "\n\n*(If you would also like to download the source files like weights or dataset for this model, just ask to download the ZIP file!)*"
 
     res_payload = compose_response(user_question, final_answer, actions, comp_payload, db_session, state.get("sql_results"))
     if state.get("action_payload") and "follow_ups" in state["action_payload"]:
