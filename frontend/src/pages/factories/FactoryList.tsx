@@ -43,15 +43,7 @@ import { useTheme } from "../../theme/ThemeContext";
 /* ==========================================================================
    TYPES
 ========================================================================== */
-interface Factory {
-  id: number;
-  name: string;
-  description?: string;
-  algorithms_count: number;
-  models_count: number;
-  created_at: string;
-  algorithm_names?: string[];
-}
+import type { Factory } from '../../types';
 
 export default function FactoryList() {
   const navigate = useNavigate();
@@ -111,6 +103,12 @@ export default function FactoryList() {
 
   useEffect(() => {
     fetchFactories();
+
+    const handleEntityCreated = () => {
+      fetchFactories();
+    };
+    window.addEventListener("entityCreated", handleEntityCreated);
+    return () => window.removeEventListener("entityCreated", handleEntityCreated);
   }, []);
 
   /* =======================
@@ -240,17 +238,19 @@ export default function FactoryList() {
             {filteredFactories.map((factory) => (
               <Grid size={{ xs: 12, md: 6, lg: 4 }} key={factory.id}>
                 <Card
+                  onClick={() => navigate(`/factories/${factory.id}`)}
                   elevation={0}
                   sx={{
                     borderRadius: "24px",
                     border: `1px solid ${theme.border}`,
                     height: "100%",
                     bgcolor: theme.paper,
+                    cursor: "pointer",
                     transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                     "&:hover": {
                       borderColor: theme.primary,
                       boxShadow: `0 20px 25px -5px ${alpha("#000", 0.05)}`,
-                      "& .arrow-icon": { opacity: 1, transform: "translateX(0)" }
+                      transform: "translateY(-4px)"
                     }
                   }}
                 >
@@ -322,7 +322,6 @@ export default function FactoryList() {
 
                     <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
                       <Box
-                        onClick={() => navigate(`/factories/${factory.id}`)}
                         className="arrow-icon"
                         sx={{
                           display: 'flex',
@@ -332,8 +331,8 @@ export default function FactoryList() {
                           cursor: 'pointer',
                           p: 0.5,
                           borderRadius: '4px',
-                          opacity: 0,
-                          transform: "translateX(-10px)",
+                          opacity: 1,
+                          transform: "translateX(0)",
                           transition: "all 0.3s",
                           '&:hover': {
                             bgcolor: alpha(theme.primary, 0.1)

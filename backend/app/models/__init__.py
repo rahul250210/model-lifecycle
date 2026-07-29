@@ -1,4 +1,4 @@
-from app.models.factory import Factory
+from app.models.factory import Factory, AlgorithmFactoryLink
 from app.models.algorithm import Algorithm
 from app.models.model import Model
 from app.models.version import ModelVersion

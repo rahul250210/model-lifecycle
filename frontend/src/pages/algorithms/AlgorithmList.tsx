@@ -121,6 +121,12 @@ export default function AlgorithmList() {
 
   useEffect(() => {
     fetchAlgorithms();
+
+    const handleEntityCreated = () => {
+      fetchAlgorithms();
+    };
+    window.addEventListener("entityCreated", handleEntityCreated);
+    return () => window.removeEventListener("entityCreated", handleEntityCreated);
   }, []);
 
   if (loading) {
@@ -196,21 +202,23 @@ export default function AlgorithmList() {
           {
             algorithms.map((algo) => (
               <Grid size={{ xs: 12, md: 6, lg: 4 }} key={algo.id}>
-                <Card
-                  sx={{
-                    borderRadius: "24px",
-                    height: "100%",
-                    bgcolor: theme.paper,
-                    border: `1px solid ${theme.border}`,
-                    transition: "border-color 0.3s",
-                    "&:hover": {
-                      borderColor: theme.primary,
-                      boxShadow: `0 25px 30px -5px ${alpha("#000", 0.08)}`,
-                      "& .arrow-icon": { opacity: 1, transform: "translateX(0)" }
-                    },
-                  }}
-                  elevation={0}
-                >
+                    <Card
+                      onClick={() => navigate(`/algorithms/${algo.id}/factories`)}
+                      sx={{
+                        borderRadius: "24px",
+                        height: "100%",
+                        bgcolor: theme.paper,
+                        border: `1px solid ${theme.border}`,
+                        transition: "all 0.3s",
+                        cursor: "pointer",
+                        "&:hover": {
+                          borderColor: theme.primary,
+                          boxShadow: `0 25px 30px -5px ${alpha("#000", 0.08)}`,
+                          transform: "translateY(-4px)"
+                        },
+                      }}
+                      elevation={0}
+                    >
                   <CardContent sx={{ p: 3 }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 4 }}>
                       <Box sx={{ p: 1, bgcolor: alpha(theme.primary, 0.08), borderRadius: "10px" }}>
@@ -265,11 +273,10 @@ export default function AlgorithmList() {
                       </Stack>
 
                       <Box
-                        onClick={() => navigate(`/algorithms/${algo.id}/factories`)}
                         className="arrow-icon"
                         sx={{
-                          opacity: 0,
-                          transform: "translateX(-10px)",
+                          opacity: 1,
+                          transform: "translateX(0)",
                           transition: "all 0.3s",
                           color: theme.primary,
                           display: 'flex',

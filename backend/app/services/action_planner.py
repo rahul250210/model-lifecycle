@@ -1,72 +1,57 @@
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.services.llm_service import call_llm
+from app.services.llm_service import call_llm, parse_json_from_llm
 from app.services.query_router import resolve_entities
+from app.models.model import Model
+from app.models.algorithm import Algorithm
+from app.models.factory import Factory
+from app.models.version import ModelVersion
+from app.models.artifact import Artifact
+from sqlalchemy.orm import joinedload
 
-def _enrich_version_row(res, db_session: Session) -> Dict[str, Any]:
+def _enrich_version_row(mv: ModelVersion) -> Dict[str, Any]:
     """Enriches a model version record with its associated artifacts."""
-    row_dict = dict(res._mapping)
-    # Query artifacts
-    arts = db_session.execute(
-        text("SELECT name, size, type FROM artifacts WHERE version_id = :v_id"),
-        {"v_id": row_dict["id"]}
-    ).fetchall()
-    row_dict["artifacts"] = [{"name": art.name, "size": art.size, "type": art.type} for art in arts]
+    row_dict = {}
+    for col in mv.__table__.columns.keys():
+        val = getattr(mv, col)
+        row_dict[col] = val.isoformat() if hasattr(val, 'isoformat') else val
+        
+    # Map renames and defaults for UI compatibility
+    row_dict["description"] = row_dict.pop("note", None)
+    row_dict["metrics"] = row_dict.pop("resource_metrics", {}) or {}
+    row_dict["parameters"] = row_dict.get("parameters") or {}
     
-    # Ensure parameters is a clean dict
-    params_val = row_dict.get("parameters")
-    if isinstance(params_val, str):
-        try:
-            row_dict["parameters"] = json.loads(params_val)
-        except:
-            row_dict["parameters"] = {}
-    elif not isinstance(params_val, dict):
-        row_dict["parameters"] = {}
-        
-    # Format datetimes for JSON serialization
-    if row_dict.get("created_at") and not isinstance(row_dict["created_at"], str):
-        row_dict["created_at"] = row_dict["created_at"].isoformat()
-    if row_dict.get("updated_at") and not isinstance(row_dict["updated_at"], str):
-        row_dict["updated_at"] = row_dict["updated_at"].isoformat()
-        
+    # Attach relationship data
+    row_dict["artifacts"] = [{"name": a.name, "size": a.size, "type": a.type} for a in mv.artifacts]
+    row_dict["model_name"] = mv.model.name if mv.model else None
+    row_dict["algorithm_id"] = mv.model.algorithm_id if mv.model else None
+    row_dict["algorithm_name"] = mv.model.algorithm.name if mv.model and mv.model.algorithm else None
+    row_dict["factory_id"] = mv.model.factory_id if mv.model else None
+    row_dict["factory_name"] = mv.model.factory.name if mv.model and mv.model.factory else None
+    
     return row_dict
 
 def _fetch_report_target(entity_type: str, entity_id: int, db_session: Session) -> Dict[str, Any]:
     """Centralizes report entity queries to build download report actions."""
     if entity_type == "model":
-        row = db_session.execute(
-            text("SELECT id, name, algorithm_id, factory_id FROM models WHERE id = :mid"),
-            {"mid": entity_id}
-        ).fetchone()
-        if row:
+        model = db_session.query(Model).get(entity_id)
+        if model:
             return {
-                "id": int(row.id),
-                "name": row.name,
-                "algorithm_id": int(row.algorithm_id) if row.algorithm_id else None,
-                "factory_id": int(row.factory_id) if row.factory_id else None
+                "id": model.id,
+                "name": model.name,
+                "algorithm_id": model.algorithm_id,
+                "factory_id": model.factory_id
             }
     elif entity_type == "algorithm":
-        row = db_session.execute(
-            text("SELECT id, name FROM algorithms WHERE id = :aid"),
-            {"aid": entity_id}
-        ).fetchone()
-        if row:
-            return {
-                "id": int(row.id),
-                "name": row.name
-            }
+        algo = db_session.query(Algorithm).get(entity_id)
+        if algo:
+            return {"id": algo.id, "name": algo.name}
     elif entity_type == "factory":
-        row = db_session.execute(
-            text("SELECT id, name FROM factories WHERE id = :fid"),
-            {"fid": entity_id}
-        ).fetchone()
-        if row:
-            return {
-                "id": int(row.id),
-                "name": row.name
-            }
+        factory = db_session.query(Factory).get(entity_id)
+        if factory:
+            return {"id": factory.id, "name": factory.name}
     return None
 
 def _fetch_version_rows(
@@ -77,28 +62,23 @@ def _fetch_version_rows(
     latest_only: bool = False
 ) -> List[Dict[str, Any]]:
     """Deduplicates version retrieval queries for zip extraction and version comparisons."""
-    sql = """
-        SELECT mv.*, m.name as model_name, f.name as factory_name, a.name as algorithm_name, m.factory_id, m.algorithm_id
-        FROM model_versions mv
-        JOIN models m ON m.id = mv.model_id
-        LEFT JOIN factories f ON f.id = m.factory_id
-        LEFT JOIN algorithms a ON a.id = m.algorithm_id
-        WHERE mv.model_id = :model_id
-    """
-    params = {"model_id": model_id}
-    if active_only:
-        sql += " AND mv.is_active = true"
-    if version_number is not None:
-        sql += " AND mv.version_number = :v_num"
-        params["v_num"] = version_number
+    query = db_session.query(ModelVersion).options(
+        joinedload(ModelVersion.artifacts),
+        joinedload(ModelVersion.model).joinedload(Model.algorithm),
+        joinedload(ModelVersion.model).joinedload(Model.factory)
+    ).filter(ModelVersion.model_id == model_id)
     
-    if latest_only:
-        sql += " ORDER BY mv.version_number DESC LIMIT 1"
-    else:
-        sql += " ORDER BY mv.version_number ASC"
+    if active_only:
+        query = query.filter(ModelVersion.is_active == True)
+    if version_number is not None:
+        query = query.filter(ModelVersion.version_number == version_number)
         
-    rows = db_session.execute(text(sql), params).fetchall()
-    return [_enrich_version_row(row, db_session) for row in rows]
+    if latest_only:
+        query = query.order_by(ModelVersion.version_number.desc()).limit(1)
+    else:
+        query = query.order_by(ModelVersion.version_number.asc())
+        
+    return [_enrich_version_row(v) for v in query.all()]
 
 def _get_plan_from_llm(user_question: str, query_results: Dict[str, Any], context: List[Dict[str, Any]] = []) -> Dict[str, Any]:
     """Invokes the LLM to structure the requested UI Action."""
@@ -119,11 +99,14 @@ Analyze the user's question, the conversation history, and any query results (pr
 - "download_report": download a factory, algorithm, or model performance report (also triggered by "give me the report", "show report", etc.).
 - "download_zip": download the zip code/dataset/weights bundle of a specific model version.
 - "compare_versions": compare performance/metrics across models or versions of a model.
-- "none": no specific action requested. Note: Aggregate, ranking, or analytical queries (e.g., "best", "most", "highest", "lowest", "top 5", or comparisons between completely different entity types like a factory and an algorithm) should result in action: "none".
+- "interactive_create": user wants to create, register, or link a new factory, algorithm, model, or version.
+- "interactive_edit": user wants to edit/modify a factory, algorithm, model, or version.
+- "interactive_delete": user wants to delete/remove a factory, algorithm, model, or version.
+- "none": no specific action requested. Note: Aggregate, ranking, or analytical queries (e.g., "best", "most", "highest", "lowest", "top 5") should result in action: "none". Do not output "none" if the user is asking to download or compare specific entities, even if they specify the factory, algorithm, and model together.
 
 Output ONLY a raw JSON object with the following schema:
 {{
-  "action": "download_report" | "download_zip" | "compare_versions" | "none",
+  "action": "download_report" | "download_zip" | "compare_versions" | "interactive_create" | "interactive_edit" | "interactive_delete" | "none",
   "entity_type": "model" | "algorithm" | "factory" | "version",
   "compare_scope": "models" | "versions" | null,
   "targets": [
@@ -138,8 +121,14 @@ Instructions for compare_scope:
 Examples:
 - "compare v1 and v2 of R2+1D" -> action: "compare_versions", entity_type: "version", compare_scope: "versions", targets: [{{"name": "R2+1D", "version": 1}}, {{"name": "R2+1D", "version": 2}}]
 - "download zip for yolov11 version 3" -> action: "download_zip", entity_type: "version", compare_scope: null, targets: [{{"name": "yolov11", "version": 3}}]
-- "compare yolov11 and R2+1D" -> action: "compare_versions", entity_type: "model", compare_scope: "models", targets: [{{"name": "yolov11", "version": null}}, {{"name": "R2+1D", "version": null}}]
 - "give me the report for R2+1D" -> action: "download_report", entity_type: "model", compare_scope: null, targets: [{{"name": "R2+1D", "version": null}}]
+- "create a new model" -> action: "interactive_create", entity_type: "model", compare_scope: null, targets: []
+- "create a new version for YOLO" -> action: "interactive_create", entity_type: "version", compare_scope: null, targets: []
+- "delete the FAS algorithm" -> action: "interactive_delete", entity_type: "algorithm", compare_scope: null, targets: [{{"name": "FAS", "version": null}}]
+- "edit YOLOv11" -> action: "interactive_edit", entity_type: "model", compare_scope: null, targets: [{{"name": "YOLOv11", "version": null}}]
+- "edit the description of algorithm X" -> action: "interactive_edit", entity_type: "algorithm", compare_scope: null, targets: [{{"name": "X", "version": null}}]
+- "edit version 2 of YOLO" -> action: "interactive_edit", entity_type: "version", compare_scope: null, targets: [{{"name": "YOLO", "version": 2}}]
+- "link the Facemask algorithm to the Sejong factory" -> action: "interactive_create", entity_type: "factory", compare_scope: null, targets: [{{"name": "Sejong", "version": null}}]
 Do NOT write any explanations, do NOT wrap in markdown backticks, do NOT write ```json.
 
 User Question: "{user_question}"
@@ -147,21 +136,9 @@ Query Results: {json.dumps(query_results, default=str)}
 
 Output:"""
 
-    raw_res = call_llm(prompt, temperature=0.0).strip()
-    if raw_res.startswith("```json"):
-        raw_res = raw_res[7:]
-    if raw_res.startswith("```"):
-        raw_res = raw_res[3:]
-    if raw_res.endswith("```"):
-        raw_res = raw_res[:-3]
-    raw_res = raw_res.strip()
+    raw_res = call_llm(prompt, temperature=0.0)
     
-    plan = None
-    try:
-        if raw_res and raw_res != "__LLM_OFFLINE__":
-            plan = json.loads(raw_res)
-    except Exception as e:
-        print(f"[ActionPlanner] Failed to parse action planner JSON: {e}")
+    plan = parse_json_from_llm(raw_res)
         
     if not plan or not isinstance(plan, dict):
         plan = {
@@ -189,6 +166,20 @@ def _resolve_targets(plan: Dict[str, Any], user_question: str, db_session: Sessi
     factories = resolved["factories"]
     algorithms = resolved["algorithms"]
 
+    if models:
+        filtered_models = []
+        for m in models:
+            match_f = True
+            match_a = True
+            if factories and not any(f.id == m.factory_id for f in factories):
+                match_f = False
+            if algorithms and not any(a.id == m.algorithm_id for a in algorithms):
+                match_a = False
+            if match_f and match_a:
+                filtered_models.append(m)
+        if filtered_models:
+            models = filtered_models
+
     if models and action == "compare_versions":
         if len(set(m.name.lower() for m in models)) == 1 and (len(factories) < 2 or len(version_numbers) >= 2):
             matched_m = None
@@ -202,12 +193,6 @@ def _resolve_targets(plan: Dict[str, Any], user_question: str, db_session: Sessi
                     if cnt > max_matches:
                         max_matches = cnt
                         matched_m = m
-            if not matched_m and factories:
-                fid = factories[0].id
-                for m in models:
-                    if m.factory_id == fid:
-                        matched_m = m
-                        break
             if matched_m:
                 models = [matched_m]
             else:
@@ -373,6 +358,32 @@ def _build_compare_payload(
         }
     return None
 
+def _build_navigate_action(action: str, entity_type: str, models: list, algorithms: list, factories: list) -> List[Dict[str, Any]]:
+    """Builds navigation actions for edit/delete operations."""
+    actions = []
+    
+    if action == "interactive_create":
+        actions.append({"type": "interactive_create", "entity_type": entity_type})
+        
+    elif action in ("navigate_edit", "navigate_delete"):
+        intent = "edit" if action == "navigate_edit" else "delete"
+        icon = "edit" if action == "navigate_edit" else "delete"
+        prefix = "Edit" if action == "navigate_edit" else "Delete"
+        
+        if entity_type == "factory" and factories:
+            for f in factories:
+                # Assuming factory overview has edit/delete
+                actions.append({"type": "navigate", "label": f"{prefix} {f.name}", "icon": icon, "path": f"/factories/{f.id}", "intent": intent})
+        elif entity_type == "algorithm" and algorithms:
+            for a in algorithms:
+                actions.append({"type": "navigate", "label": f"{prefix} {a.name}", "icon": icon, "path": f"/algorithms/{a.id}/factories", "intent": intent})
+        elif entity_type == "model" and models:
+            for m in models:
+                actions.append({"type": "navigate", "label": f"{prefix} {m.name}", "icon": icon, "path": f"/algorithms/{m.algorithm_id}/factories/{m.factory_id}/models/{m.id}", "intent": intent})
+        # Note: version delete would link to the model overview where versions are listed
+                
+    return actions
+
 def plan_action(
     user_question: str,
     query_results: Dict[str, Any],
@@ -403,8 +414,12 @@ def plan_action(
         actions = _build_zip_action(models, version_numbers, db_session)
     elif action == "compare_versions":
         comp_payload = _build_compare_payload(models, version_numbers, entity_type_plural, user_question.lower(), db_session)
+    elif action in ("interactive_create", "navigate_edit", "navigate_delete"):
+        actions = _build_navigate_action(action, entity_type, models, algorithms, factories)
         
     return {
+        "action_type": action,
         "actions": actions,
-        "comp_payload": comp_payload
+        "comp_payload": comp_payload,
+        "entity_type": entity_type
     }

@@ -47,7 +47,7 @@ def create_model(
         .filter(
             Model.algorithm_id == algo_id,
             Model.factory_id == fac_id,
-            func.lower(Model.name) == model.name.lower(),
+            func.replace(func.lower(Model.name), " ", "") == model.name.lower().replace(" ", ""),
         )
         .first()
     )
@@ -328,12 +328,14 @@ def generate_model_report(
         "CPU Utilization (%)",
         "GPU Utilization (%)",
         "Inference Time (ms)",
-        "Hyperparameters"
-    ])
+        "Hyperparameters",
+            "INI Configuration"
+        ])
 
     for v in versions:
         dataset_count = v.delta.dataset_count if v.delta and v.delta.dataset_count is not None else 0
-        hyperparameters = str(v.parameters) if v.parameters else "None"
+        hyperparameters = str(v.parameters).replace('\n', ' | ').replace('\r', '') if v.parameters else "None"
+        ini_config_str = v.ini_config.replace('\n', ' | ').replace('\r', '') if hasattr(v, "ini_config") and v.ini_config else "None"
         created_at_str = v.created_at.strftime("%d-%m-%Y %H:%M:%S") if v.created_at else "N/A"
 
         csv_writer.writerow([
@@ -348,8 +350,9 @@ def generate_model_report(
             v.cpu_utilization if v.cpu_utilization is not None else "N/A",
             v.gpu_utilization if v.gpu_utilization is not None else "N/A",
             v.inference_time if v.inference_time is not None else "N/A",
-            hyperparameters
-        ])
+            hyperparameters,
+                ini_config_str
+            ])
 
     response = StreamingResponse(
         iter([stream.getvalue()]),

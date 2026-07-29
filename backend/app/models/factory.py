@@ -21,3 +21,10 @@ class Factory(Base):
         back_populates="factory",
         cascade="all, delete-orphan"
     )
+
+class AlgorithmFactoryLink(Base):
+    __tablename__ = "algorithm_factory_links"
+
+    algorithm_id = Column(Integer, ForeignKey("algorithms.id", ondelete="CASCADE"), primary_key=True)
+    factory_id = Column(Integer, ForeignKey("factories.id", ondelete="CASCADE"), primary_key=True)
+    description = Column(String, nullable=True)

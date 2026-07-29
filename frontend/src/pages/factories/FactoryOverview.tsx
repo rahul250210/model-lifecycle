@@ -63,20 +63,7 @@ interface DashboardData {
     }[];
 }
 
-interface Factory {
-    id: number;
-    name: string;
-    description?: string;
-}
-
-interface Algorithm {
-    id: number;
-    name: string;
-    description?: string;
-    models_count?: number;
-    created_at?: string;
-    accuracy?: number | null;
-}
+import type { Factory, Algorithm } from '../../types';
 
 function formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';

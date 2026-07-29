@@ -3,12 +3,7 @@
 import { Grid, Card, CardContent, Typography, Chip, Button } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 
-interface Model {
-  id: number;
-  name: string;
-  versions_count: number;
-  created_at: string;
-}
+import type { Model } from '../../types';
 
 export default function ModelsDashboard({ models, factoryId, algorithmId }: {
   models: Model[];

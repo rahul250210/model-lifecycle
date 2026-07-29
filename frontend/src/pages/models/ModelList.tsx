@@ -29,10 +29,10 @@ import FactoryIcon from "@mui/icons-material/Factory";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HistoryIcon from "@mui/icons-material/History";
-import Breadcrumbs from "@mui/material/Breadcrumbs";
 import Link from "@mui/material/Link";
 import NavigateNextIcon from "@mui/icons-material/NavigateNext";
 import CircularProgress from "@mui/material/CircularProgress";
+import InteractiveBreadcrumbs from "../../components/InteractiveBreadcrumbs";
 
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axios";
@@ -68,10 +68,11 @@ export default function ModelList() {
   const handleGenerateFactoryReport = async () => {
     setFactoryReportLoading(true);
     try {
-      const response = await axios.get(
-        `/factories/${factoryId}/report`,
-        { responseType: 'blob' }
-      );
+      const reportUrl = algorithmId 
+        ? `/factories/${factoryId}/report?algorithm_id=${algorithmId}`
+        : `/factories/${factoryId}/report`;
+      
+      const response = await axios.get(reportUrl, { responseType: 'blob' });
 
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -160,6 +161,12 @@ export default function ModelList() {
       }
     };
     fetchData();
+
+    const handleEntityCreated = () => {
+      fetchData();
+    };
+    window.addEventListener("entityCreated", handleEntityCreated);
+    return () => window.removeEventListener("entityCreated", handleEntityCreated);
   }, [factoryId, algorithmId]);
 
   if (loading) {
@@ -189,24 +196,13 @@ export default function ModelList() {
                   <ArrowBackIcon fontSize="small" sx={{ color: theme.textMain }} />
                 </IconButton>
 
-                <Breadcrumbs separator={<NavigateNextIcon fontSize="small" sx={{ color: theme.textSecondary }} />} aria-label="breadcrumb">
-                  <Link
-                    underline="hover"
-                    onClick={() => navigate(`/algorithms`)}
-                    sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textSecondary }}
-                  >
-                    {t('modelList.algorithms', 'Algorithms')}
-                  </Link>
-                  <Link
-                    underline="hover"
-                    color="inherit"
-                    onClick={() => navigate(`/algorithms/${algorithmId}/factories`)}
-                    sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textSecondary }}
-                  >
-                    {algorithmName}
-                  </Link>
-                  <Typography fontWeight={700} sx={{ fontSize: '1.2rem', color: theme.textMain }}>{factoryName}</Typography>
-                </Breadcrumbs>
+                <InteractiveBreadcrumbs 
+                  path={[
+                    { label: t('modelList.algorithms', 'Algorithms'), link: '/algorithms', type: 'root' },
+                    { label: algorithmName, link: `/algorithms/${algorithmId}/factories`, type: 'algorithm', id: algorithmId },
+                    { label: factoryName, type: 'factory', id: factoryId }
+                  ]}
+                />
               </Stack>
               <Typography variant="h5" fontWeight={800} sx={{ color: theme.textMain, letterSpacing: "-0.02em", mb: 1 }}>
                 {t('modelList.model', 'Model')} <Box component="span" sx={{ color: theme.primary }}>{t('modelList.repository', 'Repository')}</Box>
@@ -286,16 +282,18 @@ export default function ModelList() {
             models.map((model) => (
               <Grid size={{ xs: 12, md: 6, lg: 4 }} key={model.id}>
                 <Card
+                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${model.id}`)}
                   sx={{
                     borderRadius: "24px",
                     height: "100%",
                     bgcolor: theme.paper,
                     border: `1px solid ${theme.border}`,
+                    cursor: "pointer",
                     transition: "all 0.3s",
                     "&:hover": {
                       borderColor: theme.primary,
                       boxShadow: `0 25px 30px -5px ${alpha("#000", 0.08)}`,
-                      "& .arrow-icon": { opacity: 1, transform: "translateX(0)" }
+                      transform: "translateY(-4px)"
                     },
                   }}
                   elevation={0}
@@ -355,11 +353,10 @@ export default function ModelList() {
                       </Stack>
 
                       <Box
-                        onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${model.id}`)}
                         className="arrow-icon"
                         sx={{
-                          opacity: 0,
-                          transform: "translateX(-10px)",
+                          opacity: 1,
+                          transform: "translateX(0)",
                           transition: "all 0.3s",
                           color: theme.primary,
                           display: 'flex',

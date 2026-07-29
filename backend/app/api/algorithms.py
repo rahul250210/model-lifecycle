@@ -34,7 +34,7 @@ def create_algorithm(
 ):
     existing = (
         db.query(Algorithm)
-        .filter(func.lower(Algorithm.name) == algorithm.name.lower())
+        .filter(func.replace(func.lower(Algorithm.name), " ", "") == algorithm.name.lower().replace(" ", ""))
         .first()
     )
     if existing:
@@ -194,6 +194,11 @@ def delete_algorithm(
     if not algo:
         raise HTTPException(404, "Algorithm not found")
 
+    # Remove references from factories to prevent foreign key constraint violations
+    from sqlalchemy import text
+    db.execute(text("UPDATE factories SET created_by_algorithm_id = NULL WHERE created_by_algorithm_id = :algo_id"), {"algo_id": algorithm_id})
+    db.execute(text("DELETE FROM algorithm_factory_links WHERE algorithm_id = :algo_id"), {"algo_id": algorithm_id})
+
     db.delete(algo)
     db.commit()
     logger.info(f"Algorithm deleted: {algo.name} (ID: {algo.id})")
@@ -214,17 +219,20 @@ def list_factories_for_algorithm(
     if not algo:
         raise HTTPException(404, "Algorithm not found")
 
+    from app.models.factory import AlgorithmFactoryLink
+
     rows = (
         db.query(
             Factory.id,
             Factory.name,
-            Factory.description,
+            func.coalesce(AlgorithmFactoryLink.description, Factory.description).label("description"),
             Factory.created_at,
             func.count(Model.id).label("models_count")
         )
         .outerjoin(Model, (Model.factory_id == Factory.id) & (Model.algorithm_id == algorithm_id))
-        .filter((Model.id.isnot(None)) | (Factory.created_by_algorithm_id == algorithm_id))
-        .group_by(Factory.id)
+        .outerjoin(AlgorithmFactoryLink, (AlgorithmFactoryLink.factory_id == Factory.id) & (AlgorithmFactoryLink.algorithm_id == algorithm_id))
+        .filter((Model.id.isnot(None)) | (Factory.created_by_algorithm_id == algorithm_id) | (AlgorithmFactoryLink.factory_id.isnot(None)))
+        .group_by(Factory.id, AlgorithmFactoryLink.description)
         .order_by(Factory.name.asc())
         .all()
     )
@@ -240,6 +248,37 @@ def list_factories_for_algorithm(
         for r in rows
     ]
 
+
+# ======================================================
+# LINK EXISTING FACTORY TO ALGORITHM
+# ======================================================
+from fastapi import Body
+
+@router.post(
+    "/{algorithm_id}/factories/{factory_id}/link",
+)
+def link_factory_to_algorithm(
+    algorithm_id: int,
+    factory_id: int,
+    description: str = Body(None, embed=True),
+    db: Session = Depends(get_db)
+):
+    from app.models.factory import AlgorithmFactoryLink
+
+    algo = db.query(Algorithm).filter(Algorithm.id == algorithm_id).first()
+    factory = db.query(Factory).filter(Factory.id == factory_id).first()
+    if not algo or not factory:
+        raise HTTPException(404, "Algorithm or Factory not found")
+    
+    link = db.query(AlgorithmFactoryLink).filter_by(algorithm_id=algorithm_id, factory_id=factory_id).first()
+    if link:
+        link.description = description
+    else:
+        link = AlgorithmFactoryLink(algorithm_id=algorithm_id, factory_id=factory_id, description=description)
+        db.add(link)
+    
+    db.commit()
+    return {"message": "Factory linked successfully"}
 
 # ======================================================
 # LIST ALL VERSIONS UNDER AN ALGORITHM (FOR INHERITANCE)
@@ -339,8 +378,9 @@ def generate_algorithm_report(
         "CPU Utilization (%)",
         "GPU Utilization (%)",
         "Inference Time (ms)",
-        "Hyperparameters"
-    ])
+        "Hyperparameters",
+            "INI Configuration"
+        ])
 
     for model in models:
         # Sort versions in memory since they are eagerly loaded
@@ -348,7 +388,8 @@ def generate_algorithm_report(
         
         for v in versions:
             dataset_count = v.delta.dataset_count if v.delta and v.delta.dataset_count is not None else 0
-            hyperparameters = str(v.parameters) if v.parameters else "None"
+            hyperparameters = str(v.parameters).replace('\n', ' | ').replace('\r', '') if v.parameters else "None"
+            ini_config_str = v.ini_config.replace('\n', ' | ').replace('\r', '') if hasattr(v, "ini_config") and v.ini_config else "None"
             created_at_str = v.created_at.strftime("%d-%m-%Y %H:%M:%S") if v.created_at else "N/A"
 
             csv_writer.writerow([
@@ -365,7 +406,8 @@ def generate_algorithm_report(
                 v.cpu_utilization if v.cpu_utilization is not None else "N/A",
                 v.gpu_utilization if v.gpu_utilization is not None else "N/A",
                 v.inference_time if v.inference_time is not None else "N/A",
-                hyperparameters
+                hyperparameters,
+                ini_config_str
             ])
             
         if versions:

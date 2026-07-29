@@ -56,9 +56,13 @@ export default function FactoryCreate() {
       } else {
         navigate("/factories");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError(t("factoryCreate.failedCreate"));
+      if (err.response && err.response.data && err.response.data.detail) {
+        setError(err.response.data.detail);
+      } else {
+        setError(t("factoryCreate.failedCreate"));
+      }
     } finally {
       setLoading(false);
     }

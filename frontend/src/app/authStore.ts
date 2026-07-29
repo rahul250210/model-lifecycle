@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import axios from "axios";
+import api from "../api/axios";
 
 export interface User {
   id: string;
@@ -28,7 +28,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   login: async (email: string, password: string) => {
     set({ isLoading: true });
     try {
-      const response = await axios.post("http://localhost:8000/api/auth/login", {
+      const response = await api.post("/api/auth/login", {
         email,
         password,
       });
@@ -39,7 +39,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       localStorage.setItem("user", JSON.stringify(user));
       
       // Set default authorization header
-      axios.defaults.headers.common["Authorization"] = `Bearer ${access_token}`;
+      api.defaults.headers.common["Authorization"] = `Bearer ${access_token}`;
       
       set({
         token: access_token,
@@ -56,7 +56,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   signup: async (firstName: string, lastName: string, email: string, password: string) => {
     set({ isLoading: true });
     try {
-      const response = await axios.post("http://localhost:8000/api/auth/signup", {
+      const response = await api.post("/api/auth/signup", {
         first_name: firstName,
         last_name: lastName,
         email,
@@ -69,7 +69,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       localStorage.setItem("user", JSON.stringify(user));
       
       // Set default authorization header
-      axios.defaults.headers.common["Authorization"] = `Bearer ${access_token}`;
+      api.defaults.headers.common["Authorization"] = `Bearer ${access_token}`;
       
       set({
         token: access_token,
@@ -87,7 +87,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     console.log("Logging out");
     localStorage.removeItem("access_token");
     localStorage.removeItem("user");
-    delete axios.defaults.headers.common["Authorization"];
+    delete api.defaults.headers.common["Authorization"];
     set({
       user: null,
       token: null,
@@ -106,7 +106,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     
     if (token && user) {
       try {
-        axios.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+        api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
         set({
           token,
           user: JSON.parse(user),

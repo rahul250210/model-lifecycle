@@ -103,6 +103,12 @@ export default function VersionTimeline() {
 
   useEffect(() => {
     fetchVersions();
+    
+    const handleEntityCreated = () => {
+      fetchVersions();
+    };
+    window.addEventListener("entityCreated", handleEntityCreated);
+    return () => window.removeEventListener("entityCreated", handleEntityCreated);
   }, [factoryId, algorithmId, modelId]);
 
   const processRollback = async () => {

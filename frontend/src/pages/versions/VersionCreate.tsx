@@ -883,7 +883,7 @@ export default function VersionCreate() {
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>
-                        INI Configuration
+                        {t('versionCreate.iniConfig', 'INI Configuration')}
                       </Typography>
                       <Typography variant="caption" sx={{ color: theme.textMuted }}>(Optional)</Typography>
                     </Box>

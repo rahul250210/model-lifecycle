@@ -31,6 +31,7 @@ export default function ArtifactBrowser() {
   const [openModal, setOpenModal] = useState(false);
   const [newAlgoName, setNewAlgoName] = useState("");
   const [newAlgoDesc, setNewAlgoDesc] = useState("");
+  const [newAlgoError, setNewAlgoError] = useState("");
 
   const [editAlgo, setEditAlgo] = useState<any | null>(null);
   const [editName, setEditName] = useState("");
@@ -73,6 +74,7 @@ export default function ArtifactBrowser() {
   const handleCreateAlgo = async () => {
     if (!newAlgoName.trim()) return;
     try {
+      setNewAlgoError("");
       await axios.post("/kb/algorithms", {
         name: newAlgoName,
         description: newAlgoDesc,
@@ -82,7 +84,14 @@ export default function ArtifactBrowser() {
       setNewAlgoDesc("");
       setOpenModal(false);
       fetchAlgorithms();
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      console.error(e);
+      if (e.response?.data?.detail) {
+        setNewAlgoError(e.response.data.detail);
+      } else {
+        setNewAlgoError("Failed to create algorithm repository.");
+      }
+    }
   };
 
   return (
@@ -316,7 +325,7 @@ export default function ArtifactBrowser() {
       {/* CREATE DIALOG */}
       <Dialog
         open={openModal}
-        onClose={() => setOpenModal(false)}
+        onClose={() => { setOpenModal(false); setNewAlgoError(""); }}
         PaperProps={{ sx: { borderRadius: "24px", p: 1, minWidth: 400, bgcolor: theme.paper } }}
       >
         <DialogTitle fontWeight={900} sx={{ pb: 1, color: theme.textMain }}>
@@ -348,9 +357,14 @@ export default function ArtifactBrowser() {
               "& .MuiInputLabel-root": { color: theme.textMuted }
             }}
           />
+          {newAlgoError && (
+            <Typography variant="body2" sx={{ color: theme.danger || "#f44336", mt: 1, fontWeight: 600, pl: 1 }}>
+              {newAlgoError}
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 3 }}>
-          <Button onClick={() => setOpenModal(false)} sx={{ fontWeight: 700, color: theme.textMuted }}>{t('artifactBrowser.cancel', 'Cancel')}</Button>
+          <Button onClick={() => { setOpenModal(false); setNewAlgoError(""); }} sx={{ fontWeight: 700, color: theme.textMuted }}>{t('artifactBrowser.cancel', 'Cancel')}</Button>
           <Button
             variant="contained"
             onClick={handleCreateAlgo}

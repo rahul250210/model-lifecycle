@@ -1147,7 +1147,7 @@ export default function VersionEdit() {
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography variant="h6" fontWeight={600} sx={{ color: theme.textMain }}>
-                        INI Configuration
+                        {t('versionEdit.iniConfig', 'INI Configuration')}
                       </Typography>
                       <Typography variant="caption" sx={{ color: theme.textMuted }}>(Optional)</Typography>
                     </Box>
@@ -1250,7 +1250,7 @@ export default function VersionEdit() {
                         />
                       </Button>
                       <Typography variant="body2" sx={{ color: theme.textSecondary, mt: 2 }}>
-                        Supports .ini or .txt files
+                        {t('versionEdit.iniFileTypes', 'Supports .ini or .txt files')}
                       </Typography>
                     </Box>
                   )}

@@ -86,9 +86,10 @@ export default function FileUploadDialog({
 
             const entries = await readEntriesPromise();
 
-            // Process sequentially to avoid memory spikes
-            for (const childEntry of entries) {
-                await getAllFilesFromEntry(childEntry, fileList);
+            // Process in batches of 100 to avoid memory spikes but maintain high throughput
+            for (let i = 0; i < entries.length; i += 100) {
+                const batch = entries.slice(i, i + 100);
+                await Promise.all(batch.map(childEntry => getAllFilesFromEntry(childEntry, fileList)));
             }
         }
     };

@@ -1,7 +1,7 @@
 import json
 import re
 from typing import Any, Dict, List, Union
-from app.services.llm_service import call_llm
+from app.services.llm_service import call_llm, parse_json_from_llm
 
 def _format_context(context: List[Dict[str, Any]]) -> str:
     if not context:
@@ -17,7 +17,8 @@ def _format_context(context: List[Dict[str, Any]]) -> str:
 def generate_sql(
     user_query: str,
     schema_description: Union[str, Dict[str, Any]],
-    context: List[Dict[str, Any]] = []
+    context: List[Dict[str, Any]] = [],
+    known_entities: Dict[str, List[str]] = None
 ) -> Dict[str, str]:
     """
     Generates a PostgreSQL query from a user query under strict schema constraints
@@ -59,9 +60,19 @@ def generate_sql(
     history_str = _format_context(context)
     history_section = f"\nCONVERSATION HISTORY:\n{history_str}\n" if history_str else ""
 
-    prompt = f"""You are a database-connected AI assistant translating a user question into a PostgreSQL query.
-{history_section}
+    known_entities_section = ""
+    if known_entities:
+        known_entities_section = "\nKNOWN EXTRACTED ENTITIES FROM QUERY:\n"
+        if known_entities.get("models"):
+            known_entities_section += f"- Models: {', '.join(known_entities['models'])}\n"
+        if known_entities.get("algorithms"):
+            known_entities_section += f"- Algorithms: {', '.join(known_entities['algorithms'])}\n"
+        if known_entities.get("factories"):
+            known_entities_section += f"- Factories: {', '.join(known_entities['factories'])}\n"
+        known_entities_section += "\nIMPORTANT: Use these exact names when filtering their respective tables (e.g. models.name ILIKE '%name%'). Do not mix up model names with algorithm or factory names.\n"
 
+    prompt = f"""You are a database-connected AI assistant translating a user question into a PostgreSQL query.
+{history_section}{known_entities_section}
 DATABASE SCHEMA DESCRIPTION:
 {schema_str}
 
@@ -71,6 +82,10 @@ STRICT SQL GENERATION RULES:
 3. Use case-insensitive matching where appropriate (e.g. ILIKE for search/filter operations on text columns).
 4. ALWAYS append "LIMIT 100" to the generated SQL query unless the query is an aggregation (e.g. contains COUNT, SUM, AVG, MIN, MAX, GROUP BY).
 5. The query must be strictly READ-ONLY. NEVER generate any write operations: INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or CREATE.
+6. ALWAYS link a model to its factory using `models.factory_id = factories.id`. DO NOT use `factories.created_by_algorithm_id` to find a model's factory.
+7. When querying a list of entities (factories, algorithms, models, versions), ALWAYS select their primary key `id` and any foreign keys (e.g. `factory_id`, `algorithm_id`, `model_id`). ALWAYS ensure the primary display name is selected as `name` (do not alias it to 'model' or 'factory'). This allows the frontend UI to render interactive cards.
+8. When listing algorithms associated with a factory (or factories for an algorithm), you MUST include BOTH algorithms that have deployed models in that factory (via the `models` table) AND the algorithm that created the factory (via `factories.created_by_algorithm_id`). You should use a UNION or an OR condition to get all relevant algorithms, since relying on just one method will miss some algorithms.
+9. When asked to compare models or versions, ALWAYS include the factory name (alias as `factory_name`) alongside the model name and version number. Also, pay close attention to the scope: ONLY filter by `is_active = true` if the user explicitly mentions "active", "deployed", or "current". If they ask for "all", do NOT filter by `is_active`.
 
 OUTPUT FORMAT:
 You must respond with a single JSON object in the exact format shown below:
@@ -93,40 +108,18 @@ JSON Output:"""
         }
 
     # 4. Parse JSON safely from LLM output
-    response_clean = response.strip()
-    # Remove markdown code block fences if the LLM wrapped it anyway
-    match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_clean, re.DOTALL)
-    if match:
-        response_clean = match.group(1)
-
-    try:
-        result = json.loads(response_clean)
-        # Ensure return fields are present
-        if "sql" not in result:
-            result["sql"] = ""
-        if "reasoning" not in result:
-            result["reasoning"] = "No reasoning provided by LLM."
-        return result
-    except json.JSONDecodeError:
-        # Try finding first '{' and last '}'
-        start = response_clean.find('{')
-        end = response_clean.rfind('}')
-        if start != -1 and end != -1:
-            try:
-                result = json.loads(response_clean[start:end+1])
-                if "sql" not in result:
-                    result["sql"] = ""
-                if "reasoning" not in result:
-                    result["reasoning"] = "No reasoning provided."
-                return result
-            except json.JSONDecodeError:
-                pass
-
-        # Return failure fallback
+    result = parse_json_from_llm(response)
+    if not result:
         return {
             "sql": "",
             "reasoning": f"Failed to parse JSON response from LLM. Raw response: {response}"
         }
+        
+    if "sql" not in result:
+        result["sql"] = ""
+    if "reasoning" not in result:
+        result["reasoning"] = "No reasoning provided by LLM."
+    return result
 
 
 def regenerate_sql(
@@ -134,7 +127,8 @@ def regenerate_sql(
     schema_description: Union[str, Dict[str, Any]],
     failed_sql: str,
     validation_errors: List[str],
-    context: List[Dict[str, Any]] = []
+    context: List[Dict[str, Any]] = [],
+    known_entities: Dict[str, List[str]] = None
 ) -> Dict[str, str]:
     """
     Asks the LLM to correct/regenerate a SQL query that failed validation.
@@ -173,10 +167,21 @@ def regenerate_sql(
     history_str = _format_context(context)
     history_section = f"\nCONVERSATION HISTORY:\n{history_str}\n" if history_str else ""
 
+    known_entities_section = ""
+    if known_entities:
+        known_entities_section = "\nKNOWN EXTRACTED ENTITIES FROM QUERY:\n"
+        if known_entities.get("models"):
+            known_entities_section += f"- Models: {', '.join(known_entities['models'])}\n"
+        if known_entities.get("algorithms"):
+            known_entities_section += f"- Algorithms: {', '.join(known_entities['algorithms'])}\n"
+        if known_entities.get("factories"):
+            known_entities_section += f"- Factories: {', '.join(known_entities['factories'])}\n"
+        known_entities_section += "\nIMPORTANT: Use these exact names when filtering their respective tables (e.g. models.name ILIKE '%name%'). Do not mix up model names with algorithm or factory names.\n"
+
     prompt = f"""You are a database-connected AI assistant translating a user question into a PostgreSQL query.
 {history_section}
 Your previous generated SQL query failed validation checks. You must correct the SQL query to resolve the validation errors.
-
+{known_entities_section}
 DATABASE SCHEMA DESCRIPTION:
 {schema_str}
 
@@ -186,6 +191,10 @@ STRICT SQL GENERATION RULES:
 3. Use case-insensitive matching where appropriate (e.g. ILIKE for search/filter operations on text columns).
 4. ALWAYS append "LIMIT 100" to the generated SQL query unless the query is an aggregation (e.g. contains COUNT, SUM, AVG, MIN, MAX, GROUP BY).
 5. The query must be strictly READ-ONLY. NEVER generate any write operations: INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or CREATE.
+6. ALWAYS link a model to its factory using `models.factory_id = factories.id`. DO NOT use `factories.created_by_algorithm_id` to find a model's factory.
+7. When querying a list of entities (factories, algorithms, models, versions), ALWAYS select their primary key `id` and any foreign keys (e.g. `factory_id`, `algorithm_id`, `model_id`). ALWAYS ensure the primary display name is selected as `name` (do not alias it to 'model' or 'factory'). This allows the frontend UI to render interactive cards.
+8. When listing algorithms associated with a factory (or factories for an algorithm), you MUST include BOTH algorithms that have deployed models in that factory (via the `models` table) AND the algorithm that created the factory (via `factories.created_by_algorithm_id`). You should use a UNION or an OR condition to get all relevant algorithms, since relying on just one method will miss some algorithms.
+9. When asked to compare models or versions, ALWAYS include the factory name (alias as `factory_name`) alongside the model name and version number. Also, pay close attention to the scope: ONLY filter by `is_active = true` if the user explicitly mentions "active", "deployed", or "current". If they ask for "all", do NOT filter by `is_active`.
 
 PREVIOUS ATTEMPT DETAILS:
 User Question: {user_query}
@@ -206,35 +215,16 @@ JSON Output:"""
     # 3. Call the LLM
     response = call_llm(prompt, temperature=0.0)
 
-    # 4. Parse JSON safely from LLM output
-    response_clean = response.strip()
-    match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_clean, re.DOTALL)
-    if match:
-        response_clean = match.group(1)
-
-    try:
-        result = json.loads(response_clean)
-        if "sql" not in result:
-            result["sql"] = ""
-        if "reasoning" not in result:
-            result["reasoning"] = "No reasoning provided."
-        return result
-    except json.JSONDecodeError:
-        start = response_clean.find('{')
-        end = response_clean.rfind('}')
-        if start != -1 and end != -1:
-            try:
-                result = json.loads(response_clean[start:end+1])
-                if "sql" not in result:
-                    result["sql"] = ""
-                if "reasoning" not in result:
-                    result["reasoning"] = "No reasoning provided."
-                return result
-            except json.JSONDecodeError:
-                pass
-
+    result = parse_json_from_llm(response)
+    if not result:
         return {
             "sql": "",
             "reasoning": f"Failed to parse JSON response from LLM. Raw response: {response}"
         }
+        
+    if "sql" not in result:
+        result["sql"] = ""
+    if "reasoning" not in result:
+        result["reasoning"] = "No reasoning provided."
+    return result
 

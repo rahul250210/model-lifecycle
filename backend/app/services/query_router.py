@@ -5,7 +5,10 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from difflib import SequenceMatcher
 
-from app.services.llm_service import call_llm
+from app.services.llm_service import call_llm, parse_json_from_llm
+from app.models.model import Model
+from app.models.algorithm import Algorithm
+from app.models.factory import Factory
 
 # Relying 100% on LLM routing
 
@@ -57,22 +60,9 @@ User Question: {user_question}"""
 
     raw_response = call_llm(prompt, temperature=0.0)
     
-    # Try parsing JSON
-    try:
-        clean_resp = raw_response.strip()
-        if clean_resp.startswith("```json"):
-            clean_resp = clean_resp[7:]
-        if clean_resp.startswith("```"):
-            clean_resp = clean_resp[3:]
-        if clean_resp.endswith("```"):
-            clean_resp = clean_resp[:-3]
-        clean_resp = clean_resp.strip()
-        
-        parsed = json.loads(clean_resp)
-        if parsed.get("query_type") in ["DATABASE_QUERY", "KNOWLEDGE_QUERY", "HYBRID_QUERY", "ACTION_QUERY"]:
-            return parsed
-    except Exception as e:
-        print(f"[QueryRouter] Failed to parse router response: {raw_response}. Error: {e}")
+    parsed = parse_json_from_llm(raw_response)
+    if parsed and parsed.get("query_type") in ["DATABASE_QUERY", "KNOWLEDGE_QUERY", "HYBRID_QUERY", "ACTION_QUERY"]:
+        return parsed
         
     # Simple default fallback if LLM is offline or JSON parsing fails
     q = user_question.lower()
@@ -144,23 +134,12 @@ User Question: "{user_question}"
 
 Output:"""
 
-    raw_response = call_llm(prompt, temperature=0.0).strip()
+    raw_response = call_llm(prompt, temperature=0.0)
     
-    # Clean JSON wrapper if present
-    if raw_response.startswith("```json"):
-        raw_response = raw_response[7:]
-    if raw_response.startswith("```"):
-        raw_response = raw_response[3:]
-    if raw_response.endswith("```"):
-        raw_response = raw_response[:-3]
-    raw_response = raw_response.strip()
+    extracted = parse_json_from_llm(raw_response)
     
-    extracted = {"models": [], "factories": [], "algorithms": []}
-    try:
-        if raw_response and raw_response != "__LLM_OFFLINE__":
-            extracted = json.loads(raw_response)
-    except Exception as e:
-        print(f"[QueryRouter] resolve_entities JSON parsing failed: {e}")
+    if not extracted or not isinstance(extracted, dict):
+        print(f"[QueryRouter] resolve_entities JSON parsing failed/empty.")
         # Fallback keyword match in case of LLM offline/parse error
         q = user_question.lower()
         models = db_session.execute(text("SELECT name FROM models")).fetchall()
@@ -215,20 +194,14 @@ Output:"""
     matched_algorithms = []
 
     for name in extracted.get("factories", []):
-        row = db_session.execute(
-            text("SELECT id, name, description FROM factories WHERE name ILIKE :name LIMIT 1"),
-            {"name": name}
-        ).fetchone()
-        if row:
-            matched_factories.append(row)
+        factory = db_session.query(Factory).filter(Factory.name.ilike(name)).first()
+        if factory:
+            matched_factories.append(factory)
             
     for name in extracted.get("algorithms", []):
-        row = db_session.execute(
-            text("SELECT id, name, description FROM algorithms WHERE name ILIKE :name LIMIT 1"),
-            {"name": name}
-        ).fetchone()
-        if row:
-            matched_algorithms.append(row)
+        algo = db_session.query(Algorithm).filter(Algorithm.name.ilike(name)).first()
+        if algo:
+            matched_algorithms.append(algo)
 
     STOP_WORDS = {
         "compare", "model", "models", "version", "versions", "from", "and", "the", "with", 
@@ -241,18 +214,12 @@ Output:"""
     for name in extracted.get("models", []):
         if factory_ids:
             for fid in factory_ids:
-                row = db_session.execute(
-                    text("SELECT id, name, description, algorithm_id, factory_id FROM models WHERE name ILIKE :name AND factory_id = :fid LIMIT 1"),
-                    {"name": name, "fid": fid}
-                ).fetchone()
-                if row:
-                    matched_models.append(row)
+                model = db_session.query(Model).filter(Model.name.ilike(name), Model.factory_id == fid).first()
+                if model:
+                    matched_models.append(model)
         if not matched_models:
-            rows = db_session.execute(
-                text("SELECT id, name, description, algorithm_id, factory_id FROM models WHERE name ILIKE :name"),
-                {"name": name}
-            ).fetchall()
-            matched_models.extend(rows)
+            models = db_session.query(Model).filter(Model.name.ilike(name)).all()
+            matched_models.extend(models)
 
         # Word-level fallback: if no direct name match, check individual words (e.g. "RF" in "RF models")
         if not matched_models:
@@ -260,22 +227,10 @@ Output:"""
             for word in words:
                 if word.lower() in STOP_WORDS:
                     continue
-                if factory_ids:
-                    for fid in factory_ids:
-                        row = db_session.execute(
-                            text("SELECT id, name, description, algorithm_id, factory_id FROM models WHERE name ILIKE :word AND factory_id = :fid LIMIT 1"),
-                            {"word": f"%{word}%", "fid": fid}
-                        ).fetchone()
-                        if row and row not in matched_models:
-                            matched_models.append(row)
-                if not matched_models:
-                    rows = db_session.execute(
-                        text("SELECT id, name, description, algorithm_id, factory_id FROM models WHERE name ILIKE :word"),
-                        {"word": f"%{word}%"}
-                    ).fetchall()
-                    for row in rows:
-                        if row not in matched_models:
-                            matched_models.append(row)
+                models = db_session.query(Model).filter(Model.name.ilike(f"%{word}%")).all()
+                for m in models:
+                    if m not in matched_models:
+                        matched_models.append(m)
 
     # Implicit model lookup: if no models matched but factories were specified (and potentially an algorithm or general query words)
     if not matched_models and matched_factories:
@@ -285,44 +240,34 @@ Output:"""
             for w in q_words:
                 if w.lower() in STOP_WORDS:
                     continue
-                row = db_session.execute(
-                    text("SELECT id, name, description, algorithm_id, factory_id FROM models WHERE factory_id = :fid AND name ILIKE :w LIMIT 1"),
-                    {"fid": f.id, "w": f"%{w}%"}
-                ).fetchone()
-                if row:
-                    matched_models.append(row)
+                model = db_session.query(Model).filter(Model.factory_id == f.id, Model.name.ilike(f"%{w}%")).first()
+                if model:
+                    matched_models.append(model)
                     found = True
                     break
             
             if not found:
                 if matched_algorithms:
                     for a in matched_algorithms:
-                        row = db_session.execute(
-                            text("""
-                                SELECT id, name, description, algorithm_id, factory_id 
-                                FROM models 
-                                WHERE factory_id = :fid AND algorithm_id = :aid 
-                                ORDER BY CASE WHEN name ILIKE '%test%' THEN 1 ELSE 0 END ASC, id ASC
-                                LIMIT 1
-                            """),
-                            {"fid": f.id, "aid": a.id}
-                        ).fetchone()
-                        if row:
-                            matched_models.append(row)
+                        model = db_session.query(Model).filter(
+                            Model.factory_id == f.id, 
+                            Model.algorithm_id == a.id
+                        ).order_by(
+                            Model.name.ilike('%test%').asc(), 
+                            Model.id.asc()
+                        ).first()
+                        if model:
+                            matched_models.append(model)
                             found = True
                 if not found:
-                    row = db_session.execute(
-                        text("""
-                            SELECT id, name, description, algorithm_id, factory_id 
-                            FROM models 
-                            WHERE factory_id = :fid 
-                            ORDER BY CASE WHEN name ILIKE '%test%' THEN 1 ELSE 0 END ASC, id ASC
-                            LIMIT 1
-                        """),
-                        {"fid": f.id}
-                    ).fetchone()
-                    if row:
-                        matched_models.append(row)
+                    model = db_session.query(Model).filter(
+                        Model.factory_id == f.id
+                    ).order_by(
+                        Model.name.ilike('%test%').asc(), 
+                        Model.id.asc()
+                    ).first()
+                    if model:
+                        matched_models.append(model)
 
     return {
         "models": matched_models,

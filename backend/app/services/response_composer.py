@@ -62,6 +62,73 @@ Output:"""
                     
     return filtered[:3]
 
+from typing import Optional
+
+def extract_tabular_data(query_results: Any, comp_payload: Any) -> Optional[Dict[str, Any]]:
+    """Extracts tabular headers and rows dynamically from comparison payloads or SQL results."""
+    headers = []
+    rows = []
+    
+    if comp_payload and "versions" in comp_payload:
+        versions = comp_payload["versions"]
+        if versions:
+            headers = ["Metric"] + [f"Version {v.get('version_number', i)}" for i, v in enumerate(versions)]
+            
+            metrics = [
+                ("Accuracy", "accuracy"),
+                ("Precision", "precision"),
+                ("Recall", "recall"),
+                ("F1 Score", "f1_score"),
+                ("Inference Time", "inference_time")
+            ]
+            for label, key in metrics:
+                row = [label]
+                for v in versions:
+                    val = v.get(key)
+                    if val is None:
+                        row.append("N/A")
+                    elif key == "inference_time":
+                        row.append(f"{val}ms")
+                    else:
+                        try:
+                            val_f = float(val)
+                            if val_f <= 1.0:
+                                row.append(f"{val_f*100:.1f}%")
+                            else:
+                                row.append(f"{val_f:.1f}%")
+                        except ValueError:
+                            row.append(str(val))
+                rows.append(row)
+            return {"filename": "version_comparison.csv", "headers": headers, "rows": rows}
+            
+    if query_results:
+        raw_rows = []
+        if isinstance(query_results, dict):
+            raw_rows = query_results.get("rows", [])
+        elif isinstance(query_results, list):
+            raw_rows = query_results
+            
+        if raw_rows:
+            first_row = raw_rows[0]
+            if hasattr(first_row, "keys"):
+                headers = list(first_row.keys())
+            elif isinstance(first_row, dict):
+                headers = list(first_row.keys())
+            else:
+                return None
+                
+            for r in raw_rows:
+                row = []
+                for h in headers:
+                    val = r.get(h) if isinstance(r, dict) else getattr(r, h, None)
+                    row.append(str(val) if val is not None else "")
+                rows.append(row)
+                
+            display_headers = [h.replace("_", " ").title() for h in headers]
+            return {"filename": "query_results.csv", "headers": display_headers, "rows": rows}
+            
+    return None
+
 def compose_response(
     user_question: str,
     answer: str,
@@ -103,7 +170,7 @@ def compose_response(
             except Exception:
                 keys = []
             has_identifiers = any(x in keys for x in ["name", "version_number", "version_id", "title"])
-            if len(rows) == 1 and not has_identifiers:
+            if has_identifiers or len(rows) == 1:
                 msg_type = "text"
 
     # Enforce type text for analytics/improvement queries
@@ -175,6 +242,13 @@ def compose_response(
             if "v1" not in formatted_answer:
                 formatted_answer += " (For example, v1 or other versions)."
 
+    import base64
+    tab_data = extract_tabular_data(query_results, comp_payload)
+    if tab_data:
+        json_str = json.dumps(tab_data)
+        base64_str = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
+        formatted_answer += f"\n<!-- EXPORTABLE_TABULAR_DATA: {base64_str} -->"
+
     response_payload = {
         "response": formatted_answer,
         "answer": formatted_answer,
@@ -183,6 +257,7 @@ def compose_response(
         "type": msg_type,
         "confidence": 1.0
     }
+
 
     if rows is not None:
         enriched_rows = []

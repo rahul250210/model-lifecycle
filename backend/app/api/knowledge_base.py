@@ -40,11 +40,14 @@ def create_algorithm_repo(
 
     existing = (
         db.query(AlgorithmKnowledge)
-        .filter(AlgorithmKnowledge.slug == slug)
+        .filter(func.replace(func.lower(AlgorithmKnowledge.name), " ", "") == name.lower().replace(" ", ""))
         .first()
     )
     if existing:
-        return existing
+        raise HTTPException(
+            status_code=400,
+            detail="An artifact repository for this algorithm already exists."
+        )
 
     algo = AlgorithmKnowledge(
         name=name,

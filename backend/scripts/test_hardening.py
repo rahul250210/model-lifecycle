@@ -821,6 +821,40 @@ class TestMIRA(unittest.TestCase):
         self.assertIsNotNone(res)
         self.assertNotEqual(res.get("type"), "error")
 
+    @unittest.mock.patch("app.services.llm_service.call_llm")
+    def test_dynamic_table_download_flow(self, mock_call_llm):
+        """Test 34: Verify the dynamic table download flow from base64 encoding to download link generation."""
+        import base64
+        import json
+        
+        sample_table = {
+            "filename": "model_comparison.csv",
+            "headers": ["Model", "Accuracy"],
+            "rows": [["YOLOv11", "95%"], ["R2+1D", "88%"]]
+        }
+        json_str = json.dumps(sample_table)
+        base64_str = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
+        bot_message_content = f"Here is the comparison table:\n\n| Model | Accuracy |\n|---|---|\n| YOLOv11 | 95% |\n| R2+1D | 88% |\n<!-- EXPORTABLE_TABULAR_DATA: {base64_str} -->"
+        
+        context = [
+            {"role": "user", "content": "compare the models"},
+            {"role": "bot", "content": bot_message_content}
+        ]
+        
+        mock_call_llm.return_value = "YES"
+        
+        res = run_sql_agent("export this comparison table", self.db, context=context)
+        
+        self.assertEqual(res.get("type"), "download")
+        self.assertIn("/chatbot/download-table?payload=", res.get("response", ""))
+        self.assertIn("Download CSV", res.get("response", ""))
+        
+        actions = res.get("actions", [])
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0]["type"], "download")
+        self.assertEqual(actions[0]["download_type"], "csv")
+        self.assertIn("/chatbot/download-table?payload=", actions[0]["download_url"])
+
 if __name__ == "__main__":
     from sqlalchemy import text
     unittest.main()

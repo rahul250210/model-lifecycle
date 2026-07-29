@@ -22,44 +22,7 @@ import axiosInstance from '../../api/axios';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-interface LatestDeployment {
-    version_number: number;
-    updated_at: string;
-    accuracy: number | null;
-    f1_score: number | null;
-    inference_time: number | null;
-    gpu_utilization: number | null;
-    cpu_utilization: number | null;
-    model_name: string;
-    algorithm_name: string;
-    factory_name: string;
-}
-interface Stats {
-    factories: number;
-    algorithms: number;
-    models: number;
-    active_versions: number;
-    total_storage_bytes: number;
-    latest_deployment?: LatestDeployment | null;
-}
-interface ActivityItem {
-    type?: 'version_event' | 'factory_event';
-    timestamp: string;
-    created_at: string;
-    factory_id: number;
-    factory_name: string;
-    version_id?: number;
-    version_number?: number;
-    model_id?: number;
-    model_name?: string;
-    algorithm_id?: number;
-    algorithm_name?: string;
-}
-interface ChartDataItem { name: string; value: number; }
-interface ActiveModel { model_id: number; model_name: string; version_number: number; updated_at: string; }
-interface AlgorithmStatus { algorithm_id: number; algorithm_name: string; active_models: ActiveModel[]; }
-interface FactoryStatus { factory_id: number; factory_name: string; algorithms: AlgorithmStatus[]; }
+import type { LatestDeployment, Stats, ActivityItem, ChartDataItem, ActiveModel, AlgorithmStatus, FactoryStatus } from '../../types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function formatBytes(bytes: number): string {
@@ -308,12 +271,7 @@ export default function Dashboard() {
 
                         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" sx={{ gap: 1 }}>
                             <Typography variant="caption" sx={{ color: theme.textMuted }}>{format(new Date(), 'dd MMM yyyy · HH:mm')}</Typography>
-                            <Tooltip title="Refresh all data">
-                                <IconButton size="small" onClick={() => load(true)}
-                                    sx={{ border: `1px solid ${alpha(theme.border, 0.6)}`, bgcolor: alpha(theme.paper, 0.8), backdropFilter: 'blur(4px)', color: theme.textMuted, '&:hover': { color: theme.primary, borderColor: theme.primary, transform: 'rotate(180deg)' }, transition: 'all 0.4s' }}>
-                                    <Refresh sx={{ fontSize: 16, ...(refreshing && { animation: 'spin 1s linear infinite' }) }} />
-                                </IconButton>
-                            </Tooltip>
+
                             <Button variant="outlined" startIcon={<PrecisionManufacturing />} onClick={() => navigate('/algorithms')}
                                 sx={{ borderRadius: '12px', fontWeight: 700, px: 3, py: 1, textTransform: 'none', border: `1px solid ${theme.border}`, color: theme.textSecondary, bgcolor: alpha(theme.paper, 0.8), '&:hover': { bgcolor: theme.background, borderColor: theme.textSecondary } }}>
                                 {t("dashboard.manageAlgorithms", "Manage Algorithms")}
@@ -504,7 +462,7 @@ export default function Dashboard() {
                                                 '&:hover': { bgcolor: alpha(theme.primary, 0.05) }
                                             }}
                                         >
-                                            Version Comparison (Same Model)
+                                            {t('dashboard.versionCompare', 'Version Comparison (Same Model)')}
                                         </Button>
                                         <Button
                                             size="small"
@@ -521,7 +479,7 @@ export default function Dashboard() {
                                                 '&:hover': { bgcolor: alpha(theme.primary, 0.05) }
                                             }}
                                         >
-                                            Cross-Model Comparison (Same Algorithm)
+                                            {t('dashboard.crossModelCompare', 'Cross-Model Comparison (Same Algorithm)')}
                                         </Button>
                                     </Box>
 
@@ -625,7 +583,7 @@ export default function Dashboard() {
                                                                 '&:hover': { bgcolor: 'transparent', color: theme.primaryDark }
                                                             }}
                                                         >
-                                                            {selectedVersionIds.length === selectedModelObj.versions.length ? "Deselect All Versions" : "Select All Versions"}
+                                                            {selectedVersionIds.length === selectedModelObj.versions.length ? t('dashboard.deselectAllVersions', 'Deselect All Versions') : t('dashboard.selectAllVersions', 'Select All Versions')}
                                                         </Button>
                                                     </Stack>
                                                 )}
@@ -639,7 +597,7 @@ export default function Dashboard() {
                                                             '&.Mui-disabled': { color: theme.mode === 'dark' ? alpha(theme.textMuted, 0.35) : alpha(theme.textMuted, 0.5) }
                                                         }}
                                                     >
-                                                        Select Versions to Compare (2 or more)
+                                                        {t('dashboard.selectVersionsToCompare', 'Select Versions to Compare (2 or more)')}
                                                     </InputLabel>
                                                     <Select
                                                         labelId="versions-select-label"
@@ -661,7 +619,7 @@ export default function Dashboard() {
                                                                 })}
                                                             </Box>
                                                         )}
-                                                        label="Select Versions to Compare (2 or more)"
+                                                        label={t('dashboard.selectVersionsToCompare', 'Select Versions to Compare (2 or more)')}
                                                         MenuProps={{
                                                             PaperProps: {
                                                                 sx: {
@@ -722,12 +680,12 @@ export default function Dashboard() {
                                                         id="algo-select-label"
                                                         sx={{ color: theme.textSecondary }}
                                                     >
-                                                        Select Algorithm
+                                                        {t('dashboard.selectAlgorithm', 'Select Algorithm')}
                                                     </InputLabel>
                                                     <Select
                                                         labelId="algo-select-label"
                                                         value={selectedAlgoId}
-                                                        label="Select Algorithm"
+                                                        label={t('dashboard.selectAlgorithm', 'Select Algorithm')}
                                                         onChange={(e) => {
                                                             setSelectedAlgoId(e.target.value as number);
                                                             setSelectedModelIds([]);
@@ -776,13 +734,13 @@ export default function Dashboard() {
                                                         id="models-multi-select-label"
                                                         sx={{ color: theme.textSecondary }}
                                                     >
-                                                        Select Models to Compare (2 or more)
+                                                        {t('dashboard.selectModelsToCompare', 'Select Models to Compare (2 or more)')}
                                                     </InputLabel>
                                                     <Select
                                                         labelId="models-multi-select-label"
                                                         multiple
                                                         value={selectedModelIds}
-                                                        label="Select Models to Compare (2 or more)"
+                                                        label={t('dashboard.selectModelsToCompare', 'Select Models to Compare (2 or more)')}
                                                         onChange={(e) => setSelectedModelIds(e.target.value as number[])}
                                                         renderValue={(selected) => (
                                                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -857,14 +815,14 @@ export default function Dashboard() {
                                                     border: `1px dashed ${alpha(theme.primary, 0.15)}` 
                                                 }}>
                                                     <Typography variant="caption" sx={{ color: theme.primary, display: 'block', mb: 1, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                                        Comparison Summary
+                                                        {t('dashboard.comparisonSummary', 'Comparison Summary')}
                                                     </Typography>
                                                     <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 1.5, gap: 0.5 }}>
-                                                        <Chip size="small" label={`Factory: ${selectedModelObj.factoryName}`} sx={{ bgcolor: alpha(theme.border, 0.4), color: theme.textSecondary, fontWeight: 600, height: 20, fontSize: '0.7rem' }} />
-                                                        <Chip size="small" label={`Algorithm: ${selectedModelObj.algorithmName}`} sx={{ bgcolor: alpha(theme.border, 0.4), color: theme.textSecondary, fontWeight: 600, height: 20, fontSize: '0.7rem' }} />
+                                                        <Chip size="small" label={`${t('dashboard.factory', 'Factory')}: ${selectedModelObj.factoryName}`} sx={{ bgcolor: alpha(theme.border, 0.4), color: theme.textSecondary, fontWeight: 600, height: 20, fontSize: '0.7rem' }} />
+                                                        <Chip size="small" label={`${t('dashboard.algorithm', 'Algorithm')}: ${selectedModelObj.algorithmName}`} sx={{ bgcolor: alpha(theme.border, 0.4), color: theme.textSecondary, fontWeight: 600, height: 20, fontSize: '0.7rem' }} />
                                                     </Stack>
                                                     <Typography variant="caption" sx={{ color: theme.textSecondary, fontWeight: 600, display: 'block', mb: 1 }}>
-                                                        Versions available for selection:
+                                                        {t('dashboard.versionsAvailable', 'Versions available for selection:')}
                                                     </Typography>
                                                     <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
                                                         {selectedModelObj.versions.map((v: any) => {
@@ -885,7 +843,7 @@ export default function Dashboard() {
                                                                         transition: 'all 0.2s'
                                                                     }}
                                                                 >
-                                                                    v{v.version_number} {isSelected ? '(Selected)' : ''}
+                                                                    v{v.version_number} {isSelected ? `(${t('dashboard.selected', 'Selected')})` : ''}
                                                                 </Box>
                                                             );
                                                         })}
@@ -918,7 +876,7 @@ export default function Dashboard() {
                                                         Comparison Summary
                                                     </Typography>
                                                     <Typography variant="caption" sx={{ color: theme.textSecondary, fontWeight: 600, display: 'block', mb: 1 }}>
-                                                        Models selected for comparison (Active version will be compared):
+                                                        {t('dashboard.modelsSelectedForComparison', 'Models selected for comparison (Active version will be compared):')}
                                                     </Typography>
                                                     <Box sx={{ display: 'flex', gap: 0.8, flexWrap: 'wrap' }}>
                                                         {(() => {
@@ -926,7 +884,7 @@ export default function Dashboard() {
                                                             const models = algoObj ? algoObj.factories.flatMap((f: any) => f.models.map((m: any) => ({ ...m, factoryName: f.factory_name }))) : [];
                                                             const selectedModels = models.filter((m: any) => selectedModelIds.includes(m.model_id));
                                                             if (selectedModels.length === 0) {
-                                                                return <Typography variant="caption" color="text.secondary">No models selected yet.</Typography>;
+                                                                return <Typography variant="caption" color="text.secondary">{t('dashboard.noModelsSelected', 'No models selected yet.')}</Typography>;
                                                             }
                                                             return selectedModels.map((m: any) => (
                                                                 <Chip 
@@ -1029,7 +987,7 @@ export default function Dashboard() {
                                 />
                                 {storageData.length === 0 ? (
                                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
-                                        <Typography sx={{ color: theme.textMuted }}>No storage data yet</Typography>
+                                        <Typography sx={{ color: theme.textMuted }}>{t('dashboard.noStorageData', 'No storage data yet')}</Typography>
                                     </Box>
                                 ) : (
                                     <>
@@ -1104,7 +1062,7 @@ export default function Dashboard() {
 
                         {filteredFactories.length === 0 ? (
                             <Paper elevation={0} sx={{ ...paperSx(theme), p: 6, textAlign: 'center' }}>
-                                <Typography sx={{ color: theme.textMuted }}>No factories matching filters found.</Typography>
+                                <Typography sx={{ color: theme.textMuted }}>{t('dashboard.noFactoriesFound', 'No factories matching filters found.')}</Typography>
                                 <Button variant="text" size="small" sx={{ mt: 1, textTransform: 'none' }} onClick={() => navigate('/factories')}>
                                     Create a factory
                                 </Button>
@@ -1164,11 +1122,11 @@ export default function Dashboard() {
 
                                                     <Stack spacing={1.2} sx={{ mb: 2 }}>
                                                         <Box display="flex" justifyContent="space-between">
-                                                            <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 600 }}>Algorithms Deployed</Typography>
+                                                            <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 600 }}>{t('dashboard.algorithmsDeployed', 'Algorithms Deployed')}</Typography>
                                                             <Typography variant="caption" sx={{ color: theme.textSecondary, fontWeight: 800 }}>{factory.algorithms.length}</Typography>
                                                         </Box>
                                                         <Box display="flex" justifyContent="space-between">
-                                                            <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 600 }}>Active Deployments</Typography>
+                                                            <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 600 }}>{t('dashboard.activeDeployments', 'Active Deployments')}</Typography>
                                                             <Typography variant="caption" sx={{ color: theme.textSecondary, fontWeight: 800 }}>{totalActive}</Typography>
                                                         </Box>
                                                     </Stack>

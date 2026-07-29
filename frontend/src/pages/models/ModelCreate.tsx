@@ -53,9 +53,13 @@ export default function ModelCreate() {
       );
 
       navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models`);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError(t("modelCreate.failedCreate"));
+      if (err.response && err.response.data && err.response.data.detail) {
+        setError(err.response.data.detail);
+      } else {
+        setError(t("modelCreate.failedCreate"));
+      }
     } finally {
       setLoading(false);
     }

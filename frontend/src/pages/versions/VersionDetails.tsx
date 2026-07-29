@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Box,
   Typography,
@@ -37,6 +37,10 @@ import NavigateNextIcon from "@mui/icons-material/NavigateNext";
 
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import DownloadIcon from "@mui/icons-material/Download";
+import FolderZipIcon from "@mui/icons-material/FolderZip";
+import LinkIcon from "@mui/icons-material/Link";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import InteractiveBreadcrumbs from "../../components/InteractiveBreadcrumbs";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -295,12 +299,12 @@ export default function VersionDetails() {
 
   const parsedIni = React.useMemo(() => {
     if (!version || !(version as any).ini_config) return [];
-    
+
     const lines = ((version as any).ini_config as string).split('\n');
     const result: { section: string; pairs: { key: string, value: string, meaning: string }[] }[] = [];
     let currentSection = { section: 'Global', pairs: [] as { key: string, value: string, meaning: string }[] };
     let lastComment = "";
-    
+
     lines.forEach(line => {
       const trimmed = line.trim();
       if (!trimmed) {
@@ -311,7 +315,7 @@ export default function VersionDetails() {
         lastComment = trimmed.substring(1).trim();
         return;
       }
-      
+
       if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
         if (currentSection.pairs.length > 0) result.push(currentSection);
         currentSection = { section: trimmed.slice(1, -1), pairs: [] };
@@ -441,43 +445,15 @@ export default function VersionDetails() {
         {/* ================= HEADER SECTION ================= */}
         <Box sx={{ pt: 6, pb: 6 }}>
           <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-            <Breadcrumbs separator={<NavigateNextIcon fontSize="small" sx={{ color: theme.textMuted }} />} aria-label="breadcrumb">
-              <Link
-                underline="hover"
-                color="inherit"
-                onClick={() => navigate("/algorithms")}
-                sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
-              >
-                {algorithmName || "Algorithms"}
-              </Link>
-              <Link
-                underline="hover"
-                color="inherit"
-                onClick={() => navigate(`/algorithms/${algorithmId}/factories`)}
-                sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
-              >
-                {factoryName || "Factories"}
-              </Link>
-              <Link
-                underline="hover"
-                color="inherit"
-                onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}`)}
-                sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
-              >
-                {modelName || "Model"}
-              </Link>
-              <Link
-                underline="hover"
-                color="inherit"
-                onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions`)}
-                sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textMuted }}
-              >
-                History
-              </Link>
-              <Typography color={theme.textMain} fontWeight={700} sx={{ fontSize: '1.2rem' }}>
-                v{version.version_number}
-              </Typography>
-            </Breadcrumbs>
+            <InteractiveBreadcrumbs 
+              path={[
+                { label: 'Algorithms', link: '/algorithms', type: 'root' },
+                { label: algorithmName || 'Algorithm', link: `/algorithms/${algorithmId}/factories`, type: 'algorithm', id: algorithmId },
+                { label: factoryName || 'Factory', link: `/algorithms/${algorithmId}/factories/${factoryId}/models`, type: 'factory', id: factoryId },
+                { label: modelName || 'Model', link: `/algorithms/${algorithmId}/factories/${factoryId}/models/${modelId}/versions`, type: 'model', id: modelId },
+                { label: `v${version.version_number}` }
+              ]}
+            />
           </Stack>
           <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'center' }} spacing={3}>
             <Box>
@@ -565,12 +541,12 @@ export default function VersionDetails() {
 
             {/* INI CONFIGURATION */}
             {parsedIni.length > 0 && (
-              <Paper 
+              <Paper
                 elevation={0}
-                sx={{ 
-                  borderRadius: "24px", 
-                  border: `1px solid ${theme.border}`, 
-                  bgcolor: theme.paper, 
+                sx={{
+                  borderRadius: "24px",
+                  border: `1px solid ${theme.border}`,
+                  bgcolor: theme.paper,
                   overflow: 'hidden',
                   mb: 4
                 }}
@@ -578,10 +554,10 @@ export default function VersionDetails() {
                 <Box sx={{ p: 4, pb: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
                   <SettingsIcon sx={{ color: theme.primary }} />
                   <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    INI Configuration
+                    {t('versionDetails.iniConfig', 'INI Configuration')}
                   </Typography>
                 </Box>
-                
+
                 <TableContainer>
                   <Table sx={{ minWidth: 650 }}>
                     <TableHead>
@@ -605,13 +581,13 @@ export default function VersionDetails() {
                                   </Box>
                                 </Box>
                               </TableCell>
-                              
+
                               <TableCell sx={{ verticalAlign: 'middle', borderBottom: `1px solid ${alpha(theme.border, 0.3)}` }}>
                                 <Typography variant="body2" sx={{ color: pair.meaning ? theme.textMain : theme.textMuted, fontStyle: pair.meaning ? 'normal' : 'italic' }}>
                                   {pair.meaning || "No description"}
                                 </Typography>
                               </TableCell>
-                              
+
                               <TableCell align="right" sx={{ verticalAlign: 'middle', borderBottom: `1px solid ${alpha(theme.border, 0.3)}` }}>
                                 <Typography variant="body2" sx={{ display: 'inline-block', color: theme.textMain, fontFamily: 'monospace', fontWeight: 800, bgcolor: alpha(theme.textMain, 0.05), px: 1.5, py: 1, borderRadius: '6px', wordBreak: 'break-all' }}>
                                   {pair.value}
@@ -705,7 +681,7 @@ export default function VersionDetails() {
                       </Box>
                     </Grid>
                   )}
-                  
+
                   {(version as any).alert_tp !== undefined && (version as any).alert_tp !== null && (
                     <Grid size={{ xs: 12, md: 6 }}>
                       <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', bgcolor: alpha(theme.background, 0.3), borderRadius: "20px", p: 3, border: `1px dashed ${theme.border}` }}>

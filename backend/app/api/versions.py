@@ -278,18 +278,15 @@ def create_version(
             spooled_file = file.file
             spooled_file.seek(0)
             
-            with tempfile.NamedTemporaryFile(dir=TEMP_ROOT, delete=False) as tmp:
-                while chunk := spooled_file.read(1024 * 1024):
-                    hasher.update(chunk)
-                    tmp.write(chunk)
-                tmp_path = tmp.name
-                size = tmp.tell()
+            while chunk := spooled_file.read(1024 * 1024):
+                hasher.update(chunk)
+            size = spooled_file.tell()
 
             checksum_hex = hasher.hexdigest()
             return (checksum_hex, {
                 "name": file.filename,
-                "tmp_path": tmp_path,
-                "size": size
+                "size": size,
+                "file_obj": file
             })
 
         with ThreadPoolExecutor(max_workers=32) as executor:
@@ -318,7 +315,6 @@ def create_version(
         # 3. Process each file
         artifacts_to_insert = []
         for checksum, info in io_results:
-            tmp_path = info["tmp_path"]
             
             if checksum in existing_artifacts:
                 old = existing_artifacts[checksum]
@@ -336,19 +332,16 @@ def create_version(
                     dataset_reused += 1
                 else:
                     label_reused += 1
-                try: os.unlink(tmp_path)
-                except: pass
             else:
                 cache_dir = CACHE_ROOT / checksum[:2] / checksum[2:4]
                 cache_dir.mkdir(parents=True, exist_ok=True)
                 cache_path = cache_dir / checksum
 
                 if not cache_path.exists():
-                    shutil.move(tmp_path, cache_path)
+                    info["file_obj"].file.seek(0)
+                    with open(cache_path, "wb") as f:
+                        shutil.copyfileobj(info["file_obj"].file, f)
                     new_files_on_disk.append(cache_path)
-                else:
-                    try: os.unlink(tmp_path)
-                    except: pass
 
                 artifacts_to_insert.append(
                     Artifact(
@@ -1221,18 +1214,15 @@ def upload_chunk(
         spooled_file = file.file
         spooled_file.seek(0)
         
-        with tempfile.NamedTemporaryFile(dir=TEMP_ROOT, delete=False) as tmp:
-            while chunk := spooled_file.read(1024 * 1024):
-                hasher.update(chunk)
-                tmp.write(chunk)
-            tmp_path = tmp.name
-            size = tmp.tell()
+        while chunk := spooled_file.read(1024 * 1024):
+            hasher.update(chunk)
+        size = spooled_file.tell()
 
         checksum_hex = hasher.hexdigest()
         return (checksum_hex, {
             "name": file.filename,
-            "tmp_path": tmp_path,
-            "size": size
+            "size": size,
+            "file_obj": file
         })
 
     with ThreadPoolExecutor(max_workers=16) as executor:
@@ -1266,7 +1256,6 @@ def upload_chunk(
     reused_files_count = 0
 
     for checksum, info in io_results:
-        tmp_path = info["tmp_path"]
         
         if checksum in existing_artifacts:
             old = existing_artifacts[checksum]
@@ -1281,18 +1270,15 @@ def upload_chunk(
                 )
             )
             reused_files_count += 1
-            try: os.unlink(tmp_path)
-            except: pass
         else:
             cache_dir = CACHE_ROOT / checksum[:2] / checksum[2:4]
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_path = cache_dir / checksum
 
             if not cache_path.exists():
-                shutil.move(tmp_path, cache_path)
-            else:
-                try: os.unlink(tmp_path)
-                except: pass
+                info["file_obj"].file.seek(0)
+                with open(cache_path, "wb") as f:
+                    shutil.copyfileobj(info["file_obj"].file, f)
 
             artifacts_to_insert.append(
                 Artifact(

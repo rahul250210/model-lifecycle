@@ -19,6 +19,8 @@ import {
     Hub as AlgorithmIcon,
     Category as ModelIcon,
     Layers as VersionIcon,
+    Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
+    Remove as MinimizeIcon, RestartAlt as RevertIcon
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -26,11 +28,13 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import axios, { API_BASE_URL, isCancel } from '../../api/axios';
+import { API_BASE_URL } from '../../api/axios';
 import { useTheme } from '../../theme/ThemeContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+import { ChatComparisonChart, ComparisonModal } from './ChatVisualizations';
+import { ComparisonButton, DownloadZipButton, ActionButton, EntityList } from './ChatUIComponents';
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Message {
     id: string;
@@ -38,7 +42,7 @@ interface Message {
     content: string;
     data?: any[];
     query?: string;
-    type?: 'text' | 'sql' | 'error' | 'comparison' | 'download' | 'factories' | 'zip_download';
+    type?: 'text' | 'sql' | 'error' | 'comparison' | 'download' | 'factories' | 'zip_download' | 'streaming';
     entity_type?: string;
     report_type?: string;
     report_name?: string | null;
@@ -113,1122 +117,6 @@ const LoadingDots = () => {
     );
 };
 
-// ─── Comparison Modal ─────────────────────────────────────────────────────────
-function ComparisonModal({ versions, open, onClose }: { versions: any[], open: boolean, onClose: () => void }) {
-    const { theme } = useTheme();
-    const navigate = useNavigate();
-    if (!versions || versions.length < 2) return null;
-
-    // Detect if there are multiple models, factories, or algorithms in the compared versions
-    const hasMultipleModels = new Set(versions.map(v => v.model_name)).size > 1;
-    const hasMultipleFactories = new Set(versions.map(v => v.factory_name)).size > 1;
-    const hasMultipleAlgos = new Set(versions.map(v => v.algorithm_name)).size > 1;
-
-    // Helper to get descriptive label for each version in chart/chips
-    const getVersionLabel = (v: any) => {
-        let label = `v${v.version_number}`;
-        if (hasMultipleModels) {
-            label = `${v.model_name || 'Model'} ${label}`;
-        }
-        if (hasMultipleFactories) {
-            label = `${label} (${v.factory_name || 'Global'})`;
-        } else if (hasMultipleAlgos) {
-            label = `${label} (${v.algorithm_name || 'Global'})`;
-        }
-        return label;
-    };
-
-    const model = versions[0].model_name || 'Model';
-
-    const colors = [
-        theme.primary,
-        theme.secondary ?? theme.info,
-        theme.success ?? '#10B981',
-        theme.warning ?? '#F59E0B',
-        theme.error ?? '#EF4444',
-        '#8B5CF6',
-        '#EC4899',
-    ];
-
-    const metricData = [
-        { name: 'Accuracy' },
-        { name: 'Precision' },
-        { name: 'Recall' },
-        { name: 'F1 Score' },
-    ];
-    versions.forEach(v => {
-        const label = getVersionLabel(v);
-        (metricData[0] as any)[label] = +(v.accuracy ?? 0);
-        (metricData[1] as any)[label] = +(v.precision ?? 0);
-        (metricData[2] as any)[label] = +(v.recall ?? 0);
-        (metricData[3] as any)[label] = +(v.f1_score ?? 0);
-    });
-
-    const resourceData = [
-        { name: 'Inference (ms)' },
-        { name: 'CPU %' },
-        { name: 'GPU %' },
-        { name: 'CPU Memory (MB)' },
-        { name: 'GPU Memory (MB)' },
-    ];
-    versions.forEach(v => {
-        const label = getVersionLabel(v);
-        (resourceData[0] as any)[label] = +(v.inference_time ?? 0);
-        (resourceData[1] as any)[label] = +(v.cpu_utilization ?? 0);
-        (resourceData[2] as any)[label] = +(v.gpu_utilization ?? 0);
-        (resourceData[3] as any)[label] = +(v.cpu_memory_usage ?? 0);
-        (resourceData[4] as any)[label] = +(v.gpu_memory_usage ?? 0);
-    });
-
-    const allParamKeys = ['batch_size', 'epochs', 'learning_rate', 'optimizer', 'image_size'];
-
-    const artSize = (v: any) => (v.artifacts ?? []).reduce((s: number, a: any) => s + (a.size ?? 0), 0);
-    const fmtSize = (b: number) => b > 1024 * 1024
-        ? `${(b / 1024 / 1024).toFixed(2)} MB`
-        : b > 1024 ? `${(b / 1024).toFixed(1)} KB` : `${b} B`;
-
-
-
-    const CustomTooltip = ({ active, payload, label }: any) => {
-        if (active && payload && payload.length) {
-            return (
-                <Paper sx={{
-                    p: 1.5,
-                    borderRadius: '12px',
-                    bgcolor: theme.mode === 'dark' ? '#1c1c2b' : '#ffffff',
-                    border: `1px solid ${alpha(theme.border, 0.25)}`,
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-                    minWidth: 160,
-                    pointerEvents: 'none',
-                }}>
-                    <Typography variant="caption" fontWeight={900} sx={{ display: 'block', mb: 1, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, borderBottom: `1px solid ${alpha(theme.border, 0.1)}`, pb: 0.5 }}>
-                        {label}
-                    </Typography>
-                    <Stack spacing={0.8}>
-                        {payload.map((entry: any) => (
-                            <Stack key={entry.name} direction="row" spacing={1.5} alignItems="center" justifyContent="space-between">
-                                <Stack direction="row" spacing={1} alignItems="center">
-                                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: entry.color }} />
-                                    <Typography variant="caption" fontWeight={750} sx={{ color: theme.textSecondary, fontSize: '0.72rem' }}>
-                                        {entry.name}
-                                    </Typography>
-                                </Stack>
-                                <Typography variant="body2" fontWeight={850} sx={{ color: theme.textMain, fontFamily: "'JetBrains Mono', monospace", fontSize: '0.74rem' }}>
-                                    {entry.value}
-                                </Typography>
-                            </Stack>
-                        ))}
-                    </Stack>
-                </Paper>
-            );
-        }
-        return null;
-    };
-
-
-
-    const StatChip = ({ label, color }: { label: string, color: string }) => (
-        <Chip label={label} size="small" sx={{
-            fontWeight: 800, fontSize: '0.7rem', height: 24,
-            bgcolor: alpha(color, 0.1), color,
-            border: `1px solid ${alpha(color, 0.25)}`,
-        }} />
-    );
-
-    const columns = ['Parameter', ...versions.map(v => getVersionLabel(v))];
-
-    return (
-        <Dialog
-            open={open}
-            onClose={onClose}
-            maxWidth="md"
-            fullWidth
-            sx={{ zIndex: 10000 }}
-            PaperProps={{
-                sx: {
-                    borderRadius: '24px',
-                    bgcolor: theme.mode === 'dark' ? '#12121f' : '#f8f9fc',
-                    backgroundImage: 'none',
-                    border: `1px solid ${alpha(theme.border, 0.3)}`,
-                    boxShadow: `0 40px 100px rgba(0,0,0,0.4)`,
-                    overflow: 'hidden',
-                }
-            }}
-        >
-            {/* ── Modal Header ── */}
-            <Box sx={{
-                px: 3.5, py: 2.2,
-                display: 'flex',
-                flexDirection: { xs: 'column', md: 'row' },
-                alignItems: { xs: 'flex-start', md: 'center' },
-                justifyContent: 'space-between',
-                gap: 2,
-                background: `linear-gradient(135deg, ${alpha(theme.primary, 0.12)} 0%, ${alpha(theme.secondary ?? theme.primary, 0.06)} 100%)`,
-                borderBottom: `1px solid ${alpha(theme.border, 0.2)}`,
-            }}>
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ xs: 'flex-start', sm: 'center' }} sx={{ minWidth: 0, flex: 1, width: '100%' }}>
-                    <Stack direction="row" spacing={1.5} alignItems="center" sx={{ minWidth: 0 }}>
-                        <Box sx={{
-                            width: 36, height: 36, borderRadius: '12px',
-                            background: `linear-gradient(135deg, ${theme.primary}, ${theme.secondary ?? theme.primary})`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            boxShadow: `0 4px 12px ${alpha(theme.primary, 0.4)}`,
-                            flexShrink: 0
-                        }}>
-                            <BarChartIcon sx={{ color: '#fff', fontSize: 18 }} />
-                        </Box>
-                        <Box sx={{ minWidth: 0 }}>
-                            <Typography variant="h6" fontWeight={900} sx={{ color: theme.textMain, letterSpacing: '-0.02em', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                Version Comparison
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 600, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {hasMultipleModels ? 'Cross-Model Performance' : model}
-                            </Typography>
-                        </Box>
-                    </Stack>
-
-                    {/* Compared versions chips with flex wrapping */}
-                    <Box sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.5,
-                        flexWrap: 'wrap',
-                        minWidth: 0
-                    }}>
-                        {versions.map((v, i) => (
-                            <span key={`${v.model_id}-${v.version_number}`} style={{ display: 'inline-flex', alignItems: 'center', flexWrap: 'nowrap' }}>
-                                <StatChip label={getVersionLabel(v)} color={colors[i % colors.length]} />
-                                {i < versions.length - 1 && (
-                                    <Typography variant="caption" fontWeight={850} sx={{ color: theme.textMuted, mx: 0.5 }}>VS</Typography>
-                                )}
-                            </span>
-                        ))}
-                    </Box>
-                </Stack>
-
-                {/* Action buttons aligned on the right, prevents shrinking */}
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ flexShrink: 0, alignSelf: { xs: 'flex-end', md: 'auto' } }}>
-                    {versions.every(v => v.id) && versions[0].model_id && versions[0].algorithm_id && versions[0].factory_id && (
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<LaunchIcon sx={{ fontSize: '14px !important' }} />}
-                            onClick={() => {
-                                onClose();
-                                const idsStr = versions.map(v => v.id).join(",");
-                                navigate(`/algorithms/${versions[0].algorithm_id}/factories/${versions[0].factory_id}/models/${versions[0].model_id}/versions/compare?left=${versions[0].id}&right=${versions[versions.length - 1].id}&ids=${idsStr}`);
-                            }}
-                            sx={{
-                                color: theme.primary,
-                                borderColor: alpha(theme.primary, 0.4),
-                                borderRadius: '10px',
-                                textTransform: 'none',
-                                fontWeight: 800,
-                                px: 2,
-                                py: 0.6,
-                                fontSize: '0.75rem',
-                                whiteSpace: 'nowrap',
-                                '&:hover': {
-                                    bgcolor: theme.primary,
-                                    color: '#fff',
-                                    borderColor: theme.primary
-                                },
-                                transition: 'all 0.2s',
-                            }}
-                        >
-                            In-Depth Analysis
-                        </Button>
-                    )}
-                    <IconButton onClick={onClose} size="small" sx={{
-                        color: theme.textMuted,
-                        bgcolor: alpha(theme.textMain, 0.05), borderRadius: '10px',
-                        '&:hover': { bgcolor: alpha(theme.error, 0.1), color: theme.error },
-                    }}>
-                        <CloseIcon fontSize="small" />
-                    </IconButton>
-                </Stack>
-            </Box>
-
-            <DialogContent sx={{ p: 3.5, overflowX: 'hidden', bgcolor: theme.mode === 'dark' ? '#0d0d15' : '#f4f6fa' }}>
-
-                {/* Shared Chart Legend */}
-                <Box sx={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    gap: 3,
-                    flexWrap: 'wrap',
-                    mb: 3.5,
-                    p: 1.8,
-                    borderRadius: '16px',
-                    bgcolor: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.015)',
-                    border: `1px solid ${alpha(theme.border, 0.1)}`,
-                    boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
-                }}>
-                    {versions.map((v, i) => (
-                        <Stack key={v.id} direction="row" spacing={1} alignItems="center">
-                            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colors[i % colors.length] }} />
-                            <Typography variant="caption" sx={{ fontWeight: 800, color: theme.textSecondary, fontSize: '0.72rem' }}>
-                                {getVersionLabel(v)}
-                            </Typography>
-                        </Stack>
-                    ))}
-                </Box>
-
-                {/* ── Charts Grid (Performance Metrics & Resource Usage side-by-side) ── */}
-                <Box sx={{
-                    display: 'grid',
-                    gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
-                    gap: 3.5,
-                    mb: 3.5
-                }}>
-                    {/* Performance Metrics */}
-                    <Box sx={{
-                        p: 3, borderRadius: '20px',
-                        bgcolor: theme.mode === 'dark' ? 'rgba(30, 30, 46, 0.4)' : 'rgba(255, 255, 255, 0.8)',
-                        border: `1px solid ${alpha(theme.border, 0.2)}`,
-                        boxShadow: theme.mode === 'dark' ? '0 10px 30px rgba(0,0,0,0.2)' : '0 10px 30px rgba(0,0,0,0.03)',
-                        backdropFilter: 'blur(10px)',
-                    }}>
-                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
-                            <Box sx={{
-                                width: 32, height: 32, borderRadius: '10px',
-                                bgcolor: alpha(theme.primary, 0.1), color: theme.primary,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                                <BarChartIcon sx={{ fontSize: 16 }} />
-                            </Box>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 900, color: theme.textMain, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                Performance Metrics
-                            </Typography>
-                        </Stack>
-                        <Box sx={{ height: 240 }}>
-                            <ResponsiveContainer>
-                                <BarChart data={metricData} margin={{ top: 5, right: 10, left: -15, bottom: 5 }} barGap={6}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.textMain, 0.07)} />
-                                    <XAxis dataKey="name" tick={{ fill: theme.textSecondary, fontSize: 11, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                                    <YAxis domain={[0, 100]} tick={{ fill: theme.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
-                                    <RechartsTooltip content={<CustomTooltip />} />
-                                    {versions.map((v, index) => {
-                                        const label = getVersionLabel(v);
-                                        return (
-                                            <Bar key={label} dataKey={label} fill={colors[index % colors.length]} radius={[6, 6, 0, 0]} barSize={versions.length > 2 ? 14 : 24} />
-                                        );
-                                    })}
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </Box>
-                    </Box>
-
-                    {/* Resource Usage */}
-                    <Box sx={{
-                        p: 3, borderRadius: '20px',
-                        bgcolor: theme.mode === 'dark' ? 'rgba(30, 30, 46, 0.4)' : 'rgba(255, 255, 255, 0.8)',
-                        border: `1px solid ${alpha(theme.border, 0.2)}`,
-                        boxShadow: theme.mode === 'dark' ? '0 10px 30px rgba(0,0,0,0.2)' : '0 10px 30px rgba(0,0,0,0.03)',
-                        backdropFilter: 'blur(10px)',
-                    }}>
-                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
-                            <Box sx={{
-                                width: 32, height: 32, borderRadius: '10px',
-                                bgcolor: alpha(theme.secondary ?? theme.info, 0.1), color: theme.secondary ?? theme.info,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                                <VersionIcon sx={{ fontSize: 16 }} />
-                            </Box>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 900, color: theme.textMain, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                Resource Usage
-                            </Typography>
-                        </Stack>
-                        <Box sx={{ height: 240 }}>
-                            <ResponsiveContainer>
-                                <BarChart data={resourceData} layout="vertical" margin={{ top: 0, right: 10, left: 10, bottom: 0 }} barGap={4}>
-                                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={alpha(theme.textMain, 0.07)} />
-                                    <XAxis type="number" tick={{ fill: theme.textMuted, fontSize: 10 }} axisLine={false} tickLine={false} />
-                                    <YAxis dataKey="name" type="category" width={110} tick={{ fill: theme.textSecondary, fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                                    <RechartsTooltip content={<CustomTooltip />} />
-                                    {versions.map((v, index) => {
-                                        const label = getVersionLabel(v);
-                                        return (
-                                            <Bar key={label} dataKey={label} fill={colors[index % colors.length]} radius={[0, 6, 6, 0]} barSize={versions.length > 2 ? 8 : 14} />
-                                        );
-                                    })}
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </Box>
-                    </Box>
-                </Box>
-
-                {/* ── Parameters (Configuration Shift Highlight) ── */}
-                {allParamKeys.length > 0 && (
-                    <Box sx={{
-                        p: 3, borderRadius: '20px',
-                        bgcolor: theme.mode === 'dark' ? 'rgba(30, 30, 46, 0.4)' : 'rgba(255, 255, 255, 0.8)',
-                        border: `1px solid ${alpha(theme.border, 0.2)}`,
-                        boxShadow: theme.mode === 'dark' ? '0 10px 30px rgba(0,0,0,0.2)' : '0 10px 30px rgba(0,0,0,0.03)',
-                        backdropFilter: 'blur(10px)',
-                        mb: 3.5,
-                    }}>
-                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
-                            <Box sx={{
-                                width: 32, height: 32, borderRadius: '10px',
-                                bgcolor: alpha(theme.primary, 0.1), color: theme.primary,
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                                <VersionIcon sx={{ fontSize: 16 }} />
-                            </Box>
-                            <Box>
-                                <Typography variant="subtitle2" sx={{ fontWeight: 900, color: theme.textMain, textTransform: 'uppercase', letterSpacing: 0.5, lineHeight: 1.1 }}>
-                                    Configuration Parameters
-                                </Typography>
-                                <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 600 }}>
-                                    Highlighted rows indicate shifts across versions
-                                </Typography>
-                            </Box>
-                        </Stack>
-
-                        <Box sx={{
-                            display: 'grid',
-                            gridTemplateColumns: `repeat(${versions.length + 1}, 1fr)`,
-                            borderRadius: '16px', overflow: 'hidden',
-                            border: `1px solid ${alpha(theme.border, 0.25)}`,
-                        }}>
-                            {/* Header row */}
-                            {columns.map((h, i) => (
-                                <Box key={h} sx={{
-                                    px: 2.5, py: 1.8,
-                                    bgcolor: theme.mode === 'dark' ? 'rgba(20, 20, 35, 0.7)' : 'rgba(235, 238, 245, 0.8)',
-                                    borderRight: i < columns.length - 1 ? `1px solid ${alpha(theme.border, 0.2)}` : 'none',
-                                }}>
-                                    <Typography variant="caption" fontWeight={900} sx={{
-                                        color: i === 0 ? theme.textSecondary : colors[(i - 1) % colors.length],
-                                        letterSpacing: 1, textTransform: 'uppercase', fontSize: '0.68rem',
-                                    }}>{h}</Typography>
-                                </Box>
-                            ))}
-                            {/* Data rows */}
-                            {allParamKeys.map((k, ri) => {
-                                const firstVal = (versions[0].parameters ?? {})[k];
-                                const changed = versions.some(v => (v.parameters ?? {})[k] !== firstVal);
-                                return [k, ...versions.map(v => String((v.parameters ?? {})[k] ?? '—'))].map((val, ci) => (
-                                    <Box key={`${k}-${ci}`} sx={{
-                                        px: 2.5, py: 1.5,
-                                        bgcolor: changed
-                                            ? (theme.mode === 'dark' ? 'rgba(245, 158, 11, 0.05)' : 'rgba(245, 158, 11, 0.03)')
-                                            : (ri % 2 === 0 ? 'transparent' : alpha(theme.textMain, 0.015)),
-                                        borderRight: ci < columns.length - 1 ? `1px solid ${alpha(theme.border, 0.15)}` : 'none',
-                                        borderTop: `1px solid ${alpha(theme.border, 0.15)}`,
-                                        borderLeft: ci === 0 && changed ? `4px solid ${theme.warning ?? '#F59E0B'}` : 'none',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                    }}>
-                                        <Typography variant="body2" sx={{
-                                            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-                                            fontSize: '0.74rem',
-                                            fontWeight: ci === 0 ? 800 : 500,
-                                            color: ci === 0
-                                                ? (changed ? (theme.warning ?? '#F59E0B') : theme.textSecondary)
-                                                : theme.textMain,
-                                        }}>{val}</Typography>
-                                    </Box>
-                                ));
-                            })}
-                        </Box>
-                    </Box>
-                )}
-
-                {/* ── Artifact Sizes ( footprint ) ── */}
-                {versions.some(v => artSize(v) > 0) && (
-                    <Box sx={{
-                        p: 3, borderRadius: '20px',
-                        bgcolor: theme.mode === 'dark' ? 'rgba(30, 30, 46, 0.4)' : 'rgba(255, 255, 255, 0.8)',
-                        border: `1px solid ${alpha(theme.border, 0.2)}`,
-                        boxShadow: theme.mode === 'dark' ? '0 10px 30px rgba(0,0,0,0.2)' : '0 10px 30px rgba(0,0,0,0.03)',
-                        backdropFilter: 'blur(10px)',
-                    }}>
-                        <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2.5 }}>
-                            <Box sx={{
-                                width: 32, height: 32, borderRadius: '10px',
-                                bgcolor: alpha(theme.success ?? '#10B981', 0.1), color: theme.success ?? '#10B981',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            }}>
-                                <DownloadIcon sx={{ fontSize: 16 }} />
-                            </Box>
-                            <Typography variant="subtitle2" sx={{ fontWeight: 900, color: theme.textMain, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                                Total Artifact Footprint
-                            </Typography>
-                        </Stack>
-
-                        <Box sx={{
-                            display: 'grid',
-                            gridTemplateColumns: `repeat(auto-fit, minmax(200px, 1fr))`,
-                            gap: 2.5
-                        }}>
-                            {versions.map((v, index) => {
-                                const label = getVersionLabel(v);
-                                const color = colors[index % colors.length];
-                                return (
-                                    <Tooltip key={label} title={`Download all artifacts for v${v.version_number}`}>
-                                        <Box
-                                            onClick={() => {
-                                                const algId = v.algorithm_id || versions[0].algorithm_id;
-                                                const facId = v.factory_id || versions[0].factory_id;
-                                                const modId = v.model_id || versions[0].model_id;
-                                                if (algId && facId && modId && v.id) {
-                                                    const downloadUrl = `${API_BASE_URL}/algorithms/${algId}/factories/${facId}/models/${modId}/versions/${v.id}/download?dataset=true&labels=true&model=true&code=true`;
-                                                    window.location.href = downloadUrl;
-                                                }
-                                            }}
-                                            sx={{
-                                                p: 2.5, borderRadius: '16px',
-                                                bgcolor: alpha(color, 0.05),
-                                                border: `1px solid ${alpha(color, 0.15)}`,
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 2,
-                                                cursor: 'pointer',
-                                                transition: 'transform 0.2s, box-shadow 0.2s, background-color 0.2s',
-                                                '&:hover': {
-                                                    transform: 'translateY(-2px)',
-                                                    boxShadow: `0 8px 20px ${alpha(color, 0.15)}`,
-                                                    bgcolor: alpha(color, 0.08),
-                                                }
-                                            }}
-                                        >
-                                            <Box sx={{
-                                                width: 40, height: 40, borderRadius: '12px',
-                                                bgcolor: alpha(color, 0.1), color,
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                            }}>
-                                                <DownloadIcon sx={{ fontSize: 18 }} />
-                                            </Box>
-                                            <Box>
-                                                <Typography variant="h6" fontWeight={900} sx={{ color, lineHeight: 1.1, mb: 0.3 }}>
-                                                    {fmtSize(artSize(v))}
-                                                </Typography>
-                                                <Typography variant="caption" fontWeight={750} sx={{ color: theme.textMuted }}>
-                                                    {label}
-                                                </Typography>
-                                            </Box>
-                                        </Box>
-                                    </Tooltip>
-                                );
-                            })}
-                        </Box>
-                    </Box>
-                )}
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-// ─── Compact comparison trigger button (shown in chat bubble) ──────────────────────
-function ComparisonButton({ versions, onClick }: { versions: any[], onClick: () => void }) {
-    const { theme } = useTheme();
-    if (!versions || versions.length < 2) return null;
-
-    return (
-        <Box
-            onClick={onClick}
-            sx={{
-                mt: 1.5, cursor: 'pointer', borderRadius: '14px',
-                background: `linear-gradient(135deg, ${alpha(theme.primary, 0.08)}, ${alpha(theme.secondary ?? theme.info, 0.08)})`,
-                border: `1px solid ${alpha(theme.primary, 0.2)}`,
-                px: 2, py: 1.5,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                    background: `linear-gradient(135deg, ${alpha(theme.primary, 0.14)}, ${alpha(theme.secondary ?? theme.info, 0.14)})`,
-                    border: `1px solid ${alpha(theme.primary, 0.4)}`,
-                    transform: 'translateY(-1px)',
-                    boxShadow: `0 6px 20px ${alpha(theme.primary, 0.18)}`,
-                },
-            }}
-        >
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                <BarChartIcon sx={{ fontSize: 16, color: theme.primary }} />
-                <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexWrap: 'wrap', gap: 0.5 }}>
-                    {versions.map((v, i) => (
-                        <span key={v.version_number} style={{ display: 'inline-flex', alignItems: 'center' }}>
-                            <Chip label={`v${v.version_number}`} size="small" sx={{
-                                height: 18, fontSize: '0.6rem', fontWeight: 800,
-                                bgcolor: alpha(i === 0 ? theme.primary : theme.secondary ?? theme.info, 0.15),
-                                color: i === 0 ? theme.primary : theme.secondary ?? theme.info,
-                            }} />
-                            {i < versions.length - 1 && (
-                                <Typography variant="caption" sx={{ color: theme.textMuted, fontWeight: 700, fontSize: '0.65rem', mx: 0.5 }}>vs</Typography>
-                            )}
-                        </span>
-                    ))}
-                </Stack>
-                <Typography variant="caption" fontWeight={700} sx={{ color: theme.textSecondary, fontSize: '0.7rem' }}>
-                    View full comparison
-                </Typography>
-            </Stack>
-            <ExpandIcon sx={{ fontSize: 14, color: theme.primary, opacity: 0.7 }} />
-        </Box>
-    );
-}
-
-// ─── Inline Comparison Chart (shown in chat bubble for comparing models/versions) ───
-interface ChatComparisonChartProps {
-    comparison_title?: string;
-    entities: string[];
-    metrics: { name: string;[key: string]: any }[];
-    theme: any;
-    mode: 'dark' | 'light';
-}
-
-export function ChatComparisonChart({ comparison_title, entities, metrics, theme, mode }: ChatComparisonChartProps) {
-    if (!entities || entities.length < 2 || !metrics || metrics.length === 0) return null;
-
-    const colors = [
-        theme.primary,
-        theme.secondary ?? theme.info ?? '#00B0FF',
-        theme.success ?? '#10B981',
-        theme.warning ?? '#F59E0B',
-        theme.error ?? '#EF4444',
-        '#8B5CF6',
-        '#EC4899',
-    ];
-
-    const isPercentageMetricName = (name: string) => {
-        return ['accuracy', 'precision', 'recall', 'f1_score', 'cpu_utilization', 'gpu_utilization'].includes(name.toLowerCase());
-    };
-
-    const getHumanName = (name: string) => {
-        switch (name.toLowerCase()) {
-            case 'accuracy': return 'Accuracy';
-            case 'precision': return 'Precision';
-            case 'recall': return 'Recall';
-            case 'f1_score': return 'F1 Score';
-            case 'cpu_utilization': return 'CPU Util (%)';
-            case 'gpu_utilization': return 'GPU Util (%)';
-            case 'inference_time': return 'Inference (ms)';
-            case 'cpu_memory_usage': return 'CPU Mem (MB)';
-            case 'gpu_memory_usage': return 'GPU Mem (MB)';
-            default: return name;
-        }
-    };
-
-    const scaleValue = (val: any, name: string) => {
-        if (val === null || val === undefined) return 0;
-        const lowerName = name.toLowerCase();
-        const isPerf = ['accuracy', 'precision', 'recall', 'f1_score'].includes(lowerName);
-        if (isPerf && val <= 1.0) {
-            return Math.round(val * 1000) / 10;
-        }
-        return val;
-    };
-
-    const percentageMetrics = metrics.filter(m => isPercentageMetricName(m.name));
-    const absoluteMetrics = metrics.filter(m => !isPercentageMetricName(m.name));
-
-    const percentageData = percentageMetrics.map(m => {
-        const item: any = { name: getHumanName(m.name) };
-        entities.forEach((entity, idx) => {
-            item[entity] = scaleValue(m[`entity${idx + 1}`], m.name);
-        });
-        return item;
-    });
-
-    const absoluteData = absoluteMetrics.map(m => {
-        const item: any = { name: getHumanName(m.name) };
-        entities.forEach((entity, idx) => {
-            item[entity] = scaleValue(m[`entity${idx + 1}`], m.name);
-        });
-        return item;
-    });
-
-    const tooltipStyle = {
-        borderRadius: 12,
-        background: mode === 'dark' ? '#1e293b' : '#fff',
-        border: `1px solid ${alpha(theme.border, 0.35)}`,
-        fontSize: 11, fontWeight: 700,
-        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-        color: theme.textMain,
-    };
-
-    return (
-        <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
-            {comparison_title && (
-                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: theme.primary, letterSpacing: '0.02em', mb: 0.5 }}>
-                    📊 {comparison_title}
-                </Typography>
-            )}
-
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ width: '100%' }}>
-                {percentageData.length > 0 && (
-                    <Box sx={{
-                        flex: 1, p: 2, borderRadius: '14px',
-                        bgcolor: mode === 'dark' ? 'rgba(15, 23, 42, 0.3)' : 'rgba(255, 255, 255, 0.6)',
-                        border: `1px solid ${alpha(theme.border, 0.25)}`,
-                        minWidth: 0,
-                    }}>
-                        <Typography variant="caption" sx={{ display: 'block', fontWeight: 800, color: theme.textSecondary, mb: 1.5, letterSpacing: 0.5 }}>
-                            PERFORMANCE & UTILIZATION (%)
-                        </Typography>
-                        <Box sx={{ height: 200, width: '100%' }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={percentageData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }} barGap={4}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.textMain, 0.06)} />
-                                    <XAxis dataKey="name" tick={{ fill: theme.textSecondary, fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                                    <YAxis domain={[0, 100]} tick={{ fill: theme.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                                    <RechartsTooltip contentStyle={tooltipStyle} />
-                                    <Legend wrapperStyle={{ fontSize: 10, fontWeight: 700, paddingTop: 8 }} iconType="circle" iconSize={7} />
-                                    {entities.map((entity, idx) => (
-                                        <Bar key={entity} dataKey={entity} fill={colors[idx % colors.length]} radius={[4, 4, 0, 0]} maxBarSize={20} />
-                                    ))}
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </Box>
-                    </Box>
-                )}
-
-                {absoluteData.length > 0 && (
-                    <Box sx={{
-                        flex: 1, p: 2, borderRadius: '14px',
-                        bgcolor: mode === 'dark' ? 'rgba(15, 23, 42, 0.3)' : 'rgba(255, 255, 255, 0.6)',
-                        border: `1px solid ${alpha(theme.border, 0.25)}`,
-                        minWidth: 0,
-                    }}>
-                        <Typography variant="caption" sx={{ display: 'block', fontWeight: 800, color: theme.textSecondary, mb: 1.5, letterSpacing: 0.5 }}>
-                            LATENCY & RESOURCE USAGE
-                        </Typography>
-                        <Box sx={{ height: 200, width: '100%' }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={absoluteData} margin={{ top: 5, right: 10, left: -25, bottom: 5 }} barGap={4}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={alpha(theme.textMain, 0.06)} />
-                                    <XAxis dataKey="name" tick={{ fill: theme.textSecondary, fontSize: 10, fontWeight: 700 }} axisLine={false} tickLine={false} />
-                                    <YAxis tick={{ fill: theme.textMuted, fontSize: 9 }} axisLine={false} tickLine={false} width={30} />
-                                    <RechartsTooltip contentStyle={tooltipStyle} />
-                                    <Legend wrapperStyle={{ fontSize: 10, fontWeight: 700, paddingTop: 8 }} iconType="circle" iconSize={7} />
-                                    {entities.map((entity, idx) => (
-                                        <Bar key={entity} dataKey={entity} fill={colors[idx % colors.length]} radius={[4, 4, 0, 0]} maxBarSize={20} />
-                                    ))}
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </Box>
-                    </Box>
-                )}
-            </Stack>
-        </Box>
-    );
-}
-
-// ─── Download Report Button (shown in chat bubble) ───────────────────────────────
-function DownloadReportButton({
-    reportType,
-    reportName,
-    algorithmId,
-    algorithmName,
-    factoryId,
-    factoryName,
-    modelId,
-}: {
-    reportType: string;
-    reportName?: string | null;
-    algorithmId?: number | null;
-    algorithmName?: string | null;
-    factoryId?: number | null;
-    factoryName?: string | null;
-    modelId?: number | null;
-}) {
-    const { theme } = useTheme();
-
-    const handleDownload = () => {
-        try {
-            const params = new URLSearchParams({ report_type: reportType });
-            if (reportName) params.append('name', reportName);
-            if (algorithmId) params.append('algorithm_id', String(algorithmId));
-            if (algorithmName) params.append('algorithm_name', algorithmName);
-            if (factoryId) params.append('factory_id', String(factoryId));
-            if (factoryName) params.append('factory_name', factoryName);
-            if (modelId) params.append('model_id', String(modelId));
-
-            const url = `${API_BASE_URL}/chatbot/download-report?${params.toString()}`;
-            window.location.href = url;
-        } catch (e) {
-            console.error('Download setup failed:', e);
-        }
-    };
-
-
-    const labelMap: Record<string, string> = { factory: 'Factory', algorithm: 'Algorithm', model: 'Model' };
-    const label = labelMap[reportType] ?? 'Report';
-    const nameStr = reportName ? ` — ${reportName}` : ' (All)';
-
-    return (
-        <Box
-            onClick={handleDownload}
-            sx={{
-                mt: 1.5, cursor: 'pointer',
-                borderRadius: '14px',
-                background: `linear-gradient(135deg, ${alpha(theme.success, 0.1)}, ${alpha(theme.primary, 0.08)})`,
-                border: `1px solid ${alpha(theme.success, 0.3)}`,
-                px: 2, py: 1.5,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                    background: `linear-gradient(135deg, ${alpha(theme.success, 0.16)}, ${alpha(theme.primary, 0.12)})`,
-                    border: `1px solid ${alpha(theme.success, 0.5)}`,
-                    transform: 'translateY(-1px)',
-                    boxShadow: `0 6px 20px ${alpha(theme.success, 0.2)}`,
-                },
-            }}
-        >
-            <Stack direction="row" spacing={1} alignItems="center">
-                <DownloadIcon sx={{ fontSize: 16, color: theme.success }} />
-                <Box>
-                    <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMain, fontSize: '0.72rem', display: 'block', lineHeight: 1.2 }}>
-                        {`Download ${label} Report${nameStr}`}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem' }}>
-                        CSV · All fields included
-                    </Typography>
-                </Box>
-            </Stack>
-            <DownloadIcon sx={{ fontSize: 14, color: theme.success, opacity: 0.6 }} />
-        </Box>
-    );
-}
-
-// ─── Download Zip Button (shown in chat bubble for model version export bundle) ───
-function DownloadZipButton({ downloadUrl, modelName, versionNumber, components }: { downloadUrl: string, modelName: string, versionNumber: number, components: string[] }) {
-    const { theme } = useTheme();
-
-    const handleDownload = () => {
-        try {
-            const finalUrl = downloadUrl.startsWith('http') ? downloadUrl : `${API_BASE_URL}${downloadUrl}`;
-            window.location.href = finalUrl;
-        } catch (e) {
-            console.error('ZIP Download setup failed:', e);
-        }
-    };
-
-    return (
-        <Box
-            onClick={handleDownload}
-            sx={{
-                mt: 1.5, cursor: 'pointer',
-                borderRadius: '14px',
-                background: `linear-gradient(135deg, ${alpha(theme.success, 0.1)}, ${alpha(theme.primary, 0.08)})`,
-                border: `1px solid ${alpha(theme.success, 0.3)}`,
-                px: 2, py: 1.5,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                    background: `linear-gradient(135deg, ${alpha(theme.success, 0.16)}, ${alpha(theme.primary, 0.12)})`,
-                    border: `1px solid ${alpha(theme.success, 0.5)}`,
-                    transform: 'translateY(-1px)',
-                    boxShadow: `0 6px 20px ${alpha(theme.success, 0.2)}`,
-                },
-            }}
-        >
-            <Stack direction="row" spacing={1} alignItems="center">
-                <DownloadIcon sx={{ fontSize: 16, color: theme.success }} />
-                <Box>
-                    <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMain, fontSize: '0.72rem', display: 'block', lineHeight: 1.2 }}>
-                        {`Download ${modelName} v${versionNumber} Export Bundle`}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem' }}>
-                        ZIP · Included: {components.join(', ')}
-                    </Typography>
-                </Box>
-            </Stack>
-            <DownloadIcon sx={{ fontSize: 14, color: theme.success, opacity: 0.6 }} />
-        </Box>
-    );
-}
-
-// ─── Action Button (renders dynamic actions) ──────────────────────────────────
-function ActionButton({ action }: { action: { type: string; label: string; download_type: string; entity_type: string; entity_id: number; download_url?: string } }) {
-    const { theme } = useTheme();
-
-    const handleDownload = () => {
-        try {
-            let url = action.download_url;
-            if (!url) {
-                if (action.download_type === 'artifact') {
-                    url = `/artifacts/${action.entity_id}/download`;
-                }
-            }
-
-            if (!url) {
-                console.error('No download URL available for action:', action);
-                return;
-            }
-
-            const finalUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
-            window.location.href = finalUrl;
-        } catch (e) {
-            console.error('Action download setup failed:', e);
-        }
-    };
-
-    const isReport = action.download_type === 'report';
-
-    return (
-        <Box
-            onClick={handleDownload}
-            sx={{
-                mt: 1.5, cursor: 'pointer',
-                borderRadius: '14px',
-                background: `linear-gradient(135deg, ${alpha(theme.success, 0.1)}, ${alpha(theme.primary, 0.08)})`,
-                border: `1px solid ${alpha(theme.success, 0.3)}`,
-                px: 2, py: 1.5,
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                    background: `linear-gradient(135deg, ${alpha(theme.success, 0.16)}, ${alpha(theme.primary, 0.12)})`,
-                    border: `1px solid ${alpha(theme.success, 0.5)}`,
-                    transform: 'translateY(-1px)',
-                    boxShadow: `0 6px 20px ${alpha(theme.success, 0.2)}`,
-                },
-            }}
-        >
-            <Stack direction="row" spacing={1} alignItems="center">
-                <DownloadIcon sx={{ fontSize: 16, color: theme.success }} />
-                <Box>
-                    <Typography variant="caption" fontWeight={800} sx={{ color: theme.textMain, fontSize: '0.72rem', display: 'block', lineHeight: 1.2 }}>
-                        {action.label}
-                    </Typography>
-                    <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.62rem' }}>
-                        {isReport ? 'CSV · All fields included' : 'Export Bundle · ZIP'}
-                    </Typography>
-                </Box>
-            </Stack>
-            <DownloadIcon sx={{ fontSize: 14, color: theme.success, opacity: 0.6 }} />
-        </Box>
-    );
-}
-
-// ─── Entity list view ───────────────────────────────────────────────────────
-function EntityList({ data, type }: { data: any[], type: 'factories' | 'algorithms' | 'models' | 'versions' }) {
-    const { theme, mode } = useTheme();
-    const navigate = useNavigate();
-
-    return (
-        <Stack spacing={1.5} sx={{ mt: 1.5, width: '100%' }}>
-            {data.map((item, index) => {
-                const id = item.id;
-                const name = item.name || (type === 'versions' ? `Version ${item.version_number}` : `Item ${index + 1}`);
-                const description = item.description || item.note;
-                const formattedDate = item.created_at
-                    ? new Date(item.created_at).toLocaleDateString(undefined, {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                    })
-                    : null;
-
-                // Determine navigation path
-                let path: string | null = null;
-                if (id !== undefined && id !== null) {
-                    if (type === 'factories') {
-                        path = `/factories/${id}`;
-                    } else if (type === 'algorithms') {
-                        path = `/algorithms/${id}/factories`;
-                    } else if (type === 'models') {
-                        const algId = item.algorithm_id;
-                        const facId = item.factory_id;
-                        if (algId && facId) {
-                            path = `/algorithms/${algId}/factories/${facId}/models/${id}`;
-                        } else {
-                            path = `/algorithms`; // Fallback
-                        }
-                    } else if (type === 'versions') {
-                        const algId = item.algorithm_id;
-                        const facId = item.factory_id;
-                        const modelId = item.model_id;
-                        if (algId && facId && modelId) {
-                            path = `/algorithms/${algId}/factories/${facId}/models/${modelId}/versions/${id}`;
-                        } else {
-                            path = `/algorithms`; // Fallback
-                        }
-                    }
-                }
-
-                // Select Icon and Color based on type
-                let Icon = FactoryIcon;
-                let color = theme.primary;
-                if (type === 'algorithms') {
-                    Icon = AlgorithmIcon;
-                    color = theme.secondary ?? theme.info;
-                } else if (type === 'models') {
-                    Icon = ModelIcon;
-                    color = '#8B5CF6'; // purple color
-                } else if (type === 'versions') {
-                    Icon = VersionIcon;
-                    color = theme.success ?? '#10B981';
-                }
-
-                return (
-                    <Box
-                        key={id ?? index}
-                        onClick={path ? () => navigate(path) : undefined}
-                        sx={{
-                            p: 2,
-                            borderRadius: '16px',
-                            background: mode === 'dark'
-                                ? 'rgba(30, 41, 59, 0.65)'
-                                : 'rgba(255, 255, 255, 0.9)',
-                            border: `1px solid ${alpha(color, 0.12)}`,
-                            boxShadow: `0 4px 12px ${alpha('#000', 0.03)}`,
-                            cursor: path ? 'pointer' : 'default',
-                            transition: 'all 0.2s ease',
-                            display: 'flex',
-                            gap: 1.5,
-                            alignItems: 'center',
-                            position: 'relative',
-                            overflow: 'hidden',
-                            '&:hover': path ? {
-                                transform: 'translateY(-2px)',
-                                borderColor: color,
-                                boxShadow: `0 6px 18px ${alpha(color, 0.15)}`,
-                                '& .launch-icon': {
-                                    opacity: 1,
-                                    transform: 'translateX(0)',
-                                }
-                            } : {},
-                        }}
-                    >
-                        {/* Soft background glow on hover */}
-                        {path && (
-                            <Box sx={{
-                                position: 'absolute',
-                                top: 0, left: 0, right: 0, bottom: 0,
-                                background: `linear-gradient(135deg, ${alpha(color, 0.04)}, transparent)`,
-                                pointerEvents: 'none',
-                            }} />
-                        )}
-
-                        {/* Left Avatar */}
-                        <Avatar sx={{
-                            width: 40,
-                            height: 40,
-                            borderRadius: '12px',
-                            background: `linear-gradient(135deg, ${alpha(color, 0.12)}, ${alpha(theme.secondary ?? theme.info, 0.08)})`,
-                            color: color,
-                            border: `1px solid ${alpha(color, 0.18)}`,
-                        }}>
-                            <Icon sx={{ fontSize: 20 }} />
-                        </Avatar>
-
-                        {/* Middle Content */}
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Typography variant="subtitle2" fontWeight={800} sx={{ color: theme.textMain, fontSize: '0.88rem', mb: 0.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {name}
-                            </Typography>
-                            {description && (
-                                <Typography variant="caption" sx={{
-                                    color: theme.textMuted,
-                                    fontSize: '0.74rem',
-                                    display: '-webkit-box',
-                                    WebkitLineClamp: 2,
-                                    WebkitBoxOrient: 'vertical',
-                                    overflow: 'hidden',
-                                    lineHeight: 1.3,
-                                    mb: 0.5,
-                                }}>
-                                    {description}
-                                </Typography>
-                            )}
-
-                            {/* Extra metrics for versions */}
-                            {type === 'versions' && (() => {
-                                const formatAccuracy = (val: any) => {
-                                    if (val === undefined || val === null) return '';
-                                    const num = Number(val);
-                                    if (isNaN(num)) return String(val);
-                                    if (num <= 1.0) return `${(num * 100).toFixed(1)}%`;
-                                    return `${num.toFixed(1)}%`;
-                                };
-                                const formatF1 = (val: any) => {
-                                    if (val === undefined || val === null) return '';
-                                    const num = Number(val);
-                                    if (isNaN(num)) return String(val);
-                                    return num.toFixed(3);
-                                };
-                                return (
-                                    <Stack direction="row" spacing={1} sx={{ mt: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
-                                        {item.accuracy !== undefined && item.accuracy !== null && (
-                                            <Chip
-                                                label={`Acc: ${formatAccuracy(item.accuracy)}`}
-                                                size="small"
-                                                sx={{
-                                                    height: 18,
-                                                    fontSize: '0.62rem',
-                                                    fontWeight: 700,
-                                                    bgcolor: mode === 'dark' ? alpha(theme.success ?? '#10B981', 0.18) : alpha(theme.success ?? '#10B981', 0.1),
-                                                    color: mode === 'dark' ? '#34d399' : theme.success ?? '#10B981',
-                                                    border: `1px solid ${alpha(theme.success ?? '#10B981', 0.3)}`,
-                                                }}
-                                            />
-                                        )}
-                                        {item.f1_score !== undefined && item.f1_score !== null && (
-                                            <Chip
-                                                label={`F1: ${formatF1(item.f1_score)}`}
-                                                size="small"
-                                                sx={{
-                                                    height: 18,
-                                                    fontSize: '0.62rem',
-                                                    fontWeight: 700,
-                                                    bgcolor: mode === 'dark' ? alpha(theme.primary, 0.18) : alpha(theme.primary, 0.1),
-                                                    color: mode === 'dark' ? '#818cf8' : theme.primary,
-                                                    border: `1px solid ${alpha(theme.primary, 0.3)}`,
-                                                }}
-                                            />
-                                        )}
-                                        {item.precision !== undefined && item.precision !== null && (
-                                            <Chip
-                                                label={`Prec: ${formatAccuracy(item.precision)}`}
-                                                size="small"
-                                                sx={{
-                                                    height: 18,
-                                                    fontSize: '0.62rem',
-                                                    fontWeight: 700,
-                                                    bgcolor: mode === 'dark' ? alpha(theme.secondary ?? theme.info, 0.18) : alpha(theme.secondary ?? theme.info, 0.1),
-                                                    color: mode === 'dark' ? '#60a5fa' : theme.secondary ?? theme.info,
-                                                    border: `1px solid ${alpha(theme.secondary ?? theme.info, 0.3)}`,
-                                                }}
-                                            />
-                                        )}
-                                    </Stack>
-                                );
-                            })()}
-
-                            {formattedDate && (
-                                <Typography variant="caption" sx={{ color: theme.textMuted, fontSize: '0.64rem', display: 'block', fontWeight: 600, mt: 0.5 }}>
-                                    Created on {formattedDate}
-                                </Typography>
-                            )}
-                        </Box>
-
-                        {/* Right side: navigate arrow */}
-                        {path && (
-                            <IconButton
-                                className="launch-icon"
-                                size="small"
-                                sx={{
-                                    color: color,
-                                    opacity: 0.5,
-                                    transform: 'translateX(-4px)',
-                                    transition: 'all 0.2s ease',
-                                    bgcolor: alpha(color, 0.04),
-                                    '&:hover': { bgcolor: alpha(color, 0.1) }
-                                }}
-                            >
-                                <LaunchIcon sx={{ fontSize: 14 }} />
-                            </IconButton>
-                        )}
-                    </Box>
-                );
-            })}
-        </Stack>
-    );
-}
-
 // ─── Memoized BotMessageContent (prevents re-parsing markdown on every render)
 // This is the #1 performance fix: ReactMarkdown + its custom components are only
 // re-created when `content` or the theme actually changes.
@@ -1237,7 +125,7 @@ interface BotMessageContentProps {
     msgType?: string;
     themeRef: any;  // stable theme reference
     mode: 'dark' | 'light';
-    onExpandTable: (content: React.ReactNode, title?: string) => void;
+    onExpandTable: (content: React.ReactNode, title?: string, filename?: string) => void;
 }
 
 const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode, onExpandTable }: BotMessageContentProps) => {
@@ -1304,7 +192,7 @@ const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode, onExp
             </Box>
         ),
         h3: ({ node, ...props }: any) => <Typography variant="subtitle2" fontWeight={800} sx={{ mt: 1.2, mb: 0.6, color: theme.textSecondary, fontSize: '0.8rem' }} {...props} />,
-        p: ({ node, ...props }: any) => <Typography variant="body2" sx={{ mb: 1, color: msgType === 'user' ? '#fff' : theme.textMain, fontSize: '0.86rem', lineHeight: 1.65 }} {...props} />,
+        p: ({ node, ...props }: any) => <Typography variant="body2" sx={{ mb: 1, color: msgType === 'user' ? '#fff' : theme.textMain, fontSize: '0.86rem', lineHeight: 1.65, wordBreak: 'break-word', overflowWrap: 'break-word' }} {...props} />,
         ul: ({ node, ...props }: any) => <Box component="ul" sx={{ pl: 2, mb: 1 }} {...props} />,
         ol: ({ node, ...props }: any) => <Box component="ol" sx={{ pl: 2, mb: 1 }} {...props} />,
         li: ({ node, ...props }: any) => <Box component="li" sx={{ mb: 0.5 }} {...props} />,
@@ -1312,7 +200,8 @@ const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode, onExp
             <Box component="code" sx={{
                 bgcolor: mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)',
                 px: 0.6, py: 0.2, borderRadius: '4px', fontSize: '0.78rem', fontFamily: 'monospace',
-                color: msgType === 'user' ? '#fff' : theme.primary, fontWeight: 700
+                color: msgType === 'user' ? '#fff' : theme.primary, fontWeight: 700,
+                wordBreak: 'break-word', overflowWrap: 'break-word'
             }} {...props} />
         ) : (
             <Box component="pre" sx={{
@@ -1325,11 +214,35 @@ const BotMessageContent = memo(({ content, msgType, themeRef: theme, mode, onExp
         ),
         table: ({ node, children, ...props }: any) => {
             const handleExpand = () => {
+                let filename = 'table_export.csv';
+                const match = content.match(/<!-- EXPORTABLE_TABULAR_DATA: (.*?) -->/);
+                if (match && match[1]) {
+                    try {
+                        const jsonStr = atob(match[1]);
+                        const data = JSON.parse(jsonStr);
+                        if (data && data.filename) {
+                            filename = data.filename;
+                        }
+                    } catch (e) {
+                        console.error("Error decoding tabular data for filename", e);
+                    }
+                }
+                if (filename === 'table_export.csv') {
+                    if (content.toLowerCase().includes('factory') || content.toLowerCase().includes('production site')) {
+                        filename = 'factories_list.csv';
+                    } else if (content.toLowerCase().includes('model') && content.toLowerCase().includes('comparison')) {
+                        filename = 'model_comparison.csv';
+                    } else if (content.toLowerCase().includes('algorithm')) {
+                        filename = 'algorithm_list.csv';
+                    }
+                }
+
                 onExpandTable(
                     <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
                         {children}
                     </Box>,
-                    "Full Table View"
+                    "Full Table View",
+                    filename
                 );
             };
 
@@ -1463,7 +376,7 @@ interface MessageRowProps {
     theme: any;
     mode: 'dark' | 'light';
     onComparisonClick: (data: any[]) => void;
-    onExpandTable: (content: React.ReactNode, title?: string) => void;
+    onExpandTable: (content: React.ReactNode, title?: string, filename?: string) => void;
 }
 
 const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick, onExpandTable }: MessageRowProps) => {
@@ -1538,6 +451,8 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick, onExpandT
                         <Typography variant="body2" component="div" sx={{
                             color: msg.role === 'user' ? '#fff' : msg.type === 'error' ? theme.error : theme.textMain,
                             lineHeight: 1.7, fontSize: '0.86rem', fontWeight: 500,
+                            wordBreak: 'break-word',
+                            overflowWrap: 'break-word',
                             '& p': { m: 0, mb: 1 }, '& p:last-child': { mb: 0 },
                             '& strong': { fontWeight: 800 },
                             '& a': { color: theme.primary, textDecoration: 'none', fontWeight: 700, '&:hover': { textDecoration: 'underline' } },
@@ -1546,6 +461,10 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick, onExpandT
                         }}>
                             {msg.role === 'user' ? (
                                 <span>{msg.content}</span>
+                            ) : msg.type === 'streaming' ? (
+                                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                    <LoadingDots />
+                                </Box>
                             ) : (
                                 <BotMessageContent
                                     content={msg.content}
@@ -1569,6 +488,21 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick, onExpandT
                                                 variant="text"
                                                 onClick={() => {
                                                     const rowData = msg.data || [];
+                                                    let filename = 'query_results.csv';
+                                                    if (msg.query) {
+                                                        const q = msg.query.toLowerCase();
+                                                        if (q.includes('factories')) {
+                                                            filename = 'factories_list.csv';
+                                                        } else if (q.includes('models')) {
+                                                            filename = 'models_list.csv';
+                                                        } else if (q.includes('algorithms')) {
+                                                            filename = 'algorithms_list.csv';
+                                                        } else if (q.includes('versions')) {
+                                                            filename = 'versions_list.csv';
+                                                        } else if (q.includes('experiments')) {
+                                                            filename = 'experiments_list.csv';
+                                                        }
+                                                    }
                                                     onExpandTable(
                                                         <Box sx={{ overflowX: 'auto', p: 1 }}>
                                                             <Box component="table" sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
@@ -1594,7 +528,8 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick, onExpandT
                                                                 </Box>
                                                             </Box>
                                                         </Box>,
-                                                        "Full Table View"
+                                                        "Full Table View",
+                                                        filename
                                                     );
                                                 }}
                                                 startIcon={<LaunchIcon sx={{ fontSize: 12 }} />}
@@ -1655,19 +590,6 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick, onExpandT
 
 
 
-                        {/* Download report button */}
-                        {msg.type === 'download' && msg.report_type && (
-                            <DownloadReportButton
-                                reportType={msg.report_type}
-                                reportName={msg.report_name}
-                                algorithmId={msg.algorithm_id}
-                                algorithmName={msg.algorithm_name}
-                                factoryId={msg.factory_id}
-                                factoryName={msg.factory_name}
-                                modelId={msg.model_id}
-                            />
-                        )}
-
                         {/* Download zip button */}
                         {msg.type === 'zip_download' && msg.download_url && (
                             <DownloadZipButton
@@ -1682,9 +604,6 @@ const MessageRow = memo(({ msg, isNew, theme, mode, onComparisonClick, onExpandT
                         {msg.actions && msg.actions.length > 0 && msg.actions
                             .filter(act => {
                                 if (msg.type === 'zip_download' && act.download_type === 'zip') {
-                                    return false;
-                                }
-                                if (msg.type === 'download' && act.download_type === 'report') {
                                     return false;
                                 }
                                 return true;
@@ -1716,7 +635,7 @@ export default function Chatbot() {
     const [isOpen, setIsOpen] = useState(false);
     const [input, setInput] = useState('');
     const [comparisonModal, setComparisonModal] = useState<{ open: boolean; data: any[] }>({ open: false, data: [] });
-    const [expandedTable, setExpandedTable] = useState<{ open: boolean; content: React.ReactNode; title?: string }>({ open: false, content: null, title: 'Table View' });
+    const [expandedTable, setExpandedTable] = useState<{ open: boolean; content: React.ReactNode; title?: string; filename?: string }>({ open: false, content: null, title: 'Table View', filename: 'table_export.csv' });
     const [messages, setMessages] = useState<Message[]>([{
         id: '1', role: 'bot', type: 'text', timestamp: new Date(),
         content: "Hi, I'm **MIRA** — your **MARS Intelligent Repository Assistant**! 🤖\n\nI can help you explore your models, factories, versions, and performance metrics — just ask me anything.",
@@ -1725,6 +644,44 @@ export default function Chatbot() {
     const [clearWarningOpen, setClearWarningOpen] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const handleComparisonClick = useCallback((data: any[]) => {
+        setComparisonModal({ open: true, data });
+    }, []);
+
+    const handleExpandTable = useCallback((content: React.ReactNode, title?: string, filename?: string) => {
+        setExpandedTable({ open: true, content, title, filename });
+    }, []);
+
+    const handleDownloadExpandedTable = useCallback(() => {
+        const table = document.querySelector('.expanded-table-container table');
+        if (!table) return;
+
+        const rows = Array.from(table.querySelectorAll('tr'));
+        const csvContent = rows.map(row => {
+            const cells = Array.from(row.querySelectorAll('th, td'));
+            return cells.map(cell => {
+                let text = cell.textContent || '';
+                text = text.trim().replace(/"/g, '""');
+                return `"${text}"`;
+            }).join(',');
+        }).join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+
+        let filename = expandedTable.filename || 'table_export.csv';
+        if (!filename.endsWith('.csv')) {
+            filename += '.csv';
+        }
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }, [expandedTable.filename]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -1743,7 +700,10 @@ export default function Chatbot() {
         const msg = text.trim();
         if (!msg || isLoading) return;
         setInput('');
-        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', content: msg, timestamp: new Date() }]);
+
+        const userMsgId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+        setMessages(prev => [...prev, { id: userMsgId, role: 'user', content: msg, timestamp: new Date() }]);
+
         setIsLoading(true);
         abortControllerRef.current = new AbortController();
         try {
@@ -1751,36 +711,84 @@ export default function Chatbot() {
                 role: m.role,
                 content: m.content
             }));
-            const { data } = await axios.post(`${API_BASE_URL}/chatbot/ask`, {
-                message: msg,
-                context: historyContext
-            }, {
-                signal: abortControllerRef.current.signal
-            });
+
+            // Add a temporary bot message for streaming status
+            const tempBotId = Date.now().toString(36) + Math.random().toString(36).substring(2);
             setMessages(prev => [...prev, {
-                id: (Date.now() + 1).toString(), role: 'bot',
-                content: data.response || data.answer || '', data: data.data, query: data.query,
-                type: data.type, report_type: data.report_type, report_name: data.report_name,
-                algorithm_id: data.algorithm_id,
-                algorithm_name: data.algorithm_name,
-                factory_id: data.factory_id,
-                factory_name: data.factory_name,
-                model_id: data.model_id,
-                entity_type: data.entity_type,
-                download_url: data.download_url,
-                components: data.components,
-                model_name: data.model_name,
-                version_number: data.version_number,
-                actions: data.actions || [],
-                response_type: data.response_type,
-                show_compare: data.show_compare,
-                comparison_title: data.comparison_title,
-                entities: data.entities,
-                metrics: data.metrics,
+                id: tempBotId, role: 'bot',
+                content: "Initializing...", type: 'streaming',
                 timestamp: new Date(),
             }]);
+
+            const response = await fetch(`${API_BASE_URL}/chatbot/stream`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg, context: historyContext }),
+                signal: abortControllerRef.current.signal
+            });
+
+            if (!response.body) throw new Error("No response body");
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            let buffer = "";
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n\n");
+                buffer = lines.pop() || ""; // Keep the incomplete line in the buffer
+
+                for (const chunk of lines) {
+                    const chunkLines = chunk.split("\n");
+                    let dataStr = "";
+                    for (const line of chunkLines) {
+                        if (line.startsWith("data: ")) {
+                            dataStr = line.substring(6);
+                            break;
+                        }
+                    }
+
+                    if (chunk.startsWith("event: status")) {
+                        if (dataStr) {
+                            const data = JSON.parse(dataStr);
+                            setMessages(prev => prev.map(m =>
+                                m.id === tempBotId ? { ...m, content: `*${data.status}*` } : m
+                            ));
+                        }
+                    } else if (chunk.startsWith("event: done") || chunk.startsWith("event: error")) {
+                        if (dataStr) {
+                            const data = JSON.parse(dataStr);
+                            
+                            // Emit global event to refresh UI lists if creation was successful
+                            if (data.type === 'interactive_creation' && data.success) {
+                                window.dispatchEvent(new CustomEvent('entityCreated'));
+                            }
+                            
+                            setMessages(prev => prev.map(m =>
+                                m.id === tempBotId ? {
+                                    ...m,
+                                    content: data.response || data.answer || '',
+                                    data: data.data, query: data.query,
+                                    type: data.type, report_type: data.report_type, report_name: data.report_name,
+                                    algorithm_id: data.algorithm_id, algorithm_name: data.algorithm_name,
+                                    factory_id: data.factory_id, factory_name: data.factory_name,
+                                    model_id: data.model_id, entity_type: data.entity_type,
+                                    download_url: data.download_url, components: data.components,
+                                    model_name: data.model_name, version_number: data.version_number,
+                                    actions: data.actions || [], response_type: data.response_type,
+                                    show_compare: data.show_compare, comparison_title: data.comparison_title,
+                                    entities: data.entities, metrics: data.metrics,
+                                } : m
+                            ));
+                        }
+                    }
+                }
+            }
         } catch (err: any) {
-            if (isCancel(err) || err.name === 'CanceledError') {
+            if (err.name === 'AbortError') {
                 return; // Suppress error for aborted requests
             }
             setMessages(prev => [...prev, {
@@ -1893,6 +901,16 @@ export default function Chatbot() {
                                             </IconButton>
                                         </Tooltip>
                                     )}
+                                    <Tooltip title="Minimize">
+                                        <IconButton size="small" onClick={() => setIsOpen(false)} sx={{
+                                            color: 'rgba(255,255,255,0.85)',
+                                            bgcolor: 'rgba(255,255,255,0.1)',
+                                            borderRadius: '10px',
+                                            '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' },
+                                        }}>
+                                            <MinimizeIcon fontSize="small" />
+                                        </IconButton>
+                                    </Tooltip>
                                     <IconButton size="small" onClick={() => setIsOpen(false)} sx={{
                                         color: 'rgba(255,255,255,0.85)',
                                         bgcolor: 'rgba(255,255,255,0.1)',
@@ -1919,32 +937,14 @@ export default function Chatbot() {
                                         isNew={idx === messages.length - 1}
                                         theme={theme}
                                         mode={mode}
-                                        onComparisonClick={(data) => setComparisonModal({ open: true, data })}
-                                        onExpandTable={(content, title) => setExpandedTable({ open: true, content, title })}
+                                        onComparisonClick={handleComparisonClick}
+                                        onExpandTable={handleExpandTable}
                                     />
                                 ))}
 
 
 
-                                {/* Organic Typing Indicator */}
-                                {isLoading && (
-                                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
-                                        <Box sx={{ display: 'flex', gap: 1.2, alignItems: 'flex-start' }}>
-                                            <Avatar sx={{ width: 32, height: 32, borderRadius: '10px', bgcolor: alpha(theme.primary, 0.1), color: theme.primary }}>
-                                                <BotIcon sx={{ fontSize: 16 }} />
-                                            </Avatar>
-                                            <Paper elevation={0} sx={{
-                                                px: 2, py: 1.2, borderRadius: '18px 18px 18px 4px',
-                                                bgcolor: mode === 'dark' ? 'rgba(30, 41, 59, 0.45)' : 'rgba(241, 245, 249, 0.85)',
-                                                border: `1px solid ${mode === 'dark' ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)'}`,
-                                                display: 'flex', alignItems: 'center', gap: 1.2,
-                                                boxShadow: `0 4px 12px -2px ${alpha('#000', 0.04)}`,
-                                            }}>
-                                                <LoadingDots />
-                                            </Paper>
-                                        </Box>
-                                    </motion.div>
-                                )}
+
                                 <div ref={messagesEndRef} />
                             </Box>
 
@@ -2069,7 +1069,7 @@ export default function Chatbot() {
             </Zoom>
 
             {/* ── Comparison Modal ── */}
-            <ComparisonModal
+            <ComparisonModal theme={theme} mode={mode}
                 versions={comparisonModal.data}
                 open={comparisonModal.open}
                 onClose={() => setComparisonModal({ open: false, data: [] })}
@@ -2127,7 +1127,7 @@ export default function Chatbot() {
                     </IconButton>
                 </Box>
                 <DialogContent sx={{ p: 3.5, bgcolor: mode === 'dark' ? '#0d0d15' : '#f4f6fa', overflowX: 'auto' }}>
-                    <Box sx={{
+                    <Box className="expanded-table-container" sx={{
                         borderRadius: '16px',
                         border: `1px solid ${alpha(theme.border, 0.25)}`,
                         boxShadow: `0 8px 30px rgba(0,0,0,0.12)`,
@@ -2138,20 +1138,25 @@ export default function Chatbot() {
                         {expandedTable.content}
                     </Box>
                 </DialogContent>
-                <DialogActions sx={{ px: 3.5, py: 2, borderTop: `1px solid ${alpha(theme.border, 0.15)}`, bgcolor: mode === 'dark' ? '#12121f' : '#f8f9fc' }}>
+                <DialogActions sx={{ px: 3.5, py: 2, borderTop: `1px solid ${alpha(theme.border, 0.15)}`, bgcolor: mode === 'dark' ? '#12121f' : '#f8f9fc', justifyContent: 'flex-end', gap: 1.5 }}>
                     <Button
-                        onClick={() => setExpandedTable(prev => ({ ...prev, open: false }))}
-                        variant="contained"
+                        onClick={handleDownloadExpandedTable}
+                        variant="outlined"
+                        startIcon={<DownloadIcon />}
                         sx={{
                             fontWeight: 800,
                             borderRadius: '10px',
                             textTransform: 'none',
-                            bgcolor: theme.primary,
                             px: 3,
-                            '&:hover': { bgcolor: alpha(theme.primary, 0.85) }
+                            color: theme.primary,
+                            borderColor: alpha(theme.primary, 0.4),
+                            '&:hover': {
+                                borderColor: theme.primary,
+                                bgcolor: alpha(theme.primary, 0.08),
+                            }
                         }}
                     >
-                        Close View
+                        Download CSV
                     </Button>
                 </DialogActions>
             </Dialog>

@@ -64,7 +64,7 @@ export const BackgroundUploaderProvider: React.FC<{ children: React.ReactNode }>
     const cancelledVersionsRef = useRef<Set<number>>(new Set());
 
     // Chunk size for batched uploads (optimized for browser main-thread responsiveness)
-    const CHUNK_SIZE = 100;
+    const CHUNK_SIZE = 500;
 
     // Keep tasksRef up to date with latest tasks state
     useEffect(() => {

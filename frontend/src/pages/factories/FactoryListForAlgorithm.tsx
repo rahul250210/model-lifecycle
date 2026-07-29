@@ -22,6 +22,9 @@ import {
   ToggleButtonGroup,
   Dialog,
   DialogActions,
+  DialogContent,
+  DialogTitle,
+  MenuItem,
   TextField,
   Table,
   TableBody,
@@ -36,6 +39,10 @@ import HubIcon from "@mui/icons-material/Hub";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import NavigateNextIcon from "@mui/icons-material/NavigateNext";
+import SortIcon from "@mui/icons-material/Sort";
+import FileDownloadIcon from "@mui/icons-material/FileDownload";
+import FileUploadIcon from "@mui/icons-material/FileUpload";
+import InteractiveBreadcrumbs from "../../components/InteractiveBreadcrumbs";
 import DeleteIcon from "@mui/icons-material/Delete";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import EditIcon from "@mui/icons-material/Edit";
@@ -55,13 +62,7 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import WorkspacePremiumIcon from "@mui/icons-material/WorkspacePremium";
 import ScienceIcon from "@mui/icons-material/ScienceOutlined";
 
-interface Factory {
-  id: number;
-  name: string;
-  description?: string;
-  models_count: number;
-  created_at: string;
-}
+import type { Factory } from '../../types';
 
 export default function FactoryListForAlgorithm() {
   const { algorithmId } = useParams();
@@ -76,6 +77,13 @@ export default function FactoryListForAlgorithm() {
   const [reportLoading, setReportLoading] = useState(false);
   const [iniConfig, setIniConfig] = useState<string | null>(null);
   const [selectedMetric, setSelectedMetric] = useState<"accuracy" | "precision" | "recall" | "f1_score">("accuracy");
+
+  // Link Factory Dialog States
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [allFactories, setAllFactories] = useState<Factory[]>([]);
+  const [selectedLinkFactoryId, setSelectedLinkFactoryId] = useState<number | "">("");
+  const [linkDescription, setLinkDescription] = useState("");
 
   // Remove Factory Dialog States
   const [removeOpen, setRemoveOpen] = useState(false);
@@ -104,6 +112,37 @@ export default function FactoryListForAlgorithm() {
       toast.error(t('factoryList.removeFail', 'Failed to remove factory. Please try again.'));
     } finally {
       setRemoveLoading(false);
+    }
+  };
+
+  const handleOpenLinkDialog = async () => {
+    try {
+      setLinkOpen(true);
+      const res = await axios.get("/factories/");
+      const existingIds = new Set(factories.map((f) => f.id));
+      setAllFactories(res.data.filter((f: Factory) => !existingIds.has(f.id)));
+    } catch (err) {
+      console.error("Failed to load all factories", err);
+    }
+  };
+
+  const handleLinkFactory = async () => {
+    if (!selectedLinkFactoryId) return;
+    try {
+      setLinkLoading(true);
+      await axios.post(`/algorithms/${algorithmId}/factories/${selectedLinkFactoryId}/link`, {
+        description: linkDescription || null
+      });
+      toast.success(t('factoryList.linkSuccess', 'Factory linked successfully'));
+      setLinkOpen(false);
+      setSelectedLinkFactoryId("");
+      setLinkDescription("");
+      fetchData();
+    } catch (err) {
+      console.error("Failed to link factory", err);
+      toast.error(t('factoryList.linkFail', 'Failed to link factory. Please try again.'));
+    } finally {
+      setLinkLoading(false);
     }
   };
 
@@ -163,12 +202,18 @@ export default function FactoryListForAlgorithm() {
 
   useEffect(() => {
     fetchData();
+    
+    const handleEntityCreated = () => {
+      fetchData();
+    };
+    window.addEventListener("entityCreated", handleEntityCreated);
+    return () => window.removeEventListener("entityCreated", handleEntityCreated);
   }, [algorithmId]);
 
   const filteredFactories = factories;
 
   // KPI Metrics Calculation
-  const activeFactoriesCount = factories.filter((f) => f.models_count > 0).length;
+  const activeFactoriesCount = factories.filter((f) => (f.models_count || 0) > 0).length;
   const totalFactoriesCount = factories.length;
   const totalModelsCount = factories.reduce((sum, f) => sum + (f.models_count || 0), 0);
   const totalVersionsCount = versions.length;
@@ -391,23 +436,12 @@ export default function FactoryListForAlgorithm() {
                   <ArrowBackIcon fontSize="small" sx={{ color: theme.textMain }} />
                 </IconButton>
 
-                <Breadcrumbs separator={<NavigateNextIcon fontSize="small" sx={{ color: theme.textSecondary }} />} aria-label="breadcrumb">
-                  <Link
-                    underline="hover"
-                    onClick={() => navigate("/algorithms")}
-                    sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textSecondary }}
-                  >
-                    {t('factoryList.algorithms', 'Algorithms')}
-                  </Link>
-                  <Link
-                    underline="hover"
-                    onClick={() => navigate("/algorithms")}
-                    sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 500, fontSize: '1.2rem', color: theme.textSecondary }}
-                  >
-                    {algorithmName}
-                  </Link>
-                  <Typography fontWeight={700} sx={{ fontSize: '1.2rem', color: theme.textMain }}>{t('factoryList.factories', 'Factories')}</Typography>
-                </Breadcrumbs>
+                <InteractiveBreadcrumbs 
+                  path={[
+                    { label: t('factoryList.algorithms', 'Algorithms'), link: '/algorithms', type: 'root' },
+                    { label: algorithmName, link: `/algorithms/${algorithmId}/factories`, type: 'algorithm', id: algorithmId }
+                  ]}
+                />
               </Stack>
               <Typography variant="h3" fontWeight={900} sx={{
                 letterSpacing: '-0.03em', mb: 1,
@@ -421,25 +455,6 @@ export default function FactoryListForAlgorithm() {
               </Typography>
             </Box>
             <Stack direction="row" spacing={2} sx={{ width: { xs: '100%', md: 'auto' }, justifyContent: 'flex-end' }}>
-              <Button
-                variant="outlined"
-                onClick={scrollToFactories}
-                sx={{
-                  borderRadius: "14px",
-                  fontWeight: 700,
-                  fontSize: "1rem",
-                  px: 3,
-                  py: 1.5,
-                  textTransform: 'none',
-                  border: `1px solid ${theme.border}`,
-                  color: theme.primary,
-                  borderColor: alpha(theme.primary, 0.5),
-                  bgcolor: alpha(theme.primary, 0.05),
-                  '&:hover': { bgcolor: alpha(theme.primary, 0.1), borderColor: theme.primary },
-                }}
-              >
-                {t('factoryList.manageFactories', 'Manage Factories')}
-              </Button>
               <Button
                 variant="outlined"
                 startIcon={reportLoading ? <CircularProgress size={14} sx={{ color: theme.success }} /> : <DownloadIcon />}
@@ -460,6 +475,24 @@ export default function FactoryListForAlgorithm() {
                 }}
               >
                 {reportLoading ? t('factoryOverview.generating', 'Generating…') : t('algorithmList.downloadReport', 'Download Report')}
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<FactoryIcon />}
+                onClick={handleOpenLinkDialog}
+                sx={{
+                  borderRadius: "14px",
+                  px: 4,
+                  py: 1.5,
+                  fontWeight: 800,
+                  textTransform: "none",
+                  border: `1px solid ${theme.border}`,
+                  color: theme.primary,
+                  "&:hover": { bgcolor: alpha(theme.primary, 0.1), borderColor: theme.primary },
+                  transition: "all 0.2s",
+                }}
+              >
+                Use Existing Factory
               </Button>
               <Button
                 variant="contained"
@@ -574,6 +607,106 @@ export default function FactoryListForAlgorithm() {
             </Grid>
           ))}
         </Grid>
+
+        {/* Section Header for Factories */}
+        <Typography ref={factoriesSectionRef} variant="h6" fontWeight={800} sx={{ color: theme.textMain, mb: 3, scrollMarginTop: "32px" }}>
+          {t('factoryList.productionSites', 'Production Sites')}
+        </Typography>
+
+        {/* Main Grid */}
+        {filteredFactories.length === 0 ? (
+          <Box sx={{ py: 10, textAlign: 'center', bgcolor: alpha(theme.paper, 0.5), borderRadius: '32px', border: `2px dashed ${theme.border}`, mb: 6 }}>
+            <FactoryIcon sx={{ fontSize: 64, color: alpha(theme.textMuted, 0.2), mb: 2 }} />
+            <Typography variant="h6" fontWeight={700} color={theme.textMain}>{t('factoryList.noFactories', 'No factories match your search')}</Typography>
+            <Typography variant="body2" color={theme.textMuted}>{t('factoryList.noFactoriesSub', 'Try adjusting your filters or create a new cluster.')}</Typography>
+          </Box>
+        ) : (
+          <Grid container spacing={4} sx={{ mb: 6 }}>
+            {filteredFactories.map((factory) => (
+              <Grid size={{ xs: 12, md: 6, lg: 4 }} key={factory.id}>
+                <Card
+                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factory.id}/models`)}
+                  elevation={0}
+                  sx={{
+                    borderRadius: "24px",
+                    border: `1px solid ${theme.border}`,
+                    height: "100%",
+                    bgcolor: theme.paper,
+                    cursor: "pointer",
+                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                    "&:hover": {
+                      borderColor: theme.primary,
+                      boxShadow: `0 20px 25px -5px ${alpha("#000", 0.05)}`,
+                      transform: "translateY(-4px)"
+                    }
+                  }}
+                >
+                  <Box sx={{ px: 3, pt: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <Box sx={{ p: 1, bgcolor: alpha(theme.primary, 0.1), borderRadius: "10px", display: 'flex' }}>
+                      <FactoryIcon sx={{ color: theme.primary, fontSize: 20 }} />
+                    </Box>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => handleRemoveFactory(e, factory)}
+                      sx={{ 
+                        color: alpha(theme.danger, 0.7),
+                        "&:hover": { bgcolor: alpha(theme.danger, 0.1) }
+                      }}
+                      title="Remove Factory from Algorithm"
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+
+                  <CardContent sx={{ p: 3 }}>
+                    <Typography variant="h5" fontWeight={600} sx={{ color: theme.textMain, mb: 1 }}>
+                      {factory.name}
+                    </Typography>
+
+                    <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3, minHeight: 40, lineHeight: 1.6 }}>
+                      {factory.description || t('factoryList.noSummary', 'No summary provided for this factory.')}
+                    </Typography>
+
+                    <Stack direction="row" spacing={1.5} sx={{ mb: 3 }}>
+                      <Chip
+                        icon={<HubIcon sx={{ fontSize: '14px !important' }} />}
+                        label={t('factoryList.models', '{{count}} Models', { count: factory.models_count })}
+                        size="small"
+                        sx={{ bgcolor: alpha(theme.warning, 0.08), color: theme.warning, fontWeight: 700, borderRadius: '8px' }}
+                      />
+                    </Stack>
+
+                    <Divider sx={{ mb: 2, borderColor: alpha(theme.border, 0.5) }} />
+
+                    <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
+                      <Box
+                        className="arrow-icon"
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          color: theme.primary,
+                          gap: 0.5,
+                          p: 0.5,
+                          borderRadius: '4px',
+                          opacity: 1,
+                          transform: "translateX(0)",
+                          transition: "all 0.3s",
+                          cursor: 'pointer',
+                          '&:hover': {
+                            bgcolor: alpha(theme.primary, 0.1)
+                          }
+                        }}
+                      >
+                        <Typography variant="button" fontWeight={800} sx={{ fontSize: '0.7rem' }}>ENTER</Typography>
+                        <ArrowForwardIcon sx={{ fontSize: 16 }} />
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        )}
 
         {/* Comparative Charts Section */}
         {hasChartData ? (
@@ -748,7 +881,7 @@ export default function FactoryListForAlgorithm() {
           >
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
               <Typography variant="h6" fontWeight={800} sx={{ color: theme.textMain }}>
-                INI Configuration
+                {t('factoryList.iniConfig', 'INI Configuration')}
               </Typography>
               <Box sx={{ display: 'flex', gap: 2 }}>
                 {isEditingIni ? (
@@ -766,7 +899,7 @@ export default function FactoryListForAlgorithm() {
                         px: 3 
                       }}
                     >
-                      Cancel
+                      {t('factoryList.cancel', 'Cancel')}
                     </Button>
                     <Button 
                       variant="contained" 
@@ -781,7 +914,7 @@ export default function FactoryListForAlgorithm() {
                         px: 3 
                       }}
                     >
-                      {savingIni ? <CircularProgress size={20} color="inherit" /> : "Save Configuration"}
+                      {savingIni ? t('factoryList.saving', 'Saving...') : t('factoryList.saveChanges', 'Save Changes')}
                     </Button>
                   </>
                 ) : (
@@ -804,7 +937,7 @@ export default function FactoryListForAlgorithm() {
                       }
                     }}
                   >
-                    Edit Configuration
+                    {t('factoryList.editConfig', 'Edit Configuration')}
                   </Button>
                 )}
               </Box>
@@ -929,108 +1062,115 @@ export default function FactoryListForAlgorithm() {
             </TableContainer>
           </Paper>
         )}
-
-
-        {/* Section Header for Factories */}
-        <Typography ref={factoriesSectionRef} variant="h6" fontWeight={800} sx={{ color: theme.textMain, mb: 3, scrollMarginTop: "32px" }}>
-          {t('factoryList.productionSites', 'Production Sites')}
-        </Typography>
-
-
-        {/* Main Grid */}
-        {filteredFactories.length === 0 ? (
-          <Box sx={{ py: 10, textAlign: 'center', bgcolor: alpha(theme.paper, 0.5), borderRadius: '32px', border: `2px dashed ${theme.border}` }}>
-            <FactoryIcon sx={{ fontSize: 64, color: alpha(theme.textMuted, 0.2), mb: 2 }} />
-            <Typography variant="h6" fontWeight={700} color={theme.textMain}>{t('factoryList.noFactories', 'No factories match your search')}</Typography>
-            <Typography variant="body2" color={theme.textMuted}>{t('factoryList.noFactoriesSub', 'Try adjusting your filters or create a new cluster.')}</Typography>
-          </Box>
-        ) : (
-          <Grid container spacing={4}>
-            {filteredFactories.map((factory) => (
-              <Grid size={{ xs: 12, md: 6, lg: 4 }} key={factory.id}>
-                <Card
-                  elevation={0}
-                  sx={{
-                    borderRadius: "24px",
-                    border: `1px solid ${theme.border}`,
-                    height: "100%",
-                    bgcolor: theme.paper,
-                    transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                    "&:hover": {
-                      borderColor: theme.primary,
-                      boxShadow: `0 20px 25px -5px ${alpha("#000", 0.05)}`,
-                      "& .arrow-icon": { opacity: 1, transform: "translateX(0)" }
-                    }
-                  }}
-                >
-                  <Box sx={{ px: 3, pt: 3, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <Box sx={{ p: 1, bgcolor: alpha(theme.primary, 0.1), borderRadius: "10px", display: 'flex' }}>
-                      <FactoryIcon sx={{ color: theme.primary, fontSize: 20 }} />
-                    </Box>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => handleRemoveFactory(e, factory)}
-                      sx={{ 
-                        color: alpha(theme.danger, 0.7),
-                        "&:hover": { bgcolor: alpha(theme.danger, 0.1) }
-                      }}
-                      title="Remove Factory from Algorithm"
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Box>
-
-                  <CardContent sx={{ p: 3 }}>
-                    <Typography variant="h5" fontWeight={600} sx={{ color: theme.textMain, mb: 1 }}>
-                      {factory.name}
-                    </Typography>
-
-                    <Typography variant="body2" sx={{ color: theme.textMuted, mb: 3, minHeight: 40, lineHeight: 1.6 }}>
-                      {factory.description || t('factoryList.noSummary', 'No summary provided for this factory.')}
-                    </Typography>
-
-                    <Stack direction="row" spacing={1.5} sx={{ mb: 3 }}>
-                      <Chip
-                        icon={<HubIcon sx={{ fontSize: '14px !important' }} />}
-                        label={t('factoryList.models', '{{count}} Models', { count: factory.models_count })}
-                        size="small"
-                        sx={{ bgcolor: alpha(theme.warning, 0.08), color: theme.warning, fontWeight: 700, borderRadius: '8px' }}
-                      />
-                    </Stack>
-
-                    <Divider sx={{ mb: 2, borderColor: alpha(theme.border, 0.5) }} />
-
-                    <Box sx={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
-                      <Box
-                        onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factory.id}/models`)}
-                        className="arrow-icon"
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          color: theme.primary,
-                          gap: 0.5,
-                          p: 0.5,
-                          borderRadius: '4px',
-                          opacity: 0,
-                          transform: "translateX(-10px)",
-                          transition: "all 0.3s",
-                          cursor: 'pointer',
-                          '&:hover': {
-                            bgcolor: alpha(theme.primary, 0.1)
-                          }
-                        }}
-                      >
-                        <Typography variant="button" fontWeight={800} sx={{ fontSize: '0.7rem' }}>ENTER</Typography>
-                        <ArrowForwardIcon sx={{ fontSize: 16 }} />
-                      </Box>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        )}
       </Container>
+
+      {/* Link Existing Factory Dialog */}
+      <Dialog
+        open={linkOpen}
+        onClose={() => !linkLoading && setLinkOpen(false)}
+        PaperProps={{ sx: { borderRadius: "28px", p: 2, maxWidth: 500, bgcolor: theme.paper, width: "100%" } }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, color: theme.textMain, display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Box sx={{
+            width: 48,
+            height: 48,
+            borderRadius: "16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            bgcolor: alpha(theme.primary, 0.1),
+            color: theme.primary,
+          }}>
+            <FactoryIcon />
+          </Box>
+          Use Existing Factory
+        </DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: 3 }}>
+          {allFactories.length === 0 ? (
+            <Typography variant="body1" sx={{ color: theme.textMuted, p: 2, textAlign: "center", bgcolor: alpha(theme.primary, 0.03), borderRadius: "16px" }}>
+              There are no available factories to link. All existing factories are already associated with this algorithm.
+            </Typography>
+          ) : (
+            <>
+              <TextField
+                select
+                fullWidth
+                label="Select a Factory"
+                value={selectedLinkFactoryId}
+                onChange={(e) => {
+                  setSelectedLinkFactoryId(Number(e.target.value));
+                  const f = allFactories.find(fac => fac.id === Number(e.target.value));
+                  if (f) setLinkDescription(f.description || "");
+                }}
+                SelectProps={{
+                  MenuProps: { PaperProps: { sx: { bgcolor: theme.paper, borderRadius: "12px", mt: 1, boxShadow: `0 4px 20px ${alpha("#000", 0.1)}` } } }
+                }}
+                InputLabelProps={{ sx: { color: theme.textSecondary } }}
+                sx={{
+                  "& .MuiOutlinedInput-root": { borderRadius: "16px", bgcolor: theme.background },
+                  "& .MuiSelect-select": { py: 2 }
+                }}
+              >
+                {allFactories.map((f) => (
+                  <MenuItem key={f.id} value={f.id} sx={{ color: theme.textMain, py: 1.5, px: 2 }}>
+                    <Typography fontWeight={600}>{f.name}</Typography>
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              {selectedLinkFactoryId !== "" && (
+                <TextField
+                  fullWidth
+                  label="Description (Optional)"
+                  value={linkDescription}
+                  onChange={(e) => setLinkDescription(e.target.value)}
+                  multiline
+                  rows={3}
+                  placeholder="How is this factory utilized for this algorithm?"
+                  InputProps={{ sx: { color: theme.textMain } }}
+                  InputLabelProps={{ sx: { color: theme.textSecondary } }}
+                  sx={{
+                    "& .MuiOutlinedInput-root": { borderRadius: "16px", bgcolor: theme.background }
+                  }}
+                  helperText={
+                    <Typography variant="caption" sx={{ color: theme.textSecondary }}>
+                      You can customize the description specifically for this algorithm, keeping the global description intact for others.
+                    </Typography>
+                  }
+                />
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, pt: 1, justifyContent: "flex-end" }}>
+          <Button
+            onClick={() => setLinkOpen(false)}
+            sx={{ color: theme.textMuted, fontWeight: 700, borderRadius: "12px", px: 3, py: 1.2 }}
+            disabled={linkLoading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleLinkFactory}
+            variant="contained"
+            disabled={!selectedLinkFactoryId || linkLoading}
+            sx={{
+              bgcolor: theme.primary,
+              borderRadius: '12px',
+              fontWeight: 800,
+              textTransform: 'none',
+              px: 4,
+              py: 1.2,
+              boxShadow: `0 8px 16px -4px ${alpha(theme.primary, 0.4)}`,
+              "&:hover": { bgcolor: "#4338CA", transform: "translateY(-1px)" },
+              "&:disabled": { bgcolor: alpha(theme.textMuted, 0.2), color: theme.textMuted },
+              transition: "all 0.2s"
+            }}
+          >
+            {linkLoading ? <CircularProgress size={24} color="inherit" /> : "Link Factory"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Remove Confirmation Dialog */}
       <Dialog

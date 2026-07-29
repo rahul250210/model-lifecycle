@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, desc, distinct
 import io
@@ -32,23 +32,14 @@ def create_factory(
 ):
     existing = (
         db.query(Factory)
-        .filter(func.lower(Factory.name) == factory.name.lower())
+        .filter(func.replace(func.lower(Factory.name), " ", "") == factory.name.lower().replace(" ", ""))
         .first()
     )
     if existing:
-        updated = False
-        if factory.description:
-            existing.description = factory.description
-            updated = True
-        if factory.created_by_algorithm_id is not None:
-            existing.created_by_algorithm_id = factory.created_by_algorithm_id
-            updated = True
-        
-        if updated:
-            db.commit()
-            db.refresh(existing)
-            logger.info(f"Factory updated instead of created: {existing.name} (ID: {existing.id})")
-        return existing
+        raise HTTPException(
+            status_code=400,
+            detail="A factory with this name already exists. Please use the 'Use Existing Factory' button to link it to this algorithm instead."
+        )
 
     db_factory = Factory(
         name=factory.name,
@@ -71,34 +62,54 @@ def list_factories(
     limit: int = 100, 
     db: Session = Depends(get_db)
 ):
-    factories = db.query(Factory).offset(skip).limit(limit).all()
+    factories = db.query(Factory).options(joinedload(Factory.models)).offset(skip).limit(limit).all()
+    
+    if not factories:
+        return []
+        
+    factory_ids = [f.id for f in factories]
+
+    # Pre-fetch all algorithms associated with these factories via models
+    algo_query = (
+        db.query(Model.factory_id, Algorithm.id, Algorithm.name)
+        .join(Algorithm, Model.algorithm_id == Algorithm.id)
+        .filter(Model.factory_id.in_(factory_ids))
+        .distinct()
+        .all()
+    )
+    
+    # Pre-fetch creator algorithms
+    creator_algo_ids = [f.created_by_algorithm_id for f in factories if f.created_by_algorithm_id is not None]
+    creator_algos = []
+    if creator_algo_ids:
+        creator_algos = db.query(Algorithm).filter(Algorithm.id.in_(creator_algo_ids)).all()
+    creator_algo_map = {a.id: a.name for a in creator_algos}
+
+    factory_algo_map = {f_id: set() for f_id in factory_ids}
+    factory_algo_name_map = {f_id: set() for f_id in factory_ids}
+    
+    for f_id, a_id, a_name in algo_query:
+        factory_algo_map[f_id].add(a_id)
+        factory_algo_name_map[f_id].add(a_name)
 
     result = []
     for f in factories:
-        # Get all distinct algorithm names and IDs associated with this factory
-        algos = (
-            db.query(Algorithm.name, Algorithm.id)
-            .join(Model, Model.algorithm_id == Algorithm.id)
-            .filter(Model.factory_id == f.id)
-            .distinct()
-            .all()
-        )
-        algo_names = [a.name for a in algos]
-        algo_ids = {a.id for a in algos}
+        algo_ids = factory_algo_map.get(f.id, set())
+        algo_names = list(factory_algo_name_map.get(f.id, set()))
         
         if f.created_by_algorithm_id is not None:
-            creator_algo = db.query(Algorithm).filter(Algorithm.id == f.created_by_algorithm_id).first()
-            if creator_algo:
-                if creator_algo.name not in algo_names:
-                    algo_names.append(creator_algo.name)
-                algo_ids.add(creator_algo.id)
+            c_name = creator_algo_map.get(f.created_by_algorithm_id)
+            if c_name:
+                if c_name not in algo_names:
+                    algo_names.append(c_name)
+                algo_ids.add(f.created_by_algorithm_id)
                 
         result.append({
             "id": f.id,
             "name": f.name,
             "description": f.description,
             "algorithms_count": len(algo_ids),
-            "models_count": len(f.models),
+            "models_count": len(f.models) if f.models else 0,
             "created_at": f.created_at,
             "algorithm_names": algo_names,
         })
@@ -381,22 +392,26 @@ def get_factory_dashboard(
 @router.get("/{factory_id}/report")
 def generate_factory_report(
     factory_id: int,
+    algorithm_id: int | None = Query(None),
     db: Session = Depends(get_db),
 ):
     factory = db.query(Factory).filter(Factory.id == factory_id).first()
     if not factory:
         raise HTTPException(404, "Factory not found")
 
-    models = (
+    query = (
         db.query(Model)
         .options(
             joinedload(Model.algorithm),
             joinedload(Model.versions).joinedload(ModelVersion.delta)
         )
         .filter(Model.factory_id == factory_id)
-        .order_by(Model.name.asc())
-        .all()
     )
+
+    if algorithm_id is not None:
+        query = query.filter(Model.algorithm_id == algorithm_id)
+
+    models = query.order_by(Model.name.asc()).all()
 
     stream = io.StringIO()
     writer = csv.writer(stream)

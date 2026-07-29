@@ -4,7 +4,7 @@ import axios from "axios";
 // Dynamically determine the API base URL based on the current window location
 const protocol = window.location.protocol;
 //export const API_BASE_URL = `${protocol}//107.108.32.234:8000`;
-export const API_BASE_URL = `${protocol}//localhost:8000`;
+export const API_BASE_URL = import.meta.env.VITE_API_URL || `${protocol}//localhost:8000`;
 const instance = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: true,

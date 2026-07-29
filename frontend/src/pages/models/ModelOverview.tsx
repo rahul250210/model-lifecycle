@@ -28,15 +28,8 @@ import DownloadIcon from "@mui/icons-material/Download";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
 import MemoryIcon from "@mui/icons-material/Memory";
 import TuneIcon from "@mui/icons-material/Tune";
-import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-} from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import InteractiveBreadcrumbs from "../../components/InteractiveBreadcrumbs";
 
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "../../api/axios";
@@ -579,34 +572,14 @@ export default function ModelOverview() {
                 <ArrowBackIcon fontSize="small" sx={{ color: theme.textMain }} />
               </IconButton>
 
-              <Breadcrumbs separator={<NavigateNextIcon fontSize="small" sx={{ color: theme.textMuted }} />} aria-label="breadcrumb">
-                <Link
-                  underline="hover"
-                  onClick={() => navigate(`/algorithms`)}
-                  sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 600, fontSize: '1.2rem', color: theme.textMuted }}
-                >
-                  {t('modelList.algorithms', 'Algorithms')}
-                </Link>
-                <Link
-                  underline="hover"
-                  color="inherit"
-                  onClick={() => navigate(`/algorithms/${algorithmId}/factories`)}
-                  sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 600, fontSize: '1.2rem', color: theme.textMuted }}
-                >
-                  {algorithmName}
-                </Link>
-                <Link
-                  underline="hover"
-                  color="inherit"
-                  onClick={() => navigate(`/algorithms/${algorithmId}/factories/${factoryId}/models`)}
-                  sx={{ cursor: 'pointer', display: 'flex', alignItems: 'center', fontWeight: 600, fontSize: '1.2rem', color: theme.textMuted }}
-                >
-                  {factoryName}
-                </Link>
-                <Typography color="text.primary" fontWeight={800} sx={{ fontSize: '1.2rem' }}>
-                  {model?.name}
-                </Typography>
-              </Breadcrumbs>
+              <InteractiveBreadcrumbs 
+                path={[
+                  { label: t('modelList.algorithms', 'Algorithms'), link: '/algorithms', type: 'root' },
+                  { label: algorithmName, link: `/algorithms/${algorithmId}/factories`, type: 'algorithm', id: algorithmId },
+                  { label: factoryName, link: `/algorithms/${algorithmId}/factories/${factoryId}/models`, type: 'factory', id: factoryId },
+                  { label: model?.name || 'Loading...', type: 'model', id: model?.id }
+                ]}
+              />
             </Stack>
 
             <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', md: 'flex-end' }} spacing={4}>
