@@ -80,75 +80,6 @@ def _fetch_version_rows(
         
     return [_enrich_version_row(v) for v in query.all()]
 
-def _get_plan_from_llm(user_question: str, query_results: Dict[str, Any], context: List[Dict[str, Any]] = []) -> Dict[str, Any]:
-    """Invokes the LLM to structure the requested UI Action."""
-    history_str = ""
-    if context:
-        formatted = []
-        for msg in context:
-            role = "User" if msg.get("role") == "user" else "Assistant"
-            content = msg.get("content", "")
-            if content:
-                formatted.append(f"{role}: {content}")
-        if formatted:
-            history_str = "\nCONVERSATION HISTORY:\n" + "\n".join(formatted) + "\n"
-
-    prompt = f"""You are an Action Planner assistant for an MLOps platform repository.
-{history_str}
-Analyze the user's question, the conversation history, and any query results (provided in JSON format) to decide if the user wants to perform one of the following UI actions:
-- "download_report": download a factory, algorithm, or model performance report (also triggered by "give me the report", "show report", etc.).
-- "download_zip": download the zip code/dataset/weights bundle of a specific model version.
-- "compare_versions": compare performance/metrics across models or versions of a model.
-- "interactive_create": user wants to create, register, or link a new factory, algorithm, model, or version.
-- "interactive_edit": user wants to edit/modify a factory, algorithm, model, or version.
-- "interactive_delete": user wants to delete/remove a factory, algorithm, model, or version.
-- "none": no specific action requested. Note: Aggregate, ranking, or analytical queries (e.g., "best", "most", "highest", "lowest", "top 5") should result in action: "none". Do not output "none" if the user is asking to download or compare specific entities, even if they specify the factory, algorithm, and model together.
-
-Output ONLY a raw JSON object with the following schema:
-{{
-  "action": "download_report" | "download_zip" | "compare_versions" | "interactive_create" | "interactive_edit" | "interactive_delete" | "none",
-  "entity_type": "model" | "algorithm" | "factory" | "version",
-  "compare_scope": "models" | "versions" | null,
-  "targets": [
-    {{"name": "extracted entity name, e.g. Model X", "version": version_number_or_null}}
-  ]
-}}
-Each target pairs an entity name with its version number (or null if unspecified).
-Instructions for compare_scope:
-- If action is "compare_versions" and the comparison is between different versions of the SAME model name (e.g. "compare v1 and v2 of Model X"), set compare_scope to "versions".
-- If action is "compare_versions" and the comparison is between DIFFERENT models (e.g. "compare Model X and Model Y", or Model X models in Factory A and Factory B), set compare_scope to "models".
-- Otherwise, set compare_scope to null.
-Examples:
-- "compare v1 and v2 of Model X" -> action: "compare_versions", entity_type: "version", compare_scope: "versions", targets: [{{"name": "Model X", "version": 1}}, {{"name": "Model X", "version": 2}}]
-- "download zip for Model Y version 3" -> action: "download_zip", entity_type: "version", compare_scope: null, targets: [{{"name": "Model Y", "version": 3}}]
-- "give me the report for Model Z" -> action: "download_report", entity_type: "model", compare_scope: null, targets: [{{"name": "Model Z", "version": null}}]
-- "create a new model" -> action: "interactive_create", entity_type: "model", compare_scope: null, targets: []
-- "create a new version for Algorithm A" -> action: "interactive_create", entity_type: "version", compare_scope: null, targets: []
-- "delete the Algorithm B" -> action: "interactive_delete", entity_type: "algorithm", compare_scope: null, targets: [{{"name": "Algorithm B", "version": null}}]
-- "edit Model C" -> action: "interactive_edit", entity_type: "model", compare_scope: null, targets: [{{"name": "Model C", "version": null}}]
-- "edit the description of Algorithm X" -> action: "interactive_edit", entity_type: "algorithm", compare_scope: null, targets: [{{"name": "Algorithm X", "version": null}}]
-- "edit version 2 of Algorithm Y" -> action: "interactive_edit", entity_type: "version", compare_scope: null, targets: [{{"name": "Algorithm Y", "version": 2}}]
-- "link the Algorithm Z to the Factory C" -> action: "interactive_create", entity_type: "factory", compare_scope: null, targets: [{{"name": "Factory C", "version": null}}]
-Do NOT write any explanations, do NOT wrap in markdown backticks, do NOT write ```json.
-
-User Question: "{user_question}"
-Query Results: {json.dumps(query_results, default=str)}
-
-Output:"""
-
-    raw_res = call_llm(prompt, temperature=0.0)
-    
-    plan = parse_json_from_llm(raw_res)
-        
-    if not plan or not isinstance(plan, dict):
-        plan = {
-            "action": "none",
-            "entity_type": "model",
-            "compare_scope": None,
-            "targets": []
-        }
-    return plan
-
 def _resolve_targets(plan: Dict[str, Any], user_question: str, db_session: Session, context: List[Dict[str, Any]] = [], resolved_entities: Optional[Dict[str, List[Any]]] = None) -> Dict[str, Any]:
     """Performs entity search and maps extracted properties using the plan schema."""
     action = plan.get("action", "none")
@@ -180,23 +111,6 @@ def _resolve_targets(plan: Dict[str, Any], user_question: str, db_session: Sessi
         if filtered_models:
             models = filtered_models
 
-    if models and action == "compare_versions":
-        if len(set(m.name.lower() for m in models)) == 1 and (len(factories) < 2 or len(version_numbers) >= 2):
-            matched_m = None
-            if version_numbers:
-                max_matches = -1
-                for m in models:
-                    cnt = db_session.execute(
-                        text("SELECT COUNT(*) FROM model_versions WHERE model_id = :mid AND version_number IN :vnums"),
-                        {"mid": m.id, "vnums": tuple(version_numbers)}
-                    ).scalar()
-                    if cnt > max_matches:
-                        max_matches = cnt
-                        matched_m = m
-            if matched_m:
-                models = [matched_m]
-            else:
-                models = [models[0]]
 
     if (not models or len(factories) >= 2) and algorithms and action == "compare_versions":
         models = []
@@ -329,22 +243,38 @@ def _build_compare_payload(
     if not models:
         return None
     ver_rows = []
-    if len(models) >= 2:
+    # If they explicitly ask for versions, fetch all versions for all matched models
+    if entity_type_plural == "versions":
         for m in models:
-            rows = _fetch_version_rows(m.id, db_session, active_only=True)
-            if not rows:
-                rows = _fetch_version_rows(m.id, db_session, latest_only=True)
-            if rows:
-                ver_rows.append(rows[0])
+            if len(version_numbers) >= 2:
+                for v_num in version_numbers:
+                    rows = _fetch_version_rows(m.id, db_session, version_number=v_num)
+                    if rows:
+                        ver_rows.extend(rows)
+            else:
+                rows = _fetch_version_rows(m.id, db_session)
+                if rows:
+                    ver_rows.extend(rows)
     else:
-        m = models[0]
-        if len(version_numbers) >= 2:
-            for v_num in version_numbers:
-                rows = _fetch_version_rows(m.id, db_session, version_number=v_num)
+        # Comparing models (fetch active/latest version for each model)
+        if len(models) >= 2:
+            for m in models:
+                rows = _fetch_version_rows(m.id, db_session, active_only=True)
+                if not rows:
+                    rows = _fetch_version_rows(m.id, db_session, latest_only=True)
                 if rows:
                     ver_rows.append(rows[0])
         else:
-            ver_rows = _fetch_version_rows(m.id, db_session)
+            m = models[0]
+            if len(version_numbers) >= 2:
+                for v_num in version_numbers:
+                    rows = _fetch_version_rows(m.id, db_session, version_number=v_num)
+                    if rows:
+                        ver_rows.extend(rows)
+            else:
+                rows = _fetch_version_rows(m.id, db_session)
+                if rows:
+                    ver_rows.extend(rows)
             
     if len(ver_rows) >= 2 or (len(ver_rows) >= 1 and any(kw in q_lower for kw in ["evolution", "compare", "comparison", "version comparison"])):
         model_name_val = models[0].name if len(models) == 1 else "Models"
@@ -384,19 +314,24 @@ def _build_navigate_action(action: str, entity_type: str, models: list, algorith
                 
     return actions
 
-def plan_action(
+def build_action_payload(
+    plan: Dict[str, Any],
     user_question: str,
-    query_results: Dict[str, Any],
     db_session: Session,
     context: List[Dict[str, Any]] = [],
     resolved_entities: Optional[Dict[str, List[Any]]] = None
 ) -> Dict[str, Any]:
     """
-    Invokes the LLM to decide if a download/zip/compare action applies.
-    Then builds the resolved action structure and returns it.
+    Takes the action plan from the Master Analyst and builds the resolved UI payload structure.
     """
-    plan = _get_plan_from_llm(user_question, query_results, context=context)
-    
+    if not plan or not isinstance(plan, dict):
+        plan = {
+            "action": "none",
+            "entity_type": "model",
+            "compare_scope": None,
+            "targets": []
+        }
+        
     resolved_info = _resolve_targets(plan, user_question, db_session, context=context, resolved_entities=resolved_entities)
     action = resolved_info["action"]
     entity_type = resolved_info["entity_type"]
@@ -406,16 +341,16 @@ def plan_action(
     algorithms = resolved_info["algorithms"]
     entity_type_plural = resolved_info["entity_type_plural"]
     
-    if models and len(models) > 1 and action in ["download_zip", "compare_versions", "download_report"]:
-        from app.services.query_router import check_ambiguous_match
-        ambiguity_q = check_ambiguous_match(models, models[0].name, user_question)
-        if ambiguity_q:
+    # Ambiguity detection for identical model names across multiple algorithms/factories
+    if action in ("compare_versions", "download_report", "download_zip") and len(models) >= 2:
+        model_names = set(m.name.lower() for m in models)
+        if len(model_names) == 1 and len(factories) == 0 and len(algorithms) == 0:
+            m_name = models[0].name
             return {
                 "action_type": "ask_context",
-                "response": ambiguity_q,
+                "response": f"I found multiple models named **{m_name}** across different factories. Which specific factory or algorithm would you like to compare?",
                 "actions": [],
-                "comp_payload": None,
-                "entity_type": None
+                "comp_payload": None
             }
 
     actions = []
@@ -427,8 +362,13 @@ def plan_action(
         actions = _build_zip_action(models, version_numbers, db_session)
     elif action == "compare_versions":
         comp_payload = _build_compare_payload(models, version_numbers, entity_type_plural, user_question.lower(), db_session)
-    elif action in ("interactive_create", "navigate_edit", "navigate_delete"):
-        actions = _build_navigate_action(action, entity_type, models, algorithms, factories)
+    elif action in ("interactive_create", "interactive_edit", "interactive_delete"):
+        return {
+            "action_type": action,
+            "entity_type": entity_type,
+            "actions": [],
+            "comp_payload": None
+        }
         
     return {
         "action_type": action,

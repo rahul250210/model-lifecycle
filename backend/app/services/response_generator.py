@@ -38,7 +38,7 @@ def generate_response(
     # Serialize to JSON for prompt injection
     results_json = json.dumps(rows, default=str)
     
-    prompt = f"""You are MIRA, an intelligent AI assistant for the MARS MLOps platform.
+    prompt = f"""You are MIRA, an intelligent AI assistant for the MARS platform.
 Your task is to answer the user's question by explaining the data in natural, friendly, and professional language.
 
 USER QUESTION:

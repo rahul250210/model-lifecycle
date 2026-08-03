@@ -3,6 +3,9 @@ from sqlalchemy import inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+_DETAILED_SCHEMA_CACHE: Dict[str, Dict[str, Any]] = {}
+_SIMPLIFIED_SCHEMA_CACHE: Dict[str, Dict[str, List[str]]] = {}
+
 class SchemaProvider:
     """
     SchemaProvider dynamically discovers database metadata (tables, columns,
@@ -26,11 +29,17 @@ class SchemaProvider:
           "models": ["id", "name", "description", "created_at"]
         }
         """
+        cache_key = str(self.engine.url)
+        if cache_key in _SIMPLIFIED_SCHEMA_CACHE:
+            return _SIMPLIFIED_SCHEMA_CACHE[cache_key]
+            
         inspector = inspect(self.engine)
         schema = {}
         for table_name in inspector.get_table_names():
             columns = inspector.get_columns(table_name)
             schema[table_name] = [col["name"] for col in columns]
+        
+        _SIMPLIFIED_SCHEMA_CACHE[cache_key] = schema
         return schema
 
     def get_detailed_schema(self) -> Dict[str, Any]:
@@ -38,6 +47,10 @@ class SchemaProvider:
         Extracts full schema details including tables, columns (with types), 
         primary keys, and foreign keys.
         """
+        cache_key = str(self.engine.url)
+        if cache_key in _DETAILED_SCHEMA_CACHE:
+            return _DETAILED_SCHEMA_CACHE[cache_key]
+            
         inspector = inspect(self.engine)
         schema_desc = {}
         for table_name in inspector.get_table_names():
@@ -64,34 +77,26 @@ class SchemaProvider:
                     for fk in fk_info
                 ]
             }
+            
+        _DETAILED_SCHEMA_CACHE[cache_key] = schema_desc
         return schema_desc
+
+    @classmethod
+    def invalidate_cache(cls):
+        """
+        Invalidates the module-level schema cache.
+        """
+        _DETAILED_SCHEMA_CACHE.clear()
+        _SIMPLIFIED_SCHEMA_CACHE.clear()
 
     def get_pruned_schema(self, user_query: str) -> Dict[str, Any]:
         """
-        Prunes the schema to return only relevant tables for the given query to save context tokens.
+        Returns the detailed schema.
+        Note: Keyword-based pruning was removed because it caused silent missing-table failures. 
+        Token cost for this schema size is negligible.
+        TODO: A smarter LLM-driven table selection approach could be implemented as the next improvement.
         """
-        schema_desc = self.get_detailed_schema()
-        if not user_query:
-            return schema_desc
-            
-        q = user_query.lower()
-        # Core tables that are almost always referenced in database queries
-        keep_tables = {"models", "model_versions", "factories", "algorithms"}
-        
-        # Optional tables that we only include if keywords are present in the query
-        optional_tables = {
-            "artifacts": ["artifact", "artifacts", "checksum", "file", "files", "zip", "dataset", "weights", "code", "label", "labels"],
-            "experiments": ["experiment", "experiments", "hyperparameters", "run", "runs"],
-            "algorithm_knowledge": ["knowledge", "explain", "concept", "tutorial", "theory"],
-            "algorithm_knowledge_files": ["knowledge", "file", "files", "explain", "concept", "tutorial", "theory", "document", "documents"]
-        }
-        
-        for table, keywords in optional_tables.items():
-            if any(kw in q for kw in keywords):
-                keep_tables.add(table)
-                
-        # Filter schema_desc to keep only relevant tables
-        return {tbl: info for tbl, info in schema_desc.items() if tbl in keep_tables}
+        return self.get_detailed_schema()
 
     def generate_prompt_description(self, user_query: str = None) -> str:
         """

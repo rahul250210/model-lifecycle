@@ -208,15 +208,6 @@ def compose_response(
         if "which one" in q_lower and "deployed" in q_lower:
             formatted_answer = "The **yolov11** model (running the **person cart** algorithm) is currently deployed with an active version."
 
-    # Enforce comparison description meta strings for test compatibility
-    if any(kw in q_lower for kw in ["compare", "evolution", "versus", "vs"]):
-        # Only if it is a version comparison, not an aggregate metrics SQL query
-        if not ("compare" in q_lower and ("accuracy" in q_lower or "precision" in q_lower or "recall" in q_lower or "f1" in q_lower or "inference" in q_lower or "latency" in q_lower)):
-            if "Model Details" not in formatted_answer:
-                formatted_answer += "\n\nModel Details: Performance Metrics, Deployment Information, and Key Insights are shown below."
-            if "v1" not in formatted_answer:
-                formatted_answer += " (For example, v1 or other versions)."
-
     import base64
     tab_data = extract_tabular_data(query_results, comp_payload)
     if tab_data:

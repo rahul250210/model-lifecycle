@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.services.graph_state import ChatbotState
 from app.services.query_router import route_query, handle_knowledge_query, handle_hybrid_query
-from app.services.action_planner import plan_action
+
 from app.services.schema_provider import SchemaProvider
 from app.services.text_to_sql import generate_sql, regenerate_sql
 from app.services.sql_validator import validate_sql
@@ -214,36 +214,57 @@ def router_node(state: ChatbotState, config: RunnableConfig) -> Dict[str, Any]:
     if delete_entity:
         return {"query_type": "INTERACTIVE_DELETE", "active_delete_entity": delete_entity}
 
-    if any(phrase in q_lower for phrase in ["summary of everything", "summary of all", "everything in the repo"]):
-        return {"query_type": "UNSUPPORTED"}
+    from app.services.master_analyst import analyze_query
+    analysis = analyze_query(state["current_question"], db_session, context=state.get("messages", []))
     
-    if q_lower == "show me the strongest one":
-        return {"query_type": "ASK_CLARIFICATION"}
+    q_type = analysis.get("intent", "DATABASE_QUERY")
+    clarification = analysis.get("clarification_question")
+    entities_raw = analysis.get("entities", {})
+    action_details = analysis.get("action_details", {})
+    
+    if q_type == "AMBIGUOUS" and clarification:
+        return {"query_type": "ASK_CONTEXT", "final_response": clarification}
         
-    _PRONOUNS = ["which one", "which is", "deployed one", "that one", "which of them", "of a model", "of the model", "for a model", "for the model", "this model", "that model"]
-    if any(p in q_lower for p in _PRONOUNS) or q_lower == "which one is deployed":
-        has_context_entity = False
-        for msg in state.get("messages", []):
-            content = msg.get("content", "").lower()
-            if any(kw in content for kw in ["model", "factory", "algorithm"]):
-                has_context_entity = True
-                break
-        if not has_context_entity:
-            return {"query_type": "ASK_CONTEXT"}
-
-    routing = route_query(state["current_question"], db_session, context=state.get("messages", []))
-    q_type = routing.get("query_type", "DATABASE_QUERY")
+    if q_type == "UNSUPPORTED":
+        return {"query_type": "UNSUPPORTED", "final_response": "I'm sorry, I cannot answer that type of question."}
+        
+    # We still need to do the SQL ILIKE search for entities to get actual DB records
+    # previously done by resolve_entities. We can do that by taking the extracted names
+    # and looking them up.
+    from app.models.model import Model
+    from app.models.factory import Factory
+    from app.models.algorithm import Algorithm
     
-    resolved_entities = None
+    resolved_entities = {"models": [], "factories": [], "algorithms": []}
     if q_type in ["DATABASE_QUERY", "ACTION_QUERY", "HYBRID_QUERY"]:
-        from app.services.query_router import resolve_entities
-        resolved_entities = resolve_entities(state["current_question"], db_session, context=state.get("messages", []))
-
-    return {"query_type": q_type, "resolved_entities": resolved_entities}
+        all_raw_names = set(
+            entities_raw.get("models", []) + 
+            entities_raw.get("factories", []) + 
+            entities_raw.get("algorithms", [])
+        )
+        
+        for name in all_raw_names:
+            resolved_entities["models"].extend(db_session.query(Model).filter(Model.name.ilike(f"%{name}%")).all())
+            resolved_entities["factories"].extend(db_session.query(Factory).filter(Factory.name.ilike(f"%{name}%")).all())
+            resolved_entities["algorithms"].extend(db_session.query(Algorithm).filter(Algorithm.name.ilike(f"%{name}%")).all())
+            
+    return {
+        "query_type": q_type, 
+        "resolved_entities": resolved_entities,
+        "action_payload": action_details,  # Pass this to state so action_expert can use it
+        "current_question": analysis.get("resolved_question", state["current_question"])
+    }
 
 def action_expert_node(state: ChatbotState, config: RunnableConfig) -> Dict[str, Any]:
     db_session = db_session_from_config(config)
-    plan = plan_action(state["current_question"], {}, db_session, context=state.get("messages", []), resolved_entities=state.get("resolved_entities"))
+    from app.services.action_planner import build_action_payload
+    plan = build_action_payload(
+        plan=state.get("action_payload", {}),
+        user_question=state["current_question"],
+        db_session=db_session,
+        context=state.get("messages", []),
+        resolved_entities=state.get("resolved_entities")
+    )
     
     action_type = plan.get("action_type")
     
@@ -271,30 +292,38 @@ def action_expert_node(state: ChatbotState, config: RunnableConfig) -> Dict[str,
             factory_names = sorted(list(set(v.get("factory_name") for v in comp_payload.get("versions", []) if v.get("factory_name"))))
             m_str = ", ".join(f"**{name}**" for name in model_names)
             f_str = ", ".join(f"**{name}**" for name in factory_names)
-            final_answer = f"I have loaded the version comparison details for {len(model_names)} model(s) ({m_str}) across factories: {f_str}. Model Details are available in the comparison view."
+            final_answer = f"I have loaded the version comparison details for {len(model_names)} model(s) ({m_str}) across factories: {f_str}."
         else:
             v_nums = [f"v{v.get('version_number')}" for v in comp_payload.get("versions", []) if v.get("version_number")]
             v_str = ", ".join(v_nums)
-            final_answer = f"I have loaded the version comparison details for model **{comp_payload['model_name']}** ({v_str}). Model Details: Performance Metrics, Deployment Information, and Key Insights are shown below."
+            final_answer = f"I have loaded the version comparison details for model **{comp_payload.get('model_name', 'Unknown')}** ({v_str})."
             
-            versions_list = comp_payload.get("versions", [])
-            if versions_list:
-                def fmt_pct(val):
-                    if val is None: return "N/A"
-                    val_f = float(val)
-                    if val_f <= 1.0: return f"{val_f*100:.1f}%"
-                    return f"{val_f:.1f}%"
+        versions_list = comp_payload.get("versions", [])
+        if versions_list:
+            def fmt_pct(val):
+                if val is None: return "N/A"
+                val_f = float(val)
+                if val_f <= 1.0: return f"{val_f*100:.1f}%"
+                return f"{val_f:.1f}%"
+            
+            table_lines = []
+            if comp_payload.get("has_multiple_models"):
+                if len(set(v.get('model_name') for v in versions_list)) == 1:
+                    headers = [f"{v.get('factory_name', 'Unknown')} (v{v.get('version_number', '?')})" for v in versions_list]
+                else:
+                    headers = [f"{v.get('model_name', 'Unknown')} (v{v.get('version_number', '?')})" for v in versions_list]
+            else:
+                headers = [f"Version {v.get('version_number')}" for v in versions_list]
                 
-                table_lines = []
-                table_lines.append("| Metric | " + " | ".join(f"Version {v.get('version_number')}" for v in versions_list) + " |")
-                table_lines.append("|---| " + " | ".join("---" for _ in versions_list) + " |")
-                table_lines.append("| **Accuracy** | " + " | ".join(fmt_pct(v.get('accuracy')) for v in versions_list) + " |")
-                table_lines.append("| **Precision** | " + " | ".join(fmt_pct(v.get('precision')) for v in versions_list) + " |")
-                table_lines.append("| **Recall** | " + " | ".join(fmt_pct(v.get('recall')) for v in versions_list) + " |")
-                table_lines.append("| **F1 Score** | " + " | ".join(fmt_pct(v.get('f1_score')) for v in versions_list) + " |")
-                table_lines.append("| **Inference Time** | " + " | ".join(f"{v.get('inference_time')}ms" if v.get('inference_time') is not None else "N/A" for v in versions_list) + " |")
-                
-                final_answer += f"\n\n### 📊 Performance & Resource Comparison\n" + "\n".join(table_lines)
+            table_lines.append("| Metric | " + " | ".join(headers) + " |")
+            table_lines.append("|---| " + " | ".join("---" for _ in versions_list) + " |")
+            table_lines.append("| **Accuracy** | " + " | ".join(fmt_pct(v.get('accuracy')) for v in versions_list) + " |")
+            table_lines.append("| **Precision** | " + " | ".join(fmt_pct(v.get('precision')) for v in versions_list) + " |")
+            table_lines.append("| **Recall** | " + " | ".join(fmt_pct(v.get('recall')) for v in versions_list) + " |")
+            table_lines.append("| **F1 Score** | " + " | ".join(fmt_pct(v.get('f1_score')) for v in versions_list) + " |")
+            table_lines.append("| **Inference Time** | " + " | ".join(f"{v.get('inference_time')}ms" if v.get('inference_time') is not None else "N/A" for v in versions_list) + " |")
+            
+            final_answer += f"\n\n### 📊 Performance & Resource Comparison\n" + "\n".join(table_lines)
     elif actions:
         act = actions[0]
         if act.get("type") == "interactive_create":
@@ -431,13 +460,6 @@ def sql_expert_node(state: ChatbotState, config: RunnableConfig) -> Dict[str, An
     
     resolved = state.get("resolved_entities") or {}
     
-    models_list = resolved.get("models", [])
-    if models_list and len(models_list) > 1:
-        from app.services.query_router import check_ambiguous_match
-        ambiguity_q = check_ambiguous_match(models_list, models_list[0].name, state["current_question"])
-        if ambiguity_q:
-            return {"query_type": "ASK_CONTEXT", "final_response": ambiguity_q}
-
     known_entities = {
         "models": [m.name for m in resolved.get("models", [])],
         "algorithms": [a.name for a in resolved.get("algorithms", [])],
@@ -537,8 +559,8 @@ def response_composer_node(state: ChatbotState, config: RunnableConfig) -> Dict[
                 else:
                     final_answer = f"{final_answer}\n\n{conceptual_ans}"
                     
-        # Check UI Action Planner on User query + query results
-        plan = plan_action(user_question, query_results, db_session, context=state.get("messages", []), resolved_entities=state.get("resolved_entities"))
+        # Use the UI Action Planner payload from state
+        plan = state.get("action_payload", {})
         
         if plan.get("action_type") == "ask_context":
             final_answer = plan.get("response", "Please clarify.")
